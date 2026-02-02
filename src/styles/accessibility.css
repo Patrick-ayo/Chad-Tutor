@@ -1,0 +1,86 @@
+/* Accessibility Overrides */
+
+/* Text Size Variants */
+:root.text-small {
+  font-size: 14px;
+}
+
+:root.text-default {
+  font-size: 16px;
+}
+
+:root.text-large {
+  font-size: 18px;
+}
+
+/* Reduce Motion */
+:root.reduce-motion *,
+:root.reduce-motion *::before,
+:root.reduce-motion *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
+
+/* Focus Mode Aids - Larger Timer */
+:root.large-timer [data-timer],
+:root.large-timer .timer-text,
+:root.large-timer .session-timer {
+  font-size: 2.5rem !important;
+  font-weight: 700 !important;
+  line-height: 1.2 !important;
+}
+
+:root.large-timer .countdown-text {
+  font-size: 3rem !important;
+}
+
+/* Focus Mode Aids - Clearer Violation Feedback */
+:root.clear-violations .violation-warning,
+:root.clear-violations [data-violation],
+:root.clear-violations .enforcement-alert {
+  border-width: 3px !important;
+  border-color: rgb(239, 68, 68) !important;
+  background-color: rgb(254, 242, 242) !important;
+  padding: 1.5rem !important;
+  font-weight: 600 !important;
+}
+
+:root.dark.clear-violations .violation-warning,
+:root.dark.clear-violations [data-violation],
+:root.dark.clear-violations .enforcement-alert {
+  background-color: rgb(127, 29, 29) !important;
+  color: rgb(254, 242, 242) !important;
+}
+
+:root.clear-violations .violation-icon {
+  width: 2rem !important;
+  height: 2rem !important;
+}
+
+/* Extra Warning Time - Visual indicator when extra time is active */
+:root .extra-warning-indicator {
+  display: none;
+}
+
+:root.extra-warning-time .extra-warning-indicator {
+  display: block;
+  background-color: rgb(251, 191, 36);
+  color: rgb(120, 53, 15);
+  padding: 0.5rem 1rem;
+  border-radius: 0.375rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+/* Theme transitions (only when not reducing motion) */
+:root:not(.reduce-motion) {
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+:root:not(.reduce-motion) * {
+  transition-property: background-color, border-color, color, fill, stroke;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 150ms;
+}
