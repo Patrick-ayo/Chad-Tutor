@@ -5,6 +5,34 @@ export type PaceStyle = "aggressive" | "balanced" | "light";
 export type FocusStrategy = "weakness-first" | "coverage-first";
 export type TaskStatus = "locked" | "scheduled" | "in-progress" | "completed" | "skipped" | "deferred";
 
+// Exam structure
+export interface University {
+  id: string;
+  name: string;
+  type: string;
+}
+
+export interface Course {
+  id: string;
+  name: string;
+  duration: string;
+  totalSemesters: number;
+}
+
+export interface Semester {
+  id: string;
+  name: string;
+  number: number;
+}
+
+export interface Subject {
+  id: string;
+  name: string;
+  code: string;
+  credits: number;
+  marks: number;
+}
+
 // Predefined goal options (no free text garbage)
 export interface GoalOption {
   id: string;
@@ -18,8 +46,13 @@ export interface GoalOption {
 // Step 1: Goal Definition
 export interface GoalDefinition {
   type: GoalType;
-  goalId: string; // From predefined options
+  goalId?: string; // From predefined options (for skill/role)
   customName?: string; // Only if absolutely necessary
+  // Exam specific fields
+  university?: University;
+  course?: Course;
+  semester?: Semester;
+  subjects?: Subject[]; // Multiple subjects can be selected
 }
 
 // Step 2: Deadline & Constraints

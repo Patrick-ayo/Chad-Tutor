@@ -1,0 +1,427 @@
+// Prisma Schema for Chad-Tutor
+// Production-grade academic knowledge base with deduplication, caching, and analytics
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// ENUMS
+// ============================================================================
+
+enum UserRole {
+  LEARNER
+  ADMIN
+  MODERATOR
+}
+
+enum EnforcementLevel {
+  LIGHT
+  NORMAL
+  AGGRESSIVE
+}
+
+enum RescheduleMode {
+  AUTO
+  MANUAL
+  ASK
+}
+
+enum GoalStatus {
+  ACTIVE
+  COMPLETED
+  ABANDONED
+}
+
+enum EntityType {
+  UNIVERSITY
+  COURSE
+  SEMESTER
+  SUBJECT
+}
+
+// ============================================================================
+// USER & AUTH MODELS
+// ============================================================================
+
+model User {
+  id        String     @id @default(uuid())
+  clerkId   String     @unique
+  email     String     @unique
+  name      String
+  timezone  String     @default("UTC")
+  roles     UserRole[] @default([LEARNER])
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  // Relations
+  settings         UserSettings?
+  enforcement      Enforcement?
+  goals            Goal[]
+  settingsChanges  SettingsChangeLog[]
+  searchLogs       SearchLog[]
+  contentUsage     ContentUsage[]
+
+  @@index([clerkId])
+  @@index([email])
+  @@index([createdAt])
+}
+
+model UserSettings {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  
+  // Availability
+  activeDays       String[]  @default(["monday", "tuesday", "wednesday", "thursday", "friday"])
+  dailyMinutes     Json      @default("{\"monday\":60,\"tuesday\":60,\"wednesday\":60,\"thursday\":60,\"friday\":60}")
+  
+  // Session behavior
+  sessionDuration  Int       @default(25)
+  breakFrequency   Int       @default(3)
+  
+  // Enforcement
+  enforcementLevel EnforcementLevel @default(NORMAL)
+  rescheduleMode   RescheduleMode   @default(AUTO)
+  
+  // Notifications
+  emailNotifications Boolean @default(true)
+  pushNotifications  Boolean @default(true)
+  dailyReminder      Boolean @default(true)
+  weeklyDigest       Boolean @default(true)
+  missedTaskAlert    Boolean @default(true)
+  
+  // AI preferences
+  aiExplanations     Boolean @default(true)
+  aiQuizGeneration   Boolean @default(true)
+  aiProgressInsights Boolean @default(true)
+  
+  // Privacy
+  lastDataExport     DateTime?
+  dataRetentionDays  Int      @default(90)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([userId])
+}
+
+model Enforcement {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  
+  violationCount   Int      @default(0)
+  lastViolation    DateTime?
+  violationHistory Json[]   @default([])
+  isOnProbation    Boolean  @default(false)
+  probationCount   Int      @default(0)
+  probationStart   DateTime?
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([userId])
+  @@index([isOnProbation])
+}
+
+model Goal {
+  id          String     @id @default(uuid())
+  userId      String
+  name        String
+  description String?
+  deadline    DateTime
+  
+  totalHours     Int        @default(0)
+  completedHours Int        @default(0)
+  status         GoalStatus @default(ACTIVE)
+  
+  milestones Json[] @default([])
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([userId, status])
+  @@index([deadline])
+  @@index([status])
+}
+
+model SettingsChangeLog {
+  id        String   @id @default(uuid())
+  userId    String
+  
+  changes      Json[]
+  impactScore  Int      @db.SmallInt
+  warningLevel Int      @db.SmallInt
+  
+  createdAt DateTime @default(now())
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([userId, createdAt])
+}
+
+// ============================================================================
+// ACADEMIC CONTENT MODELS (with deduplication + canonical support)
+// ============================================================================
+
+model ExternalSource {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  apiEndpoint String?
+  rateLimit   Int      @default(100) @db.SmallInt
+  lastSync    DateTime?
+  isActive    Boolean  @default(true)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  universities University[]
+  courses      Course[]
+  semesters    Semester[]
+  subjects     Subject[]
+
+  @@index([isActive])
+  @@index([lastSync])
+}
+
+model University {
+  id           String   @id @default(uuid())
+  externalId   String
+  sourceId     String
+  
+  name         String   @db.VarChar(255)
+  normalizedName String @db.VarChar(255)
+  country      String?  @db.VarChar(100)
+  type         String?  @db.VarChar(100)
+  
+  isCanonical  Boolean  @default(true)
+  canonicalId  String?
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  source    ExternalSource @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+  canonical University?    @relation("CanonicalUniversity", fields: [canonicalId], references: [id], onDelete: SetNull)
+  duplicates University[]  @relation("CanonicalUniversity")
+  courses   Course[]
+
+  @@unique([sourceId, externalId])
+  @@index([normalizedName, isCanonical])
+  @@index([isCanonical])
+  @@index([sourceId])
+  @@index([canonicalId])
+}
+
+model Course {
+  id           String   @id @default(uuid())
+  externalId   String
+  sourceId     String
+  universityId String
+  
+  name           String  @db.VarChar(255)
+  normalizedName String  @db.VarChar(255)
+  description    String? @db.Text
+  duration       String? @db.VarChar(50)
+  totalSemesters Int     @default(8) @db.SmallInt
+  
+  isCanonical  Boolean  @default(true)
+  canonicalId  String?
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  source     ExternalSource @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+  university University     @relation(fields: [universityId], references: [id], onDelete: Restrict)
+  canonical  Course?        @relation("CanonicalCourse", fields: [canonicalId], references: [id], onDelete: SetNull)
+  duplicates Course[]       @relation("CanonicalCourse")
+  semesters  Semester[]
+
+  @@unique([sourceId, externalId])
+  @@unique([universityId, sourceId, externalId])
+  @@index([normalizedName, isCanonical])
+  @@index([universityId])
+  @@index([sourceId])
+  @@index([canonicalId])
+}
+
+model Semester {
+  id         String   @id @default(uuid())
+  externalId String
+  sourceId   String
+  courseId   String
+  
+  name     String @db.VarChar(100)
+  number   Int    @db.SmallInt
+  position Int    @default(0) @db.SmallInt
+  
+  isCanonical Boolean @default(true)
+  canonicalId String?
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  source    ExternalSource @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+  course    Course         @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  canonical Semester?      @relation("CanonicalSemester", fields: [canonicalId], references: [id], onDelete: SetNull)
+  duplicates Semester[]    @relation("CanonicalSemester")
+  subjects  Subject[]
+
+  @@unique([courseId, sourceId, externalId])
+  @@unique([courseId, number]) // Ensure unique semester numbers per course
+  @@index([courseId])
+  @@index([sourceId])
+  @@index([number])
+  @@index([canonicalId])
+}
+
+model Subject {
+  id         String   @id @default(uuid())
+  externalId String
+  sourceId   String
+  semesterId String
+  
+  name           String  @db.VarChar(255)
+  normalizedName String  @db.VarChar(255)
+  code           String? @db.VarChar(20)
+  credits        Int     @default(0) @db.SmallInt
+  marks          Int     @default(100) @db.SmallInt
+  
+  metadata Json?
+  
+  isCanonical Boolean @default(true)
+  canonicalId String?
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  source     ExternalSource @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+  semester   Semester       @relation(fields: [semesterId], references: [id], onDelete: Restrict)
+  canonical  Subject?       @relation("CanonicalSubject", fields: [canonicalId], references: [id], onDelete: SetNull)
+  duplicates Subject[]      @relation("CanonicalSubject")
+  usage      ContentUsage[]
+
+  @@unique([semesterId, sourceId, externalId])
+  @@unique([semesterId, code]) // Ensure unique subject codes per semester
+  @@index([normalizedName, isCanonical])
+  @@index([semesterId])
+  @@index([sourceId])
+  @@index([code])
+  @@index([canonicalId])
+}
+
+// ============================================================================
+// CACHING & SEARCH MODELS
+// ============================================================================
+
+model SearchCache {
+  id              String     @id @default(uuid())
+  normalizedQuery String     @unique @db.VarChar(500)
+  entityType      EntityType
+  
+  resultIds   String[] // @db.Uuid[] when Prisma supports it
+  resultCount Int      @default(0) @db.SmallInt
+  
+  expiresAt DateTime
+  hitCount  Int      @default(0)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([entityType, normalizedQuery])
+  @@index([expiresAt])
+  @@index([hitCount]) // For cache popularity analysis
+}
+
+model SearchLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  
+  rawQuery        String     @db.VarChar(500)
+  normalizedQuery String     @db.VarChar(500)
+  entityType      EntityType
+  
+  cacheHit    Boolean @default(false)
+  resultCount Int     @default(0) @db.SmallInt
+  latencyMs   Int     @default(0) @db.SmallInt
+  
+  createdAt DateTime @default(now())
+
+  // Relations
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([entityType, createdAt])
+  @@index([cacheHit])
+  @@index([latencyMs]) // For performance analysis
+}
+
+// ============================================================================
+// FRESHNESS & REFRESH TRACKING
+// ============================================================================
+
+model ContentRefresh {
+  id         String     @id @default(uuid())
+  entityType EntityType
+  entityId   String
+  
+  refreshedAt  DateTime @default(now())
+  success      Boolean  @default(true)
+  errorMessage String?  @db.Text
+  
+  previousHash String? @db.VarChar(64)
+  newHash      String? @db.VarChar(64)
+  hasChanges   Boolean @default(false)
+
+  @@unique([entityType, entityId]) // Only one refresh record per entity
+  @@index([entityType, refreshedAt])
+  @@index([success])
+  @@index([hasChanges])
+}
+
+// ============================================================================
+// ANALYTICS & USAGE TRACKING
+// ============================================================================
+
+model ContentUsage {
+  id        String   @id @default(uuid())
+  userId    String
+  subjectId String
+  
+  viewCount    Int      @default(1) @db.SmallInt
+  totalViewMs  Int      @default(0) // Total time spent
+  lastViewedAt DateTime @default(now())
+  
+  sessionId String? @db.VarChar(50)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  user    User    @relation(fields: [userId], references: [id], onDelete: Restrict)
+  subject Subject @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+
+  @@unique([userId, subjectId])
+  @@index([userId, lastViewedAt])
+  @@index([subjectId])
+  @@index([lastViewedAt])
+  @@index([sessionId])
+}

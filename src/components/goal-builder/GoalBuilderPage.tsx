@@ -6,7 +6,7 @@ import type {
   Roadmap,
 } from "@/types/goal";
 import { StepperWizard } from "./StepperWizard";
-import { GoalTypeStep, DeadlineStep, AssessmentStep, PreferenceStep } from "./steps";
+import { GoalTypeStep, ExamSelectionStep, DeadlineStep, AssessmentStep, PreferenceStep } from "./steps";
 import { RoadmapPreview } from "./roadmap";
 import { RoadmapControls } from "./RoadmapControls";
 import { Card, CardContent } from "@/components/ui/card";
@@ -14,10 +14,18 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { goalOptions, generateMockRoadmap } from "@/data/mockGoals";
 import { useState, useMemo, useCallback } from "react";
 
-type WizardStep = 1 | 2 | 3 | 4;
+type WizardStep = 1 | 2 | 3 | 4 | 5;
 type PageView = "wizard" | "roadmap";
 
-const WIZARD_STEPS = [
+const WIZARD_STEPS_EXAM = [
+  { id: 1, name: "Goal Type", description: "What are you learning?" },
+  { id: 2, name: "Exam Details", description: "University & Subjects" },
+  { id: 3, name: "Timeline", description: "When do you need it?" },
+  { id: 4, name: "Assessment", description: "Where are you now?" },
+  { id: 5, name: "Preferences", description: "How do you learn?" },
+];
+
+const WIZARD_STEPS_OTHER = [
   { id: 1, name: "Goal Type", description: "What are you learning?" },
   { id: 2, name: "Timeline", description: "When do you need it?" },
   { id: 3, name: "Assessment", description: "Where are you now?" },
@@ -40,31 +48,6 @@ export function GoalBuilderPage() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
 
-  // Get selected goal info
-  const selectedGoal = useMemo(() => {
-    if (!definition.goalId) return null;
-    return goalOptions.find((g) => g.id === definition.goalId) ?? null;
-  }, [definition.goalId]);
-
-  // Navigation handlers
-  const handleNext = useCallback(() => {
-    if (currentStep < 4) {
-      setCurrentStep((prev) => (prev + 1) as WizardStep);
-    }
-  }, [currentStep]);
-
-  const handleBack = useCallback(() => {
-    if (currentStep > 1) {
-      setCurrentStep((prev) => (prev - 1) as WizardStep);
-    }
-  }, [currentStep]);
-
-  const handleStepClick = useCallback((step: number) => {
-    if (step < currentStep) {
-      setCurrentStep(step as WizardStep);
-    }
-  }, [currentStep]);
-
   // Complete wizard and generate roadmap
   const handleComplete = useCallback(async () => {
     setIsGenerating(true);
@@ -78,6 +61,138 @@ export function GoalBuilderPage() {
     setIsGenerating(false);
     setView("roadmap");
   }, [definition.goalId]);
+
+  // Get selected goal info
+  const selectedGoal = useMemo(() => {
+    if (!definition.goalId) return null;
+    return goalOptions.find((g) => g.id === definition.goalId) ?? null;
+  }, [definition.goalId]);
+
+  // Get wizard steps based on goal type
+  const wizardSteps = useMemo(() => {
+    return definition.type === "exam" ? WIZARD_STEPS_EXAM : WIZARD_STEPS_OTHER;
+  }, [definition.type]);
+
+  const maxStep = wizardSteps.length;
+
+  // Navigation handlers
+  const handleNext = useCallback(() => {
+    if (currentStep < maxStep) {
+      setCurrentStep((prev) => (prev + 1) as WizardStep);
+    }
+  }, [currentStep, maxStep]);
+
+  const handleBack = useCallback(() => {
+    if (currentStep > 1) {
+      setCurrentStep((prev) => (prev - 1) as WizardStep);
+    }
+  }, [currentStep]);
+
+  const handleStepClick = useCallback((step: number) => {
+    if (step < currentStep) {
+      setCurrentStep(step as WizardStep);
+    }
+  }, [currentStep]);
+
+  // Map physical step number to wizard step based on goal type
+  const getStepComponent = useCallback(() => {
+    const isExam = definition.type === "exam";
+
+    if (currentStep === 1) {
+      return (
+        <GoalTypeStep
+          data={definition}
+          onUpdate={setDefinition}
+          onNext={handleNext}
+        />
+      );
+    }
+
+    if (isExam) {
+      // Exam flow: step 2 = ExamSelection, 3 = Deadline, 4 = Assessment, 5 = Preferences
+      if (currentStep === 2) {
+        return (
+          <ExamSelectionStep
+            data={definition}
+            onUpdate={setDefinition}
+            onNext={handleNext}
+            onBack={handleBack}
+          />
+        );
+      }
+      if (currentStep === 3) {
+        return (
+          <DeadlineStep
+            data={constraints}
+            estimatedHours={0} // Exams don't have estimated hours
+            onUpdate={setConstraints}
+            onNext={handleNext}
+            onBack={handleBack}
+          />
+        );
+      }
+      if (currentStep === 4) {
+        const examName = typeof definition.university === "string" 
+          ? definition.university 
+          : (definition.university?.name || "this exam");
+        return (
+          <AssessmentStep
+            data={assessment}
+            goalName={examName}
+            onUpdate={setAssessment}
+            onNext={handleNext}
+            onBack={handleBack}
+          />
+        );
+      }
+      if (currentStep === 5) {
+        return (
+          <PreferenceStep
+            data={preferences}
+            onUpdate={setPreferences}
+            onComplete={handleComplete}
+            onBack={handleBack}
+          />
+        );
+      }
+    } else {
+      // Non-exam flow: step 2 = Deadline, 3 = Assessment, 4 = Preferences
+      if (currentStep === 2) {
+        return (
+          <DeadlineStep
+            data={constraints}
+            estimatedHours={selectedGoal?.estimatedHours ?? 0}
+            onUpdate={setConstraints}
+            onNext={handleNext}
+            onBack={handleBack}
+          />
+        );
+      }
+      if (currentStep === 3) {
+        return (
+          <AssessmentStep
+            data={assessment}
+            goalName={selectedGoal?.name ?? "this topic"}
+            onUpdate={setAssessment}
+            onNext={handleNext}
+            onBack={handleBack}
+          />
+        );
+      }
+      if (currentStep === 4) {
+        return (
+          <PreferenceStep
+            data={preferences}
+            onUpdate={setPreferences}
+            onComplete={handleComplete}
+            onBack={handleBack}
+          />
+        );
+      }
+    }
+
+    return null;
+  }, [currentStep, definition, constraints, assessment, preferences, selectedGoal, handleNext, handleBack, handleComplete]);
 
   // Roadmap actions
   const handleTaskDefer = useCallback((taskId: string) => {
@@ -160,7 +275,7 @@ export function GoalBuilderPage() {
 
           {/* Stepper */}
           <StepperWizard
-            steps={WIZARD_STEPS}
+            steps={wizardSteps}
             currentStep={currentStep}
             onStepClick={handleStepClick}
           />
@@ -168,45 +283,10 @@ export function GoalBuilderPage() {
           {/* Step Content */}
           <Card>
             <CardContent className="p-6">
-              {currentStep === 1 && (
-                  <GoalTypeStep
-                    data={definition}
-                    onUpdate={setDefinition}
-                    onNext={handleNext}
-                  />
-                )}
-
-                {currentStep === 2 && (
-                  <DeadlineStep
-                    data={constraints}
-                    estimatedHours={selectedGoal?.estimatedHours ?? 0}
-                    onUpdate={setConstraints}
-                    onNext={handleNext}
-                    onBack={handleBack}
-                  />
-                )}
-
-                {currentStep === 3 && (
-                  <AssessmentStep
-                    data={assessment}
-                    goalName={selectedGoal?.name ?? "this topic"}
-                    onUpdate={setAssessment}
-                    onNext={handleNext}
-                    onBack={handleBack}
-                  />
-                )}
-
-                {currentStep === 4 && (
-                  <PreferenceStep
-                    data={preferences}
-                    onUpdate={setPreferences}
-                    onComplete={handleComplete}
-                    onBack={handleBack}
-                  />
-                )}
-              </CardContent>
-            </Card>
-          </div>
+              {getStepComponent()}
+            </CardContent>
+          </Card>
+        </div>
         ) : (
           <div className="space-y-6">
             {/* Header */}

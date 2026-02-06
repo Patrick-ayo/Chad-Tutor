@@ -2,8 +2,10 @@ import express from 'express';
 import cors from 'cors';
 import { clerkMiddleware } from '@clerk/express';
 import config from './config';
-import { connectDatabase } from './config/database';
-import { userRoutes, settingsRoutes } from './routes';
+import { connectDatabase, disconnectDatabase } from './db';
+import { cacheService } from './services';
+import { registerAllJobs } from './jobs';
+import { userRoutes, settingsRoutes, examRoutes, goalsRoutes } from './routes';
 import { errorHandler, notFoundHandler } from './middleware';
 
 const app = express();
@@ -39,6 +41,8 @@ app.get('/health', (_req, res) => {
 // API Routes
 app.use('/api/user', userRoutes);
 app.use('/api/settings', settingsRoutes);
+app.use('/api/exam', examRoutes);
+app.use('/api/goals', goalsRoutes);
 
 // 404 handler
 app.use(notFoundHandler);
@@ -49,8 +53,21 @@ app.use(errorHandler);
 // Start server
 async function startServer() {
   try {
-    // Connect to MongoDB
+    // Connect to PostgreSQL
     await connectDatabase();
+    console.log('✓ PostgreSQL connected');
+
+    // Initialize Redis (optional)
+    if (config.redisUrl) {
+      await cacheService.initializeRedis();
+      console.log('✓ Redis connected');
+    } else {
+      console.log('○ Redis not configured (using L2 cache only)');
+    }
+
+    // Register background jobs (stubs)
+    registerAllJobs();
+    console.log('✓ Background jobs registered');
 
     // Start Express server
     app.listen(config.port, () => {
@@ -60,6 +77,8 @@ async function startServer() {
 ╠═══════════════════════════════════════════════════╣
 ║  Environment: ${config.nodeEnv.padEnd(35)}║
 ║  Port: ${config.port.toString().padEnd(42)}║
+║  Database: PostgreSQL                             ║
+║  Cache: ${config.redisUrl ? 'Redis + PostgreSQL' : 'PostgreSQL (L2 only)'}${''.padEnd(config.redisUrl ? 21 : 12)}║
 ║  Frontend: ${config.frontendUrl.padEnd(38)}║
 ╚═══════════════════════════════════════════════════╝
       `);
@@ -71,15 +90,22 @@ async function startServer() {
 }
 
 // Handle graceful shutdown
-process.on('SIGTERM', async () => {
-  console.log('SIGTERM received, shutting down gracefully...');
+async function shutdown(signal: string) {
+  console.log(`${signal} received, shutting down gracefully...`);
+  
+  try {
+    await cacheService.closeRedis();
+    await disconnectDatabase();
+    console.log('✓ All connections closed');
+  } catch (error) {
+    console.error('Error during shutdown:', error);
+  }
+  
   process.exit(0);
-});
+}
 
-process.on('SIGINT', async () => {
-  console.log('SIGINT received, shutting down gracefully...');
-  process.exit(0);
-});
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
 
 // Handle unhandled promise rejections
 process.on('unhandledRejection', (reason, promise) => {

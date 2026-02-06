@@ -37,7 +37,7 @@ export function GoalTypeStep({ data, onUpdate, onNext }: GoalTypeStepProps) {
   const [selectedGoalId, setSelectedGoalId] = useState<string | undefined>(data.goalId);
 
   const filteredGoals = useMemo(() => {
-    if (!selectedType) return [];
+    if (!selectedType || selectedType === "exam") return [];
     return goalOptions.filter((g) => g.type === selectedType);
   }, [selectedType]);
 
@@ -63,7 +63,20 @@ export function GoalTypeStep({ data, onUpdate, onNext }: GoalTypeStepProps) {
     onUpdate({ ...data, type: selectedType, goalId });
   };
 
-  const canProceed = selectedType && selectedGoalId;
+  const handleNext = () => {
+    // For exams, just proceed with type selected (no goalId needed)
+    if (selectedType === "exam") {
+      onUpdate({ type: "exam" });
+      onNext();
+      return;
+    }
+    // For skills/roles, need goalId
+    if (selectedType && selectedGoalId) {
+      onNext();
+    }
+  };
+
+  const canProceed = selectedType === "exam" || (selectedType && selectedGoalId);
 
   return (
     <div className="space-y-6">
@@ -108,8 +121,8 @@ export function GoalTypeStep({ data, onUpdate, onNext }: GoalTypeStepProps) {
         </div>
       </div>
 
-      {/* Step 2: Select Specific Goal */}
-      {selectedType && (
+      {/* Step 2: Select Specific Goal (only for skill/role) */}
+      {selectedType && selectedType !== "exam" && (
         <div className="space-y-4">
           <div>
             <h3 className="text-lg font-semibold">Choose your goal</h3>
@@ -165,9 +178,22 @@ export function GoalTypeStep({ data, onUpdate, onNext }: GoalTypeStepProps) {
         </div>
       )}
 
+      {/* For exams, show a message that detailed selection comes next */}
+      {selectedType === "exam" && (
+        <Card>
+          <CardContent className="p-6 text-center">
+            <GraduationCap className="h-12 w-12 mx-auto text-primary mb-3" />
+            <h4 className="font-semibold mb-2">University Exam Preparation</h4>
+            <p className="text-sm text-muted-foreground">
+              Next, you'll select your university, course, semester, and specific subjects
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Next Button */}
       <div className="flex justify-end pt-4">
-        <Button onClick={onNext} disabled={!canProceed} className="gap-2">
+        <Button onClick={handleNext} disabled={!canProceed} className="gap-2">
           Continue
           <ArrowRight className="h-4 w-4" />
         </Button>

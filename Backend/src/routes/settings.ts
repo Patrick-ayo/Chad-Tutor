@@ -1,18 +1,15 @@
+/**
+ * Settings Routes
+ * 
+ * API endpoints for user settings management.
+ * Uses the user service for business logic.
+ */
+
 import { Router, Request, Response } from 'express';
-import { UserSettings, SettingsChangeLog, User } from '../models';
+import { userService } from '../services';
 import { requireAuth } from '../middleware';
 
 const router = Router();
-
-// Settings that affect roadmap/schedule/analytics
-const IMPACTFUL_SETTINGS: Record<string, string[]> = {
-  'availability.activeDays': ['schedule', 'roadmap'],
-  'availability.minutesPerDay': ['schedule', 'roadmap'],
-  'availability.preferredSessionLength': ['schedule'],
-  'availability.maxSessionsPerDay': ['schedule'],
-  'behavior.intensity': ['schedule', 'roadmap'],
-  'behavior.autoSkipCompleted': ['schedule'],
-};
 
 /**
  * GET /api/settings
@@ -21,25 +18,17 @@ const IMPACTFUL_SETTINGS: Record<string, string[]> = {
 router.get('/', requireAuth, async (req: Request, res: Response) => {
   try {
     const clerkId = req.auth!.userId;
-    
-    let settings = await UserSettings.findOne({ clerkId });
-    
-    if (!settings) {
-      // Create default settings
-      const user = await User.findOne({ clerkId });
-      if (!user) {
-        return res.status(404).json({
-          error: 'Not Found',
-          message: 'User not found',
-        });
-      }
-      
-      settings = await UserSettings.create({
-        userId: user._id,
-        clerkId,
+
+    const user = await userService.getUserByClerkId(clerkId);
+    if (!user) {
+      return res.status(404).json({
+        error: 'Not Found',
+        message: 'User not found',
       });
     }
-    
+
+    const settings = await userService.getUserSettings(user.id);
+
     res.json(settings);
   } catch (error) {
     console.error('Settings fetch error:', error);
@@ -58,73 +47,90 @@ router.patch('/', requireAuth, async (req: Request, res: Response) => {
   try {
     const clerkId = req.auth!.userId;
     const updates = req.body;
-    
-    const settings = await UserSettings.findOne({ clerkId });
-    
-    if (!settings) {
+
+    const user = await userService.getUserByClerkId(clerkId);
+    if (!user) {
       return res.status(404).json({
         error: 'Not Found',
-        message: 'Settings not found',
+        message: 'User not found',
       });
     }
-    
-    // Track changes for logging
-    const changes: {
-      section: string;
-      field: string;
-      oldValue: unknown;
-      newValue: unknown;
-      impact: string[];
-    }[] = [];
-    
-    // Apply updates and track changes
-    for (const [section, sectionUpdates] of Object.entries(updates)) {
-      if (typeof sectionUpdates !== 'object' || sectionUpdates === null) continue;
-      
-      for (const [field, newValue] of Object.entries(sectionUpdates as Record<string, unknown>)) {
-        const settingsSection = settings.get(section);
-        if (!settingsSection) continue;
-        
-        const oldValue = (settingsSection as Record<string, unknown>)[field];
-        
-        if (JSON.stringify(oldValue) !== JSON.stringify(newValue)) {
-          const impactKey = `${section}.${field}`;
-          const impact = IMPACTFUL_SETTINGS[impactKey] || [];
-          
-          changes.push({
-            section,
-            field,
-            oldValue,
-            newValue,
-            impact,
-          });
-          
-          // Apply the update
-          (settingsSection as Record<string, unknown>)[field] = newValue;
-        }
-      }
+
+    // Extract valid settings fields matching the Prisma schema
+    const validUpdates: Partial<{
+      activeDays: string[];
+      dailyMinutes: Record<string, number>;
+      sessionDuration: number;
+      breakFrequency: number;
+      enforcementLevel: string;
+      rescheduleMode: string;
+      emailNotifications: boolean;
+      pushNotifications: boolean;
+      dailyReminder: boolean;
+      weeklyDigest: boolean;
+      missedTaskAlert: boolean;
+      aiExplanations: boolean;
+      aiQuizGeneration: boolean;
+      aiProgressInsights: boolean;
+      dataRetentionDays: number;
+    }> = {};
+
+    if (Array.isArray(updates.activeDays)) {
+      validUpdates.activeDays = updates.activeDays;
     }
-    
-    if (changes.length > 0) {
-      const previousVersion = settings.version;
-      settings.version += 1;
-      
-      await settings.save();
-      
-      // Log the changes
-      await SettingsChangeLog.create({
-        userId: settings.userId,
-        clerkId,
-        changes,
-        previousVersion,
-        newVersion: settings.version,
-      });
+    if (typeof updates.dailyMinutes === 'object') {
+      validUpdates.dailyMinutes = updates.dailyMinutes;
     }
-    
+    if (typeof updates.sessionDuration === 'number') {
+      validUpdates.sessionDuration = updates.sessionDuration;
+    }
+    if (typeof updates.breakFrequency === 'number') {
+      validUpdates.breakFrequency = updates.breakFrequency;
+    }
+    if (typeof updates.enforcementLevel === 'string') {
+      validUpdates.enforcementLevel = updates.enforcementLevel;
+    }
+    if (typeof updates.rescheduleMode === 'string') {
+      validUpdates.rescheduleMode = updates.rescheduleMode;
+    }
+    if (typeof updates.emailNotifications === 'boolean') {
+      validUpdates.emailNotifications = updates.emailNotifications;
+    }
+    if (typeof updates.pushNotifications === 'boolean') {
+      validUpdates.pushNotifications = updates.pushNotifications;
+    }
+    if (typeof updates.dailyReminder === 'boolean') {
+      validUpdates.dailyReminder = updates.dailyReminder;
+    }
+    if (typeof updates.weeklyDigest === 'boolean') {
+      validUpdates.weeklyDigest = updates.weeklyDigest;
+    }
+    if (typeof updates.missedTaskAlert === 'boolean') {
+      validUpdates.missedTaskAlert = updates.missedTaskAlert;
+    }
+    if (typeof updates.aiExplanations === 'boolean') {
+      validUpdates.aiExplanations = updates.aiExplanations;
+    }
+    if (typeof updates.aiQuizGeneration === 'boolean') {
+      validUpdates.aiQuizGeneration = updates.aiQuizGeneration;
+    }
+    if (typeof updates.aiProgressInsights === 'boolean') {
+      validUpdates.aiProgressInsights = updates.aiProgressInsights;
+    }
+    if (typeof updates.dataRetentionDays === 'number') {
+      validUpdates.dataRetentionDays = updates.dataRetentionDays;
+    }
+
+    const settings = await userService.updateUserSettings(
+      user.id,
+      validUpdates,
+      clerkId,
+      updates.reason
+    );
+
     res.json({
       settings,
-      changesApplied: changes.length,
-      impacts: [...new Set(changes.flatMap((c) => c.impact))],
+      message: 'Settings updated',
     });
   } catch (error) {
     console.error('Settings update error:', error);
@@ -143,12 +149,17 @@ router.get('/history', requireAuth, async (req: Request, res: Response) => {
   try {
     const clerkId = req.auth!.userId;
     const limit = parseInt(req.query.limit as string) || 20;
-    
-    const history = await SettingsChangeLog
-      .find({ clerkId })
-      .sort({ createdAt: -1 })
-      .limit(limit);
-    
+
+    const user = await userService.getUserByClerkId(clerkId);
+    if (!user) {
+      return res.status(404).json({
+        error: 'Not Found',
+        message: 'User not found',
+      });
+    }
+
+    const history = await userService.getSettingsChangeHistory(user.id, limit);
+
     res.json(history);
   } catch (error) {
     console.error('Settings history error:', error);
