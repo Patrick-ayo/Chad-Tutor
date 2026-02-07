@@ -507,8 +507,13 @@ app.get('/api/exam/topics', async (req, res) => {
 });
 
 // YouTube API configuration
-const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY || 'AIzaSyDmcTVkmsKjccBcI2ExQw5JTbKjGvfebqQ';
+const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
 const YOUTUBE_API_BASE = 'https://www.googleapis.com/youtube/v3';
+
+// Validate YouTube API key is set
+if (!YOUTUBE_API_KEY) {
+  console.error('ERROR: YOUTUBE_API_KEY environment variable is not set. Video search will not work.');
+}
 
 // Video search cache (in-memory for now, can be moved to DB)
 const videoCache: Map<string, { data: any; timestamp: number; ttl: number }> = new Map();
