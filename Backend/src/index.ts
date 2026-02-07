@@ -512,7 +512,13 @@ const YOUTUBE_API_BASE = 'https://www.googleapis.com/youtube/v3';
 
 // Validate YouTube API key is set
 if (!YOUTUBE_API_KEY) {
-  console.error('ERROR: YOUTUBE_API_KEY environment variable is not set. Video search will not work.');
+  console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  console.error('⚠️  WARNING: YOUTUBE_API_KEY environment variable is not set!');
+  console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  console.error('Video search endpoints will not work without this API key.');
+  console.error('Please set YOUTUBE_API_KEY in your Backend/.env file.');
+  console.error('See Backend/API_SETUP_GUIDE.md for instructions.');
+  console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 }
 
 // Video search cache (in-memory for now, can be moved to DB)

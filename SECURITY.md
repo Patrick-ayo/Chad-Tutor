@@ -15,10 +15,11 @@ The following credentials were exposed in the repository and must be regenerated
   - Update your local `Backend/.env` file with the new key
 
 - **PostgreSQL Database Password** (Exposed in `Backend/.env`)
-  - **Exposed Password:** `Asdfghjkl;'`
+  - **Exposed Password:** `Asdfghjkl;'` (Note: contains special characters including a single quote)
   - Change the database password immediately
   - Update `DATABASE_URL` in your local `Backend/.env` file
   - Update the password on your database server
+  - When setting the new password, ensure special characters are properly escaped in the connection string
 
 - **Clerk Authentication Keys** (Exposed in `Backend/.env`)
   - **Note:** The keys appear to be test placeholders (`pk_test_placeholder`, `sk_test_placeholder`)
@@ -36,6 +37,8 @@ The sensitive files and hardcoded keys have been removed from the repository, bu
 
 #### Option 1: Using BFG Repo-Cleaner (Recommended)
 
+**Note:** This requires bash shell. On Windows, use Git Bash or WSL.
+
 ```bash
 # Install BFG (if not already installed)
 # See: https://rtyley.github.io/bfg-repo-cleaner/
@@ -45,6 +48,11 @@ git clone --mirror https://github.com/Patrick-ayo/Chad-Tutor.git
 
 # Run BFG to delete .env files and replace hardcoded API key
 bfg --delete-files .env Chad-Tutor.git
+
+# Replace the exposed API key in all commits
+# Alternative for non-bash shells: create a file 'replacements.txt' with the content below
+# AIzaSyDmcTVkmsKjccBcI2ExQw5JTbKjGvfebqQ==>***REMOVED***
+# Then run: bfg --replace-text replacements.txt Chad-Tutor.git
 bfg --replace-text <(echo 'AIzaSyDmcTVkmsKjccBcI2ExQw5JTbKjGvfebqQ==>***REMOVED***') Chad-Tutor.git
 
 # Clean up and push
