@@ -12,7 +12,6 @@ export type SettingsChangeLog = Prisma.SettingsChangeLogGetPayload<{}>;
 
 export interface CreateChangeLogData {
   userId: string;
-  clerkId: string;
   changes: object[];
   impactScore: number;
   warningLevel: number;
@@ -29,7 +28,6 @@ export async function create(
   return client.settingsChangeLog.create({
     data: {
       userId: data.userId,
-      clerkId: data.clerkId,
       changes: data.changes,
       impactScore: data.impactScore,
       warningLevel: data.warningLevel,
@@ -62,10 +60,10 @@ export async function findByUserId(
 }
 
 /**
- * Find recent change logs by Clerk ID
+ * Find recent change logs by user ID
  */
-export async function findRecentByClerkId(
-  clerkId: string,
+export async function findRecentByUserId(
+  userId: string,
   days: number = 30,
   tx?: TransactionClient
 ): Promise<SettingsChangeLog[]> {
@@ -75,7 +73,7 @@ export async function findRecentByClerkId(
 
   return client.settingsChangeLog.findMany({
     where: {
-      clerkId,
+      userId,
       createdAt: { gte: since },
     },
     orderBy: { createdAt: 'desc' },

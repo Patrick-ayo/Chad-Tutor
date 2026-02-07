@@ -11,19 +11,6 @@ import type { Prisma } from '@prisma/client';
 export type Enforcement = Prisma.EnforcementGetPayload<{}>;
 
 /**
- * Find enforcement by Clerk ID
- */
-export async function findByClerkId(
-  clerkId: string,
-  tx?: TransactionClient
-): Promise<Enforcement | null> {
-  const client = tx || prisma;
-  return client.enforcement.findUnique({
-    where: { clerkId },
-  });
-}
-
-/**
  * Find enforcement by user ID
  */
 export async function findByUserId(
@@ -57,7 +44,6 @@ export async function update(
 export async function create(
   data: {
     userId: string;
-    clerkId: string;
   },
   tx?: TransactionClient
 ): Promise<Enforcement> {
@@ -65,22 +51,21 @@ export async function create(
   return client.enforcement.create({
     data: {
       userId: data.userId,
-      clerkId: data.clerkId,
     },
   });
 }
 
 /**
- * Update enforcement by Clerk ID
+ * Update enforcement by user ID
  */
-export async function updateByClerkId(
-  clerkId: string,
+export async function updateByUserId(
+  userId: string,
   data: Prisma.EnforcementUpdateInput,
   tx?: TransactionClient
 ): Promise<Enforcement> {
   const client = tx || prisma;
   return client.enforcement.update({
-    where: { clerkId },
+    where: { userId },
     data,
   });
 }
@@ -89,14 +74,14 @@ export async function updateByClerkId(
  * Increment violation count
  */
 export async function incrementViolation(
-  clerkId: string,
+  userId: string,
   violationData: { type: string; timestamp: Date; details?: string },
   tx?: TransactionClient
 ): Promise<Enforcement> {
   const client = tx || prisma;
   
   const current = await client.enforcement.findUnique({
-    where: { clerkId },
+    where: { userId },
   });
 
   if (!current) {
@@ -106,7 +91,7 @@ export async function incrementViolation(
   const history = current.violationHistory as object[];
   
   return client.enforcement.update({
-    where: { clerkId },
+    where: { userId },
     data: {
       violationCount: { increment: 1 },
       lastViolation: new Date(),
@@ -119,13 +104,13 @@ export async function incrementViolation(
  * Set probation status
  */
 export async function setProbation(
-  clerkId: string,
+  userId: string,
   isOnProbation: boolean,
   tx?: TransactionClient
 ): Promise<Enforcement> {
   const client = tx || prisma;
   return client.enforcement.update({
-    where: { clerkId },
+    where: { userId },
     data: {
       isOnProbation,
       probationStart: isOnProbation ? new Date() : null,

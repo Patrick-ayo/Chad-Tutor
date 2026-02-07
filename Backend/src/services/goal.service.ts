@@ -6,6 +6,7 @@
  */
 
 import { goalRepo } from '../repositories';
+import type { GoalStatus } from '@prisma/client';
 
 // ============================================================================
 // TYPES
@@ -36,7 +37,7 @@ export interface UpdateGoalInput {
   deadline?: Date;
   totalHours?: number;
   completedHours?: number;
-  status?: 'active' | 'completed' | 'abandoned';
+  status?: GoalStatus;
 }
 
 // ============================================================================
@@ -48,12 +49,11 @@ export interface UpdateGoalInput {
  */
 export async function createGoal(
   userId: string,
-  clerkId: string,
+  _clerkId: string,
   input: CreateGoalInput
 ): Promise<GoalData> {
   const goal = await goalRepo.create({
     userId,
-    clerkId,
     name: input.name,
     description: input.description,
     deadline: input.deadline,
@@ -75,9 +75,8 @@ export async function getUserGoals(userId: string): Promise<GoalData[]> {
  * Get active goals for a user
  */
 export async function getActiveGoals(userId: string): Promise<GoalData[]> {
-  // Use findByUserId and filter for active status
   const goals = await goalRepo.findByUserId(userId);
-  return goals.filter((g) => g.status === 'active').map(formatGoal);
+  return goals.filter((g) => g.status === 'ACTIVE').map(formatGoal);
 }
 
 /**
@@ -155,7 +154,7 @@ export async function completeGoal(
   }
 
   return updateGoal(goalId, userId, { 
-    status: 'completed',
+    status: 'COMPLETED' as GoalStatus,
     completedHours: existing.totalHours,
   });
 }
@@ -167,7 +166,7 @@ export async function archiveGoal(
   goalId: string,
   userId: string
 ): Promise<GoalData | null> {
-  return updateGoal(goalId, userId, { status: 'abandoned' });
+  return updateGoal(goalId, userId, { status: 'ABANDONED' as GoalStatus });
 }
 
 /**
@@ -177,7 +176,7 @@ export async function reactivateGoal(
   goalId: string,
   userId: string
 ): Promise<GoalData | null> {
-  return updateGoal(goalId, userId, { status: 'active' });
+  return updateGoal(goalId, userId, { status: 'ACTIVE' as GoalStatus });
 }
 
 /**
@@ -191,8 +190,8 @@ export async function getGoalStats(userId: string): Promise<{
 }> {
   const goals = await goalRepo.findByUserId(userId);
 
-  const active = goals.filter((g) => g.status === 'active');
-  const completed = goals.filter((g) => g.status === 'completed');
+  const active = goals.filter((g) => g.status === 'ACTIVE');
+  const completed = goals.filter((g) => g.status === 'COMPLETED');
 
   const totalProgress = goals.reduce((sum, g) => {
     const progress = g.totalHours > 0 ? (g.completedHours / g.totalHours) * 100 : 0;

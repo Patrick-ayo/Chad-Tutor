@@ -5,7 +5,7 @@
  */
 
 import { prisma, TransactionClient } from './base.repo';
-import type { Prisma } from '@prisma/client';
+import type { Prisma, EntityType } from '@prisma/client';
 
 export type SearchCache = Prisma.SearchCacheGetPayload<{}>;
 
@@ -16,7 +16,7 @@ const DEFAULT_CACHE_HOURS = 24;
  */
 export async function findByQuery(
   normalizedQuery: string,
-  entityType: string,
+  entityType: EntityType,
   tx?: TransactionClient
 ): Promise<SearchCache | null> {
   const client = tx || prisma;
@@ -34,7 +34,7 @@ export async function findByQuery(
  */
 export async function upsert(
   normalizedQuery: string,
-  entityType: string,
+  entityType: EntityType,
   resultIds: string[],
   cacheHours: number = DEFAULT_CACHE_HOURS,
   tx?: TransactionClient
@@ -94,7 +94,7 @@ export async function deleteExpired(
  * Clear all cache for a specific entity type
  */
 export async function clearByEntityType(
-  entityType: string,
+  entityType: EntityType,
   tx?: TransactionClient
 ): Promise<number> {
   const client = tx || prisma;

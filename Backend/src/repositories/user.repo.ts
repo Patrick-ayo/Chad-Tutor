@@ -75,7 +75,7 @@ export async function findByClerkIdWithRelations(
       settings: true,
       enforcement: true,
       goals: {
-        where: { status: 'active' },
+        where: { status: 'ACTIVE' },
         orderBy: { createdAt: 'desc' },
       },
     },

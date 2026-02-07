@@ -6,13 +6,12 @@
  */
 
 import { prisma, TransactionClient, getSkip, paginate, PaginatedResult } from './base.repo';
-import type { Prisma } from '@prisma/client';
+import type { Prisma, GoalStatus } from '@prisma/client';
 
 export type Goal = Prisma.GoalGetPayload<{}>;
 
 export interface CreateGoalData {
   userId: string;
-  clerkId: string;
   name: string;
   description?: string;
   deadline: Date;
@@ -25,7 +24,7 @@ export interface UpdateGoalData {
   deadline?: Date;
   totalHours?: number;
   completedHours?: number;
-  status?: 'active' | 'completed' | 'abandoned';
+  status?: GoalStatus;
   milestones?: object[];
 }
 
@@ -47,7 +46,7 @@ export async function findById(
  */
 export async function findByUserId(
   userId: string,
-  status?: string,
+  status?: GoalStatus,
   tx?: TransactionClient
 ): Promise<Goal[]> {
   const client = tx || prisma;
@@ -61,17 +60,17 @@ export async function findByUserId(
 }
 
 /**
- * Find active goal for user
+ * Find active goals for user
  */
-export async function findActiveByClerkId(
-  clerkId: string,
+export async function findActiveByUserId(
+  userId: string,
   tx?: TransactionClient
 ): Promise<Goal | null> {
   const client = tx || prisma;
   return client.goal.findFirst({
     where: {
-      clerkId,
-      status: 'active',
+      userId,
+      status: 'ACTIVE',
     },
     orderBy: { createdAt: 'desc' },
   });
@@ -84,12 +83,12 @@ export async function findPaginated(
   userId: string,
   page: number = 1,
   limit: number = 20,
-  status?: string,
+  status?: GoalStatus,
   tx?: TransactionClient
 ): Promise<PaginatedResult<Goal>> {
   const client = tx || prisma;
   
-  const where = {
+  const where: Prisma.GoalWhereInput = {
     userId,
     ...(status && { status }),
   };
@@ -118,7 +117,6 @@ export async function create(
   return client.goal.create({
     data: {
       userId: data.userId,
-      clerkId: data.clerkId,
       name: data.name,
       description: data.description,
       deadline: data.deadline,

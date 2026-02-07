@@ -11,6 +11,7 @@ interface RoadmapPreviewProps {
   onTaskDefer?: (taskId: string) => void;
   onTaskSkip?: (taskId: string) => void;
   onTaskLockToggle?: (taskId: string) => void;
+  onTaskSchedule?: (taskId: string, date: string | undefined) => void;
   isEditable?: boolean;
 }
 
@@ -19,6 +20,7 @@ export function RoadmapPreview({
   onTaskDefer,
   onTaskSkip,
   onTaskLockToggle,
+  onTaskSchedule,
   isEditable = true,
 }: RoadmapPreviewProps) {
   const stats = useMemo(() => {
@@ -105,6 +107,7 @@ export function RoadmapPreview({
             onTaskDefer={onTaskDefer}
             onTaskSkip={onTaskSkip}
             onTaskLockToggle={onTaskLockToggle}
+            onTaskSchedule={onTaskSchedule}
             isEditable={isEditable}
           />
         ))}

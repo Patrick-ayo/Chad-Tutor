@@ -5,12 +5,12 @@
  */
 
 import { prisma, TransactionClient } from './base.repo';
-import type { Prisma } from '@prisma/client';
+import type { Prisma, EntityType } from '@prisma/client';
 
 export type ContentRefresh = Prisma.ContentRefreshGetPayload<{}>;
 
 export interface CreateRefreshData {
-  entityType: string;
+  entityType: EntityType;
   entityId: string;
   success: boolean;
   errorMessage?: string;
@@ -36,7 +36,7 @@ export async function create(
  * Get last successful refresh for an entity
  */
 export async function getLastRefresh(
-  entityType: string,
+  entityType: EntityType,
   entityId: string,
   tx?: TransactionClient
 ): Promise<ContentRefresh | null> {
@@ -55,7 +55,7 @@ export async function getLastRefresh(
  * Check if entity needs refresh
  */
 export async function needsRefresh(
-  entityType: string,
+  entityType: EntityType,
   entityId: string,
   maxAgeHours: number = 24,
   tx?: TransactionClient
@@ -80,7 +80,7 @@ export async function needsRefresh(
  * Get entities that need refresh
  */
 export async function getStaleEntities(
-  entityType: string,
+  entityType: EntityType,
   maxAgeHours: number = 24,
   limit: number = 100,
   tx?: TransactionClient
@@ -121,7 +121,7 @@ export async function getStaleEntities(
  * Get refresh history for an entity
  */
 export async function getHistory(
-  entityType: string,
+  entityType: EntityType,
   entityId: string,
   limit: number = 10,
   tx?: TransactionClient

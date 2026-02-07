@@ -434,7 +434,7 @@ async function logSearch(
       userId,
       rawQuery,
       normalizedQuery,
-      entityType,
+      entityType: entityType as any,
       cacheHit,
       resultCount,
       latencyMs,

@@ -120,7 +120,7 @@ async function getL2(
   normalizedQuery: string,
   entityType: string
 ): Promise<{ resultIds: string[]; cacheHit: boolean } | null> {
-  const entry = await cacheRepo.findByQuery(normalizedQuery, entityType);
+  const entry = await cacheRepo.findByQuery(normalizedQuery, entityType as any);
   
   if (entry) {
     // Increment hit count for analytics
@@ -143,7 +143,7 @@ async function setL2(
   resultIds: string[],
   cacheHours: number = config.cacheExpiryHours
 ): Promise<void> {
-  await cacheRepo.upsert(normalizedQuery, entityType, resultIds, cacheHours);
+  await cacheRepo.upsert(normalizedQuery, entityType as any, resultIds, cacheHours);
 }
 
 // ============================================================================

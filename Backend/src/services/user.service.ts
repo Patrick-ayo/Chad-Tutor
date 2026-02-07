@@ -206,7 +206,7 @@ export interface EnforcementData {
  * Get enforcement state for a user
  */
 export async function getEnforcementState(userId: string): Promise<EnforcementData> {
-  const enforcement = await enforcementRepo.findByClerkId(userId);
+  const enforcement = await enforcementRepo.findByUserId(userId);
 
   if (!enforcement) {
     return {

@@ -33,6 +33,22 @@ export interface Subject {
   marks: number;
 }
 
+export interface Topic {
+  id: string;
+  name: string;
+  subjectId: string;
+  module: string;      // Which module/chapter this topic belongs to
+  difficulty: 'easy' | 'medium' | 'hard';
+  estimatedHours: number; // How long this topic typically takes to study
+  subtopics?: Subtopic[]; // Optional array of subtopics
+}
+
+export interface Subtopic {
+  id: string;
+  name: string;
+  estimatedHours?: number;
+}
+
 // Predefined goal options (no free text garbage)
 export interface GoalOption {
   id: string;
@@ -41,6 +57,52 @@ export interface GoalOption {
   category: string;
   estimatedHours: number;
   skillIds?: string[]; // For role -> skills mapping
+}
+
+// Video preferences for YouTube content fetching
+export interface VideoPreferences {
+  sourceType: "single-playlist" | "mixed";
+  sortBy: "relevance" | "views" | "rating" | "date";
+  includeOneShot: boolean;
+  preferredLanguage?: string;
+}
+
+// Fetched video data
+export interface VideoResult {
+  id: string;
+  title: string;
+  channelName: string;
+  channelId: string;
+  thumbnail: string;
+  duration: string; // ISO 8601 duration or formatted string
+  durationSeconds: number;
+  viewCount: number;
+  likeCount?: number;
+  publishedAt?: string;
+  topicId: string;
+  topicName: string;
+  subtopicId?: string;
+  subtopicName?: string;
+  module?: string;
+  playlistId?: string;
+  playlistTitle?: string;
+  isOneShot?: boolean;
+}
+
+// Playlist grouping (for single-playlist mode)
+export interface Playlist {
+  id: string;
+  title: string;
+  channelName: string;
+  channelId: string;
+  topicId: string;
+  topicName: string;
+  subtopicId?: string;
+  subtopicName?: string;
+  videoCount: number;
+  totalDuration: number;
+  totalDurationFormatted: string;
+  videos: VideoResult[];
 }
 
 // Step 1: Goal Definition
@@ -53,6 +115,9 @@ export interface GoalDefinition {
   course?: Course;
   semester?: Semester;
   subjects?: Subject[]; // Multiple subjects can be selected
+  topics?: Topic[]; // Selected topics from the chosen subjects
+  videoPreferences?: VideoPreferences; // User's video preferences
+  videos?: VideoResult[]; // Fetched videos for the selected topics
 }
 
 // Step 2: Deadline & Constraints
@@ -103,9 +168,12 @@ export interface Task {
   completedDate?: string;
   // Explanation for scheduling (builds trust)
   scheduleReason?: string;
+  // Additional metadata (videos, resources, etc.)
+  metadata?: Record<string, any>;
 }
 
-export interface Topic {
+// Roadmap Topic structure (different from GoalDefinition Topic)
+export interface RoadmapTopic {
   id: string;
   name: string;
   description?: string;
@@ -113,12 +181,17 @@ export interface Topic {
   estimatedMinutes: number; // Sum of tasks
 }
 
+// TopicNode is used in roadmap generation (extends RoadmapTopic)
+export interface TopicNode extends RoadmapTopic {
+  // Inherits from RoadmapTopic
+}
+
 export interface Phase {
   id: string;
   name: string;
   description?: string;
   order: number;
-  topics: Topic[];
+  topics: RoadmapTopic[];
   estimatedMinutes: number; // Sum of topics
   startDate?: string;
   endDate?: string;
@@ -127,12 +200,15 @@ export interface Phase {
 export interface Roadmap {
   id: string;
   goalId: string;
+  name?: string;
+  description?: string;
   phases: Phase[];
   totalEstimatedMinutes: number;
   bufferDays: number;
   revisionSlots: number;
-  generatedAt: string;
+  generatedAt?: string;
   lastRecalculatedAt?: string;
+  metadata?: Record<string, any>;
 }
 
 // Schedule entry (separate from task - tasks are reusable)

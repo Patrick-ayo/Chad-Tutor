@@ -197,7 +197,7 @@ router.patch('/:id', requireAuth, async (req: Request, res: Response) => {
       deadline?: Date;
       totalHours?: number;
       completedHours?: number;
-      status?: 'active' | 'completed' | 'abandoned';
+      status?: 'ACTIVE' | 'COMPLETED' | 'ABANDONED';
     } = {};
 
     if (updates.name !== undefined) validUpdates.name = updates.name;
@@ -206,8 +206,8 @@ router.patch('/:id', requireAuth, async (req: Request, res: Response) => {
     if (updates.totalHours !== undefined) validUpdates.totalHours = updates.totalHours;
     if (updates.completedHours !== undefined) validUpdates.completedHours = updates.completedHours;
     if (updates.status !== undefined) {
-      if (['active', 'completed', 'abandoned'].includes(updates.status)) {
-        validUpdates.status = updates.status;
+      if (['ACTIVE', 'COMPLETED', 'ABANDONED'].includes(updates.status.toUpperCase())) {
+        validUpdates.status = updates.status.toUpperCase() as 'ACTIVE' | 'COMPLETED' | 'ABANDONED';
       }
     }
 

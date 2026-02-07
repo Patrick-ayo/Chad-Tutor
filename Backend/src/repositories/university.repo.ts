@@ -17,6 +17,11 @@ export interface CreateUniversityData {
   normalizedName: string;
   country?: string;
   type?: string;
+  state?: string | null;
+  domain?: string | null;
+  webPage?: string | null;
+  alphaCode?: string | null;
+  provider?: string;
   isCanonical?: boolean;
   canonicalId?: string;
 }
@@ -168,5 +173,41 @@ export async function count(
   const client = tx || prisma;
   return client.university.count({
     where: { isCanonical: true },
+  });
+}
+
+/**
+ * Bulk insert universities, silently skipping duplicates
+ */
+export async function createMany(
+  data: CreateUniversityData[],
+  tx?: TransactionClient
+): Promise<{ count: number }> {
+  const client = tx || prisma;
+  return client.university.createMany({
+    data,
+    skipDuplicates: true,
+  });
+}
+
+/**
+ * Case-insensitive search on normalizedName (mode: insensitive)
+ */
+export async function searchByNameInsensitive(
+  query: string,
+  limit: number = 20,
+  tx?: TransactionClient
+): Promise<University[]> {
+  const client = tx || prisma;
+  return client.university.findMany({
+    where: {
+      isCanonical: true,
+      normalizedName: {
+        contains: query.toLowerCase().trim(),
+        mode: 'insensitive',
+      },
+    },
+    take: limit,
+    orderBy: { name: 'asc' },
   });
 }

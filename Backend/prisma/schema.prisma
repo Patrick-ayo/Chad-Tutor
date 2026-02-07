@@ -204,10 +204,17 @@ model University {
   externalId   String
   sourceId     String
   
-  name         String   @db.VarChar(255)
-  normalizedName String @db.VarChar(255)
-  country      String?  @db.VarChar(100)
-  type         String?  @db.VarChar(100)
+  name           String  @db.VarChar(255)
+  normalizedName String  @db.VarChar(255)
+  country        String? @db.VarChar(100)
+  type           String? @db.VarChar(100)
+
+  // Hipolabs / provider-specific enrichment fields
+  state     String? @db.VarChar(100)
+  domain    String? @db.VarChar(255)
+  webPage   String? @db.VarChar(500)
+  alphaCode String? @db.VarChar(10)
+  provider  String  @default("unknown") @db.VarChar(50)
   
   isCanonical  Boolean  @default(true)
   canonicalId  String?
@@ -222,7 +229,9 @@ model University {
   courses   Course[]
 
   @@unique([sourceId, externalId])
-  @@index([normalizedName, isCanonical])
+  @@index([normalizedName, isCanonical])  // Fast search
+  @@index([country, isCanonical])         // Country filter
+  @@index([provider])                      // Provider filter
   @@index([isCanonical])
   @@index([sourceId])
   @@index([canonicalId])

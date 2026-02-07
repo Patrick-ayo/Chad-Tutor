@@ -1,6 +1,7 @@
 import type { Task } from "@/types/goal";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   Clock,
@@ -20,6 +21,7 @@ interface TaskCardProps {
   onDefer?: (taskId: string) => void;
   onSkip?: (taskId: string) => void;
   onLockToggle?: (taskId: string) => void;
+  onSchedule?: (taskId: string, date: string | undefined) => void;
   isEditable?: boolean;
 }
 
@@ -38,7 +40,7 @@ const statusConfig = {
   deferred: { icon: Calendar, color: "text-orange-600", bg: "bg-orange-50 dark:bg-orange-950/30" },
 };
 
-export function TaskCard({ task, onDefer, onSkip, onLockToggle, isEditable = true }: TaskCardProps) {
+export function TaskCard({ task, onDefer, onSkip, onLockToggle, onSchedule, isEditable = true }: TaskCardProps) {
   const StatusIcon = statusConfig[task.status].icon;
   const statusColor = statusConfig[task.status].color;
   const statusBg = statusConfig[task.status].bg;
@@ -111,6 +113,30 @@ export function TaskCard({ task, onDefer, onSkip, onLockToggle, isEditable = tru
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
+          )}
+          
+          {/* Manual Schedule Date */}
+          {onSchedule && task.status !== "completed" && (
+            <div className="flex items-center gap-2 text-xs">
+              <Calendar className="h-3 w-3 text-muted-foreground" />
+              <Input
+                type="date"
+                value={task.scheduledDate || ""}
+                onChange={(e) => onSchedule(task.id, e.target.value || undefined)}
+                className="h-7 text-xs w-36"
+                placeholder="Set date"
+              />
+              {task.scheduledDate && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => onSchedule(task.id, undefined)}
+                  className="h-6 px-2 text-xs"
+                >
+                  Clear
+                </Button>
+              )}
+            </div>
           )}
         </div>
 

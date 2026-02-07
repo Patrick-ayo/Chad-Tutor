@@ -9,25 +9,30 @@ import {
   Lock,
   AlertTriangle,
   ArrowLeft,
+  RotateCcw,
 } from "lucide-react";
 import { useState } from "react";
 
 interface RoadmapControlsProps {
   hasChanges: boolean;
   onRegenerate: () => void;
+  onRestore: () => void;
   onSave: () => void;
   onBack: () => void;
   isRegenerating?: boolean;
   isSaving?: boolean;
+  hasOriginal?: boolean;
 }
 
 export function RoadmapControls({
   hasChanges,
   onRegenerate,
+  onRestore,
   onSave,
   onBack,
   isRegenerating = false,
   isSaving = false,
+  hasOriginal = false,
 }: RoadmapControlsProps) {
   const [preserveCompleted, setPreserveCompleted] = useState(true);
   const [showRegenerateConfirm, setShowRegenerateConfirm] = useState(false);
@@ -115,6 +120,18 @@ export function RoadmapControls({
 
             {/* Right side - Actions */}
             <div className="flex items-center gap-3">
+              {/* Restore Original */}
+              {hasOriginal && hasChanges && (
+                <Button
+                  variant="outline"
+                  onClick={onRestore}
+                  className="gap-2"
+                >
+                  <RotateCcw className="h-4 w-4" />
+                  Restore Original
+                </Button>
+              )}
+
               {/* Regenerate */}
               <Button
                 variant="outline"

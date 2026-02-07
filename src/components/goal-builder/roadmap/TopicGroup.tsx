@@ -1,4 +1,4 @@
-import type { Topic } from "@/types/goal";
+import type { RoadmapTopic } from "@/types/goal";
 import { TaskCard } from "./TaskCard";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Badge } from "@/components/ui/badge";
@@ -7,10 +7,11 @@ import { useState, useMemo } from "react";
 import { cn } from "@/lib/utils";
 
 interface TopicGroupProps {
-  topic: Topic;
+  topic: RoadmapTopic;
   onTaskDefer?: (taskId: string) => void;
   onTaskSkip?: (taskId: string) => void;
   onTaskLockToggle?: (taskId: string) => void;
+  onTaskSchedule?: (taskId: string, date: string | undefined) => void;
   isEditable?: boolean;
 }
 
@@ -19,6 +20,7 @@ export function TopicGroup({
   onTaskDefer,
   onTaskSkip,
   onTaskLockToggle,
+  onTaskSchedule,
   isEditable = true,
 }: TopicGroupProps) {
   const [isOpen, setIsOpen] = useState(true);
@@ -86,6 +88,7 @@ export function TopicGroup({
             onDefer={onTaskDefer}
             onSkip={onTaskSkip}
             onLockToggle={onTaskLockToggle}
+            onSchedule={onTaskSchedule}
             isEditable={isEditable}
           />
         ))}

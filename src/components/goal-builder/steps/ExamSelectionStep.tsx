@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Search, GraduationCap, BookOpen, Calendar, CheckSquare } from "lucide-react";
+import { Search, GraduationCap, BookOpen, Calendar, CheckSquare, X } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -29,15 +29,22 @@ export function ExamSelectionStep({ data, onUpdate, onNext, onBack }: ExamSelect
 
   // Fetch universities with search
   useEffect(() => {
+    if (!searchQuery || searchQuery.trim().length < 2) {
+      setUniversities([]);
+      return;
+    }
+
     const fetchUniversities = async () => {
       try {
         const response = await fetch(
-          `http://localhost:3001/api/exam/universities?search=${encodeURIComponent(searchQuery)}`
+          `http://localhost:3001/api/exam/universities?search=${encodeURIComponent(searchQuery.trim())}`
         );
         const data = await response.json();
-        setUniversities(data);
+        // Backend returns { universities: [...], meta: {...} }
+        setUniversities(data.universities || []);
       } catch (error) {
         console.error("Failed to fetch universities:", error);
+        setUniversities([]);
       }
     };
 
@@ -61,7 +68,8 @@ export function ExamSelectionStep({ data, onUpdate, onNext, onBack }: ExamSelect
           `http://localhost:3001/api/exam/courses?university=${encodeURIComponent(selectedUniversity.id)}`
         );
         const data = await response.json();
-        setCourses(data);
+        // Backend returns { courses: [...], meta: {...} }
+        setCourses(data.courses || []);
       } catch (error) {
         console.error("Failed to fetch courses:", error);
       }
@@ -85,7 +93,8 @@ export function ExamSelectionStep({ data, onUpdate, onNext, onBack }: ExamSelect
           )}&course=${encodeURIComponent(selectedCourse.id)}`
         );
         const data = await response.json();
-        setSemesters(data);
+        // Backend returns { semesters: [...], meta: {...} }
+        setSemesters(data.semesters || []);
       } catch (error) {
         console.error("Failed to fetch semesters:", error);
       }
@@ -111,7 +120,8 @@ export function ExamSelectionStep({ data, onUpdate, onNext, onBack }: ExamSelect
           )}`
         );
         const data = await response.json();
-        setSubjects(data);
+        // Backend returns { subjects: [...], meta: {...} }
+        setSubjects(data.subjects || []);
       } catch (error) {
         console.error("Failed to fetch subjects:", error);
       }
@@ -128,6 +138,21 @@ export function ExamSelectionStep({ data, onUpdate, onNext, onBack }: ExamSelect
     setCourses([]);
     setSemesters([]);
     setSubjects([]);
+    // Clear search when university is selected to lock the selection
+    setSearchQuery("");
+    setUniversities([]);
+  };
+
+  const handleCancelUniversity = () => {
+    setSelectedUniversity(undefined);
+    setSelectedCourse(undefined);
+    setSelectedSemester(undefined);
+    setSelectedSubjects([]);
+    setCourses([]);
+    setSemesters([]);
+    setSubjects([]);
+    setSearchQuery("");
+    setUniversities([]);
   };
 
   const handleCourseSelect = (course: Course) => {
@@ -188,39 +213,51 @@ export function ExamSelectionStep({ data, onUpdate, onNext, onBack }: ExamSelect
             <GraduationCap className="h-4 w-4" />
             Step 1: Search University
           </Label>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <Input
-              placeholder="Search for your university..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10"
-            />
-          </div>
-          {universities.length > 0 && (
-            <div className="mt-3 space-y-2 max-h-48 overflow-y-auto">
-              {universities.map((uni) => (
-                <div
-                  key={uni.id}
-                  className={`p-3 border rounded-md cursor-pointer transition-colors ${
-                    selectedUniversity?.id === uni.id
-                      ? "border-primary bg-primary/5"
-                      : "border-gray-200 hover:border-primary/50"
-                  }`}
-                  onClick={() => handleUniversitySelect(uni)}
-                >
-                  <p className="font-medium">{uni.name}</p>
-                  <p className="text-xs text-gray-500">{uni.type}</p>
+          
+          {!selectedUniversity ? (
+            <>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Input
+                  placeholder="Search for your university..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
+              {universities.length > 0 && (
+                <div className="mt-3 space-y-2 max-h-48 overflow-y-auto">
+                  {universities.map((uni) => (
+                    <div
+                      key={uni.id}
+                      className="p-3 border rounded-md cursor-pointer transition-colors border-gray-200 hover:border-primary/50"
+                      onClick={() => handleUniversitySelect(uni)}
+                    >
+                      <p className="font-medium">{uni.name}</p>
+                      <p className="text-xs text-gray-500">{uni.type}</p>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          )}
-          {selectedUniversity && (
-            <div className="mt-3">
-              <Badge variant="secondary" className="gap-2">
-                <CheckSquare className="h-3 w-3" />
-                {selectedUniversity.name}
-              </Badge>
+              )}
+            </>
+          ) : (
+            <div className="flex items-center justify-between p-3 border rounded-md bg-primary/5 border-primary">
+              <div className="flex items-center gap-3">
+                <CheckSquare className="h-4 w-4 text-primary" />
+                <div>
+                  <p className="font-medium">{selectedUniversity.name}</p>
+                  <p className="text-xs text-gray-500">{selectedUniversity.type}</p>
+                </div>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleCancelUniversity}
+                className="h-8 w-8 p-0 text-gray-500 hover:text-red-600"
+                title="Change university"
+              >
+                <X className="h-4 w-4" />
+              </Button>
             </div>
           )}
         </CardContent>

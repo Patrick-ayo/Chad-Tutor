@@ -5,7 +5,7 @@
  */
 
 import { prisma, TransactionClient, getSkip, paginate, PaginatedResult } from './base.repo';
-import type { Prisma } from '@prisma/client';
+import type { Prisma, EntityType } from '@prisma/client';
 
 export type SearchLog = Prisma.SearchLogGetPayload<{}>;
 
@@ -13,7 +13,7 @@ export interface CreateSearchLogData {
   userId?: string;
   rawQuery: string;
   normalizedQuery: string;
-  entityType: string;
+  entityType: EntityType;
   cacheHit: boolean;
   resultCount: number;
   latencyMs: number;
@@ -60,7 +60,7 @@ export async function findByUserId(
  * Get popular searches
  */
 export async function getPopularSearches(
-  entityType: string,
+  entityType: EntityType,
   days: number = 7,
   limit: number = 20,
   tx?: TransactionClient

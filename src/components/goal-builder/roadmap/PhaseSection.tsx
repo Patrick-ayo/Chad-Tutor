@@ -13,6 +13,7 @@ interface PhaseSectionProps {
   onTaskDefer?: (taskId: string) => void;
   onTaskSkip?: (taskId: string) => void;
   onTaskLockToggle?: (taskId: string) => void;
+  onTaskSchedule?: (taskId: string, date: string | undefined) => void;
   isEditable?: boolean;
 }
 
@@ -21,6 +22,7 @@ export function PhaseSection({
   onTaskDefer,
   onTaskSkip,
   onTaskLockToggle,
+  onTaskSchedule,
   isEditable = true,
 }: PhaseSectionProps) {
   const [isOpen, setIsOpen] = useState(true);
@@ -116,6 +118,7 @@ export function PhaseSection({
                 onTaskDefer={onTaskDefer}
                 onTaskSkip={onTaskSkip}
                 onTaskLockToggle={onTaskLockToggle}
+                onTaskSchedule={onTaskSchedule}
                 isEditable={isEditable}
               />
             ))}

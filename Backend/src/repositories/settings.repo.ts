@@ -26,25 +26,11 @@ export async function findByUserId(
 }
 
 /**
- * Find settings by Clerk ID
- */
-export async function findByClerkId(
-  clerkId: string,
-  tx?: TransactionClient
-): Promise<UserSettings | null> {
-  const client = tx || prisma;
-  return client.userSettings.findUnique({
-    where: { clerkId },
-  });
-}
-
-/**
  * Create settings for user
  */
 export async function create(
   data: {
     userId: string;
-    clerkId: string;
   },
   tx?: TransactionClient
 ): Promise<UserSettings> {
@@ -52,22 +38,21 @@ export async function create(
   return client.userSettings.create({
     data: {
       userId: data.userId,
-      clerkId: data.clerkId,
     },
   });
 }
 
 /**
- * Update settings by Clerk ID
+ * Update settings by user ID
  */
-export async function updateByClerkId(
-  clerkId: string,
+export async function updateByUserId(
+  userId: string,
   data: Prisma.UserSettingsUpdateInput,
   tx?: TransactionClient
 ): Promise<UserSettings> {
   const client = tx || prisma;
   return client.userSettings.update({
-    where: { clerkId },
+    where: { userId },
     data,
   });
 }
@@ -92,17 +77,15 @@ export async function update(
  */
 export async function upsert(
   userId: string,
-  clerkId: string,
-  data: Omit<Prisma.UserSettingsUpdateInput, 'userId' | 'clerkId'>,
+  data: Omit<Prisma.UserSettingsUpdateInput, 'userId'>,
   tx?: TransactionClient
 ): Promise<UserSettings> {
   const client = tx || prisma;
   return client.userSettings.upsert({
-    where: { clerkId },
+    where: { userId },
     create: {
       ...data,
       userId,
-      clerkId,
     } as Prisma.UserSettingsUncheckedCreateInput,
     update: data,
   });

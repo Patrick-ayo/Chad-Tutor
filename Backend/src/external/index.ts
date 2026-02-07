@@ -6,3 +6,4 @@
  */
 
 export * as examApiClient from './exam-api.client';
+export { ProviderFactory } from './providers/ProviderFactory';

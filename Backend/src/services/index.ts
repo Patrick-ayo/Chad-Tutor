@@ -14,5 +14,8 @@ export * as refreshService from './refresh.service';
 export * as userService from './user.service';
 export * as goalService from './goal.service';
 
+// University
+export * as universityService from './university.service';
+
 // Analytics
 export * as analyticsService from './analytics.service';
