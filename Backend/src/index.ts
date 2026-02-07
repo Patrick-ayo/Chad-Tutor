@@ -507,8 +507,19 @@ app.get('/api/exam/topics', async (req, res) => {
 });
 
 // YouTube API configuration
-const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY || 'AIzaSyDmcTVkmsKjccBcI2ExQw5JTbKjGvfebqQ';
+const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
 const YOUTUBE_API_BASE = 'https://www.googleapis.com/youtube/v3';
+
+// Validate YouTube API key is set
+if (!YOUTUBE_API_KEY) {
+  console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  console.error('⚠️  WARNING: YOUTUBE_API_KEY environment variable is not set!');
+  console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  console.error('Video search endpoints will not work without this API key.');
+  console.error('Please set YOUTUBE_API_KEY in your Backend/.env file.');
+  console.error('See Backend/API_SETUP_GUIDE.md for instructions.');
+  console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+}
 
 // Video search cache (in-memory for now, can be moved to DB)
 const videoCache: Map<string, { data: any; timestamp: number; ttl: number }> = new Map();
