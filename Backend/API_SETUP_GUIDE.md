@@ -561,7 +561,7 @@ CLERK_PUBLISHABLE_KEY=pk_test_...
 CLERK_SECRET_KEY=sk_test_...
 
 # YouTube Data API v3 (required for video discovery)
-YOUTUBE_API_KEY=AIzaSy...
+YOUTUBE_API_KEY=your_youtube_api_key_here
 
 # Cache TTL (optional, default: 168 hours)
 CACHE_EXPIRY_HOURS=168
@@ -577,6 +577,7 @@ FRONTEND_URL=http://localhost:5174
 - **Hipolabs:** No API key needed (public API)
 - **YouTube Data API v3:** Required for video content discovery
   - Obtain from: https://console.cloud.google.com/apis/credentials
+  - Add to `.env` file as `YOUTUBE_API_KEY`
   - Default quota: 10,000 units/day
   - Each video search uses ~3-5 units
 

@@ -507,7 +507,11 @@ app.get('/api/exam/topics', async (req, res) => {
 });
 
 // YouTube API configuration
-const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY || 'AIzaSyDmcTVkmsKjccBcI2ExQw5JTbKjGvfebqQ';
+const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
+if (!YOUTUBE_API_KEY) {
+  console.error('ERROR: YOUTUBE_API_KEY not found in environment variables');
+  console.error('Please add YOUTUBE_API_KEY to your .env file');
+}
 const YOUTUBE_API_BASE = 'https://www.googleapis.com/youtube/v3';
 
 // Video search cache (in-memory for now, can be moved to DB)
@@ -544,6 +548,14 @@ function formatDuration(seconds: number): string {
 // YouTube video search endpoint
 app.post('/api/videos/search', async (req, res) => {
   try {
+    // Check if API key is configured
+    if (!YOUTUBE_API_KEY) {
+      return res.status(500).json({
+        error: 'YouTube API key not configured',
+        message: 'Please add YOUTUBE_API_KEY to your .env file'
+      });
+    }
+
     const { topics, preferences, examContext } = req.body;
     
     if (!topics || topics.length === 0) {
