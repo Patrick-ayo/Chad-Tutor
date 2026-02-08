@@ -106,6 +106,63 @@ export function normalizeSubjectName(name: string): string {
 }
 
 /**
+ * Normalize skill name
+ * Handles common programming language and skill variations
+ */
+export function normalizeSkillName(name: string): string {
+  let normalized = normalizeString(name);
+
+  // Standardize common programming skill names
+  const standardizations: Record<string, string> = {
+    'javascript': 'js',
+    'typescript': 'ts',
+    'python3': 'python',
+    'python 3': 'python',
+    'c++': 'cpp',
+    'c plus plus': 'cpp',
+    'c#': 'csharp',
+    'c sharp': 'csharp',
+    'f#': 'fsharp',
+    'golang': 'go',
+    'go lang': 'go',
+    'rust lang': 'rust',
+    'objective-c': 'objc',
+    'objective c': 'objc',
+    'react.js': 'react',
+    'reactjs': 'react',
+    'vue.js': 'vue',
+    'vuejs': 'vue',
+    'node.js': 'nodejs',
+    'next.js': 'nextjs',
+    'express.js': 'expressjs',
+    'angular.js': 'angular',
+    'angularjs': 'angular',
+    'postgresql': 'postgres',
+    'mongo db': 'mongodb',
+    'my sql': 'mysql',
+    'sql server': 'mssql',
+    'microsoft sql server': 'mssql',
+    'aws': 'amazon web services',
+    'gcp': 'google cloud platform',
+    'oop': 'object oriented programming',
+    'object-oriented programming': 'object oriented programming',
+    'dsa': 'data structures and algorithms',
+    'html5': 'html',
+    'css3': 'css',
+    'es6': 'javascript',
+    'ecmascript': 'javascript',
+  };
+
+  for (const [variant, standard] of Object.entries(standardizations)) {
+    // Only replace if it's the whole word
+    const regex = new RegExp(`\\b${variant}\\b`, 'gi');
+    normalized = normalized.replace(regex, standard);
+  }
+
+  return normalized;
+}
+
+/**
  * Normalize search query
  */
 export function normalizeSearchQuery(query: string): string {

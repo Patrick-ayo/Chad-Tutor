@@ -5,7 +5,7 @@ import config from './config';
 import { connectDatabase, disconnectDatabase } from './db';
 import { cacheService } from './services';
 import { registerAllJobs } from './jobs';
-import { userRoutes, settingsRoutes, examRoutes, goalsRoutes, universityRoutes } from './routes';
+import { userRoutes, settingsRoutes, examRoutes, goalsRoutes, universityRoutes, skillsRoutes } from './routes';
 import { errorHandler, notFoundHandler } from './middleware';
 import { HipolabsProvider } from './external/providers/HipolabsProvider';
 
@@ -1127,6 +1127,7 @@ app.use('/api/settings', settingsRoutes);
 app.use('/api/exam', examRoutes);
 app.use('/api/goals', goalsRoutes);
 app.use('/api/universities', universityRoutes);
+app.use('/api/skills', skillsRoutes);
 
 // 404 handler
 app.use(notFoundHandler);

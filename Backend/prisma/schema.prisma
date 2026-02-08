@@ -46,6 +46,50 @@ enum EntityType {
 }
 
 // ============================================================================
+// SKILL ENUMS
+// ============================================================================
+
+enum Difficulty {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+  EXPERT
+}
+
+enum SkillEdgeType {
+  SUBSKILL_OF     // A is subskill of B (hierarchy via edges)
+  PREREQUISITE    // A requires B to be completed first
+  RELATED         // A and B are conceptually related
+  ALTERNATIVE     // A is alternative approach to B
+  BUILDS_ON       // A extends/advances B
+  COMPLEMENTS     // A pairs well with B
+}
+
+enum SkillStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+  MASTERED
+}
+
+enum MasteryLevel {
+  NONE
+  FAMILIAR
+  COMPETENT
+  PROFICIENT
+  EXPERT
+  MASTERED
+}
+
+enum SelectionSource {
+  USER_SELECTED     // User explicitly picked this
+  AI_RECOMMENDED    // AI suggested based on goals
+  ROLE_REQUIRED     // Required for a role/career path
+  GOAL_DERIVED      // Automatically added from goal definition
+  PREREQUISITE      // Added because another skill requires it
+}
+
+// ============================================================================
 // USER & AUTH MODELS
 // ============================================================================
 
@@ -66,6 +110,8 @@ model User {
   settingsChanges  SettingsChangeLog[]
   searchLogs       SearchLog[]
   contentUsage     ContentUsage[]
+  skillProgress    UserSkillProgress[]
+  selectedSkills   UserSelectedSkill[]
 
   @@index([clerkId])
   @@index([email])
@@ -433,4 +479,175 @@ model ContentUsage {
   @@index([subjectId])
   @@index([lastViewedAt])
   @@index([sessionId])
+}
+
+// ============================================================================
+// SKILLS - PURE GRAPH STRUCTURE
+// ============================================================================
+
+model SkillCategory {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  slug        String   @unique
+  description String?
+  icon        String?
+  color       String?
+  sortOrder   Int      @default(0) @db.SmallInt
+  
+  skills      Skill[]
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([slug])
+  @@index([sortOrder])
+}
+
+model SkillTag {
+  id    String  @id @default(uuid())
+  name  String  @unique
+  slug  String  @unique
+  color String?
+  
+  skills Skill[]
+  
+  @@index([slug])
+}
+
+model Skill {
+  id              String   @id @default(uuid())
+  name            String
+  slug            String   @unique
+  normalizedName  String   @db.VarChar(255)
+  description     String?  @db.Text
+  icon            String?  @db.VarChar(50)
+  color           String?  @db.VarChar(20)
+  
+  // Categorization
+  category        SkillCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  categoryId      String
+  tags            SkillTag[]
+  
+  // Difficulty (static metadata)
+  difficulty      Difficulty @default(BEGINNER)
+  
+  // Canonical pattern (matches University/Course/Subject pattern)
+  isCanonical     Boolean  @default(true)
+  canonicalId     String?
+  canonical       Skill?   @relation("CanonicalSkill", fields: [canonicalId], references: [id], onDelete: SetNull)
+  variants        Skill[]  @relation("CanonicalSkill")
+  
+  // Graph edges (this skill as source)
+  edgesFrom       SkillEdge[] @relation("EdgeSource")
+  // Graph edges (this skill as target)
+  edgesTo         SkillEdge[] @relation("EdgeTarget")
+  
+  // User relations
+  userProgress    UserSkillProgress[]
+  userSelections  UserSelectedSkill[]
+  
+  // Metadata
+  isPublished     Boolean  @default(false)
+  sortOrder       Int      @default(0) @db.SmallInt
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@index([categoryId])
+  @@index([slug])
+  @@index([normalizedName, isCanonical])
+  @@index([canonicalId])
+  @@index([difficulty])
+  @@index([isPublished])
+}
+
+// Pure graph edges - Everything is an edge
+model SkillEdge {
+  id          String    @id @default(uuid())
+  
+  // Source skill (from)
+  source      Skill     @relation("EdgeSource", fields: [sourceId], references: [id], onDelete: Cascade)
+  sourceId    String
+  
+  // Target skill (to)
+  target      Skill     @relation("EdgeTarget", fields: [targetId], references: [id], onDelete: Cascade)
+  targetId    String
+  
+  // Edge type - THE KEY DIFFERENTIATOR
+  edgeType    SkillEdgeType
+  
+  // Edge properties
+  strength    Float     @default(1.0)
+  isStrict    Boolean   @default(false)
+  metadata    Json?
+  
+  createdAt   DateTime  @default(now())
+  
+  @@unique([sourceId, targetId, edgeType])
+  @@index([sourceId, edgeType])
+  @@index([targetId, edgeType])
+  @@index([edgeType])
+}
+
+// ============================================================================
+// USER SKILL PROGRESS (Behavioral data - separate from structure)
+// ============================================================================
+
+model UserSkillProgress {
+  id        String @id @default(uuid())
+  
+  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  
+  skill     Skill  @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  skillId   String
+  
+  // Progress tracking
+  status          SkillStatus  @default(NOT_STARTED)
+  progressPercent Float        @default(0)
+  
+  // Performance
+  masteryLevel    MasteryLevel @default(NONE)
+  accuracyRate    Float        @default(0)
+  
+  // Streaks (computed per-skill)
+  currentStreak   Int       @default(0) @db.SmallInt
+  longestStreak   Int       @default(0) @db.SmallInt
+  lastPracticed   DateTime?
+  
+  // Timestamps
+  startedAt       DateTime?
+  completedAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  @@unique([userId, skillId])
+  @@index([userId])
+  @@index([skillId])
+  @@index([status])
+  @@index([lastPracticed])
+}
+
+// User's selected skills for learning path
+model UserSelectedSkill {
+  id        String   @id @default(uuid())
+  
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  
+  skill     Skill    @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  skillId   String
+  
+  // How this skill was added to the user's path
+  sourceType       SelectionSource @default(USER_SELECTED)
+  
+  // Include subskills when selected (via SUBSKILL_OF edges)
+  includeSubskills Boolean @default(true)
+  
+  priority         Int     @default(0) @db.SmallInt
+  
+  createdAt DateTime @default(now())
+  
+  @@unique([userId, skillId])
+  @@index([userId])
+  @@index([sourceType])
 }
