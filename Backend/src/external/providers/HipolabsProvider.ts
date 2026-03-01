@@ -30,7 +30,7 @@ export class HipolabsProvider implements IUniversityProvider {
   constructor() {
     this.client = axios.create({
       baseURL: this.endpoint,
-      timeout: 5_000,
+      timeout: 15_000,  // Increased timeout to 15 seconds
       headers: { 'Accept': 'application/json' },
     });
   }

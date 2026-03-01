@@ -5,7 +5,7 @@ import config from './config';
 import { connectDatabase, disconnectDatabase } from './db';
 import { cacheService } from './services';
 import { registerAllJobs } from './jobs';
-import { userRoutes, settingsRoutes, examRoutes, goalsRoutes, universityRoutes, skillsRoutes } from './routes';
+import { userRoutes, settingsRoutes, examRoutes, goalsRoutes, universityRoutes, skillsRoutes, roadmapsRoutes } from './routes';
 import { errorHandler, notFoundHandler } from './middleware';
 import { HipolabsProvider } from './external/providers/HipolabsProvider';
 
@@ -1116,6 +1116,9 @@ app.get('/api/universities/suggest', async (req, res) => {
     });
   }
 });
+
+// Public API Routes (no authentication required)
+app.use('/api/roadmaps', roadmapsRoutes);
 
 // Clerk authentication middleware
 // This makes req.auth available on all routes

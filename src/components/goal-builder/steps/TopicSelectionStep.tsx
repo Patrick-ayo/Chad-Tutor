@@ -20,6 +20,7 @@ export function TopicSelectionStep({ data, onUpdate, onNext, onBack }: TopicSele
   const [selectedSubtopics, setSelectedSubtopics] = useState<{ [topicId: string]: string[] }>({});
   const [expandedTopics, setExpandedTopics] = useState<{ [topicId: string]: boolean }>({});
   const [loading, setLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   // Fetch topics when subjects are available
   useEffect(() => {
@@ -131,6 +132,16 @@ export function TopicSelectionStep({ data, onUpdate, onNext, onBack }: TopicSele
           Choose topics and drill into subtopics for detailed study planning
         </p>
       </div>
+      {/* Search Box */}
+      <div className="max-w-md mx-auto mb-2">
+        <input
+          type="text"
+          placeholder="Search topics or subtopics..."
+          value={searchQuery}
+          onChange={e => setSearchQuery(e.target.value)}
+          className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+        />
+      </div>
 
       {/* Selected subjects overview */}
       <Card>
@@ -176,114 +187,124 @@ export function TopicSelectionStep({ data, onUpdate, onNext, onBack }: TopicSele
                   {module}
                 </h4>
                 <div className="grid gap-2 ml-4">
-                  {topicsBySubjectAndModule[subject][module].map((topic) => {
-                    const isSelected = !!selectedTopics.find(t => t.id === topic.id);
-                    const isExpanded = !!expandedTopics[topic.id];
-                    const hasSubtopics = topic.subtopics && topic.subtopics.length > 0;
-                    const selectedCount = selectedSubtopics[topic.id]?.length ?? 0;
-                    const totalSubs = topic.subtopics?.length ?? 0;
+                  {topicsBySubjectAndModule[subject][module]
+                    .filter((topic) => {
+                      // Filter topics by search query
+                      if (!searchQuery.trim()) return true;
+                      const topicMatch = topic.name.toLowerCase().includes(searchQuery.toLowerCase());
+                      const subtopicMatch = topic.subtopics?.some(st => st.name.toLowerCase().includes(searchQuery.toLowerCase()));
+                      return topicMatch || subtopicMatch;
+                    })
+                    .map((topic) => {
+                      const isSelected = !!selectedTopics.find(t => t.id === topic.id);
+                      const isExpanded = !!expandedTopics[topic.id];
+                      const hasSubtopics = topic.subtopics && topic.subtopics.length > 0;
+                      const selectedCount = selectedSubtopics[topic.id]?.length ?? 0;
+                      const totalSubs = topic.subtopics?.length ?? 0;
 
-                    return (
-                      <div
-                        key={topic.id}
-                        className={`border rounded-lg transition-colors ${
-                          isSelected
-                            ? "border-primary bg-primary/5"
-                            : "border-border hover:border-primary/50"
-                        }`}
-                      >
-                        {/* Topic row */}
+                      return (
                         <div
-                          className="flex items-center gap-3 p-3 cursor-pointer"
-                          onClick={() => handleTopicToggle(topic)}
+                          key={topic.id}
+                          className={`border rounded-lg transition-colors ${
+                            isSelected
+                              ? "border-primary bg-primary/5"
+                              : "border-border hover:border-primary/50"
+                          }`}
                         >
-                          <Checkbox
-                            checked={isSelected}
-                            onCheckedChange={() => handleTopicToggle(topic)}
-                          />
-                          <div className="flex-1 min-w-0">
-                            <p className="font-medium">{topic.name}</p>
-                            <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1">
-                              <span className="flex items-center gap-1">
-                                <BarChart className="h-3 w-3" />
-                                <span className={`capitalize ${
-                                  topic.difficulty === 'easy' ? 'text-green-500' :
-                                  topic.difficulty === 'medium' ? 'text-yellow-500' :
-                                  'text-red-500'
-                                }`}>
-                                  {topic.difficulty}
+                          {/* Topic row */}
+                          <div
+                            className="flex items-center gap-3 p-3 cursor-pointer"
+                            onClick={() => handleTopicToggle(topic)}
+                          >
+                            <Checkbox
+                              checked={isSelected}
+                              onCheckedChange={() => handleTopicToggle(topic)}
+                            />
+                            <div className="flex-1 min-w-0">
+                              <p className="font-medium">{topic.name}</p>
+                              <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1">
+                                <span className="flex items-center gap-1">
+                                  <BarChart className="h-3 w-3" />
+                                  <span className={`capitalize ${
+                                    topic.difficulty === 'easy' ? 'text-green-500' :
+                                    topic.difficulty === 'medium' ? 'text-yellow-500' :
+                                    'text-red-500'
+                                  }`}>
+                                    {topic.difficulty}
+                                  </span>
                                 </span>
-                              </span>
-                              {hasSubtopics && isSelected && (
-                                <span className="text-primary font-medium">
-                                  {selectedCount}/{totalSubs} subtopics
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                          {/* Expand/collapse button for subtopics */}
-                          {hasSubtopics && (
-                            <button
-                              className="p-1 rounded hover:bg-accent"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                toggleExpanded(topic.id);
-                              }}
-                              aria-label={isExpanded ? "Collapse subtopics" : "Expand subtopics"}
-                            >
-                              {isExpanded
-                                ? <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                                : <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                              }
-                            </button>
-                          )}
-                        </div>
-
-                        {/* Subtopics dropdown */}
-                        {hasSubtopics && isExpanded && (
-                          <div className="border-t border-border bg-muted/30 rounded-b-lg">
-                            <div className="px-4 py-2">
-                              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-                                Subtopics
-                              </p>
-                              <div className="space-y-1">
-                                {topic.subtopics!.map((subtopic) => {
-                                  const isSubSelected = selectedSubtopics[topic.id]?.includes(subtopic.id) ?? false;
-                                  return (
-                                    <div
-                                      key={subtopic.id}
-                                      className={`flex items-center gap-3 p-2 rounded-md cursor-pointer transition-colors ${
-                                        isSubSelected
-                                          ? "bg-primary/10"
-                                          : "hover:bg-accent"
-                                      }`}
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        // Auto-select the parent topic if not already selected
-                                        if (!isSelected) {
-                                          handleTopicToggle(topic);
-                                        }
-                                        handleSubtopicToggle(topic.id, subtopic.id);
-                                      }}
-                                    >
-                                      <Checkbox
-                                        checked={isSubSelected}
-                                        onCheckedChange={() => {
-                                          if (!isSelected) handleTopicToggle(topic);
-                                          handleSubtopicToggle(topic.id, subtopic.id);
-                                        }}
-                                      />
-                                      <span className="text-sm flex-1">{subtopic.name}</span>
-                                    </div>
-                                  );
-                                })}
+                                {hasSubtopics && isSelected && (
+                                  <span className="text-primary font-medium">
+                                    {selectedCount}/{totalSubs} subtopics
+                                  </span>
+                                )}
                               </div>
                             </div>
+                            {/* Expand/collapse button for subtopics */}
+                            {hasSubtopics && (
+                              <button
+                                className="p-1 rounded hover:bg-accent"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toggleExpanded(topic.id);
+                                }}
+                                aria-label={isExpanded ? "Collapse subtopics" : "Expand subtopics"}
+                              >
+                                {isExpanded
+                                  ? <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                                  : <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                                }
+                              </button>
+                            )}
                           </div>
-                        )}
-                      </div>
-                    );
-                  })}
+
+                          {/* Subtopics dropdown */}
+                          {hasSubtopics && isExpanded && (
+                            <div className="border-t border-border bg-muted/30 rounded-b-lg">
+                              <div className="px-4 py-2">
+                                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                                  Subtopics
+                                </p>
+                                <div className="space-y-1">
+                                  {topic.subtopics!
+                                    .filter(st => !searchQuery.trim() || st.name.toLowerCase().includes(searchQuery.toLowerCase()))
+                                    .map((subtopic) => {
+                                      const isSubSelected = selectedSubtopics[topic.id]?.includes(subtopic.id) ?? false;
+                                      return (
+                                        <div
+                                          key={subtopic.id}
+                                          className={`flex items-center gap-3 p-2 rounded-md cursor-pointer transition-colors ${
+                                            isSubSelected
+                                              ? "bg-primary/10"
+                                              : "hover:bg-accent"
+                                          }`}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            // Auto-select the parent topic if not already selected
+                                            if (!isSelected) {
+                                              handleTopicToggle(topic);
+                                            }
+                                            handleSubtopicToggle(topic.id, subtopic.id);
+                                          }}
+                                        >
+                                          <Checkbox
+                                            checked={isSubSelected}
+                                            onCheckedChange={() => {
+                                              if (!isSelected) handleTopicToggle(topic);
+                                              handleSubtopicToggle(topic.id, subtopic.id);
+                                            }}
+                                          />
+                                          <span className="text-sm flex-1">{subtopic.name}</span>
+                                        </div>
+                                      );
+                                    })}
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                 </div>
                 {modIdx < modArr.length - 1 && <Separator className="mt-4" />}
               </div>

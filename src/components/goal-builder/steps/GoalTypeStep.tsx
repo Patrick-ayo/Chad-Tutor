@@ -1,9 +1,11 @@
 import type { GoalDefinition, GoalType, GoalOption } from "@/types/goal";
+import type { SkillSelection } from "@/types/skill";
 import { Card, CardContent } from "@/components/ui/card";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { SkillSelector } from "@/components/skills";
 import { goalOptions } from "@/data/mockGoals";
 import { GraduationCap, Sparkles, Briefcase, ArrowRight, Clock } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -35,6 +37,7 @@ const goalTypeConfig: Record<GoalType, { icon: typeof GraduationCap; label: stri
 export function GoalTypeStep({ data, onUpdate, onNext }: GoalTypeStepProps) {
   const [selectedType, setSelectedType] = useState<GoalType | undefined>(data.type);
   const [selectedGoalId, setSelectedGoalId] = useState<string | undefined>(data.goalId);
+  const [selectedSkills, setSelectedSkills] = useState<SkillSelection[]>([]);
 
   const filteredGoals = useMemo(() => {
     if (!selectedType || selectedType === "exam") return [];
@@ -55,6 +58,7 @@ export function GoalTypeStep({ data, onUpdate, onNext }: GoalTypeStepProps) {
   const handleTypeChange = (type: GoalType) => {
     setSelectedType(type);
     setSelectedGoalId(undefined);
+    setSelectedSkills([]);
     onUpdate({ type, goalId: undefined });
   };
 
@@ -70,13 +74,21 @@ export function GoalTypeStep({ data, onUpdate, onNext }: GoalTypeStepProps) {
       onNext();
       return;
     }
-    // For skills/roles, need goalId
-    if (selectedType && selectedGoalId) {
+    // For skills, use selected skills
+    if (selectedType === "skill" && selectedSkills.length > 0) {
+      onUpdate({ type: "skill", selectedSkills });
+      onNext();
+      return;
+    }
+    // For roles, need goalId
+    if (selectedType === "role" && selectedGoalId) {
       onNext();
     }
   };
 
-  const canProceed = selectedType === "exam" || (selectedType && selectedGoalId);
+  const canProceed = selectedType === "exam" || 
+    (selectedType === "skill" && selectedSkills.length > 0) ||
+    (selectedType === "role" && selectedGoalId);
 
   return (
     <div className="space-y-6">
@@ -121,13 +133,33 @@ export function GoalTypeStep({ data, onUpdate, onNext }: GoalTypeStepProps) {
         </div>
       </div>
 
-      {/* Step 2: Select Specific Goal (only for skill/role) */}
-      {selectedType && selectedType !== "exam" && (
+      {/* Step 2: Select Skills */}
+      {selectedType === "skill" && (
         <div className="space-y-4">
           <div>
-            <h3 className="text-lg font-semibold">Choose your goal</h3>
+            <h3 className="text-lg font-semibold">Select Skills to Master</h3>
             <p className="text-sm text-muted-foreground">
-              Select from predefined goals for accurate planning
+              Search and select the specific skills you want to learn
+            </p>
+          </div>
+
+          <div className="border rounded-lg p-4 min-h-[400px]">
+            <SkillSelector
+              onSelectionChange={setSelectedSkills}
+              maxHeight="350px"
+              placeholder="Search programming languages, frameworks, tools..."
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Step 2: Select Role Goal (only for role) */}
+      {selectedType === "role" && (
+        <div className="space-y-4">
+          <div>
+            <h3 className="text-lg font-semibold">Choose your role</h3>
+            <p className="text-sm text-muted-foreground">
+              Select from predefined role goals for accurate planning
             </p>
           </div>
 

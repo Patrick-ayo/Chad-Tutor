@@ -7,6 +7,7 @@ import { LearningSessionPage } from "@/components/session/LearningSessionPage";
 import { ProgressAnalyticsPage } from "@/components/analytics";
 import { PlannerPage } from "@/components/planner/PlannerPage";
 import { SettingsPage } from "@/components/settings";
+import { ExplorePage } from "@/components/explore";
 import { AccessibilityProvider } from "@/contexts/AccessibilityContext";
 import { mockDashboardData } from "@/data/mockDashboard";
 import { mockPlannerData } from "@/data/mockPlanner";
@@ -40,6 +41,7 @@ function App() {
             <Route path="/progress" element={<ProgressAnalyticsPage />} />
             <Route path="/planner" element={<PlannerPage data={mockPlannerData} />} />
             <Route path="/settings" element={<SettingsPage initialSettings={settings} onSave={handleSettingsSave} />} />
+            <Route path="/explore" element={<ExplorePage />} />
           </Route>
         </Routes>
       </BrowserRouter>

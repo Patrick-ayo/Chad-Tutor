@@ -1,5 +1,7 @@
 // Goal & Roadmap Types - DAG-based execution plan
 
+import type { SkillSelection } from './skill';
+
 export type GoalType = "exam" | "skill" | "role";
 export type PaceStyle = "aggressive" | "balanced" | "light";
 export type FocusStrategy = "weakness-first" | "coverage-first";
@@ -110,6 +112,7 @@ export interface GoalDefinition {
   type: GoalType;
   goalId?: string; // From predefined options (for skill/role)
   customName?: string; // Only if absolutely necessary
+  selectedSkills?: SkillSelection[]; // For skill type goals
   // Exam specific fields
   university?: University;
   course?: Course;

@@ -1,6 +1,6 @@
 import { Link, useLocation, Outlet } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { LayoutDashboard, Target, BookOpen, Settings, Play, BarChart3, CalendarDays } from "lucide-react";
+import { LayoutDashboard, Target, BookOpen, Settings, Play, BarChart3, CalendarDays, Compass } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -9,6 +9,7 @@ const navItems = [
   { path: "/session/task-1", label: "Session", icon: Play },
   { path: "/planner", label: "Planner", icon: CalendarDays },
   { path: "/progress", label: "Progress", icon: BarChart3 },
+  { path: "/explore", label: "Explore", icon: Compass },
 ];
 
 export function Layout() {
@@ -48,7 +49,7 @@ export function Layout() {
                     )}
                   >
                     <Link to={item.path}>
-                      <Icon className="h-4 w-4" />
+                      {Icon && <Icon className="h-4 w-4" />}
                       {item.label}
                     </Link>
                   </Button>

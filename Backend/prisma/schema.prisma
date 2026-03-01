@@ -485,6 +485,33 @@ model ContentUsage {
 // SKILLS - PURE GRAPH STRUCTURE
 // ============================================================================
 
+// Roadmap - represents a learning path/roadmap (e.g., PostgreSQL, Android, AI Engineer)
+model Roadmap {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  slug        String   @unique
+  description String?  @db.Text
+  icon        String?  @db.VarChar(50)
+  color       String?  @db.VarChar(20)
+  
+  // Root skill for this roadmap (the main skill node)
+  rootSkillId String?  @unique
+  rootSkill   Skill?   @relation("RoadmapRootSkill", fields: [rootSkillId], references: [id], onDelete: SetNull)
+  
+  // All skills belonging to this roadmap
+  skills      Skill[]  @relation("RoadmapSkills")
+  
+  // Metadata
+  isPublished Boolean  @default(false)
+  sortOrder   Int      @default(0) @db.SmallInt
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([slug])
+  @@index([isPublished])
+  @@index([sortOrder])
+}
+
 model SkillCategory {
   id          String   @id @default(uuid())
   name        String   @unique
@@ -528,6 +555,11 @@ model Skill {
   categoryId      String
   tags            SkillTag[]
   
+  // Roadmap membership (optional - skill can belong to a roadmap)
+  roadmap         Roadmap?  @relation("RoadmapSkills", fields: [roadmapId], references: [id], onDelete: SetNull)
+  roadmapId       String?
+  roadmapRoot     Roadmap?  @relation("RoadmapRootSkill")
+  
   // Difficulty (static metadata)
   difficulty      Difficulty @default(BEGINNER)
   
@@ -558,6 +590,7 @@ model Skill {
   @@index([canonicalId])
   @@index([difficulty])
   @@index([isPublished])
+  @@index([roadmapId])
 }
 
 // Pure graph edges - Everything is an edge
