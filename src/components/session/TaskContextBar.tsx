@@ -1,6 +1,5 @@
-import { Clock, Target, Gauge, ChevronRight } from "lucide-react";
+import { Clock, Target, Gauge } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
 import type { SessionTask, SessionState } from "@/types/session";
 
 interface TaskContextBarProps {
@@ -10,9 +9,9 @@ interface TaskContextBarProps {
 
 export function TaskContextBar({ task, sessionState }: TaskContextBarProps) {
   const difficultyColors = {
-    easy: "bg-green-100 text-green-800",
-    medium: "bg-yellow-100 text-yellow-800",
-    hard: "bg-red-100 text-red-800",
+    easy: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
+    medium: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
+    hard: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
   };
 
   const overallProgress = Math.round(
@@ -23,60 +22,37 @@ export function TaskContextBar({ task, sessionState }: TaskContextBarProps) {
   );
 
   return (
-    <div className="sticky top-0 z-10 bg-white border-b border-gray-200 shadow-sm">
-      <div className="max-w-4xl mx-auto px-4 py-3">
-        {/* Breadcrumb */}
-        <div className="flex items-center gap-1 text-sm text-gray-500 mb-2">
-          <span>{task.goalName}</span>
-          <ChevronRight className="h-3 w-3" />
-          <span>{task.topicName}</span>
-          <ChevronRight className="h-3 w-3" />
-          <span className="text-gray-900 font-medium">{task.name}</span>
-        </div>
-
-        {/* Task Info Row */}
+    <div className="sticky top-0 z-10 bg-background border-b border-border">
+      <div className="px-6 py-2">
+        {/* Compact Single Row Layout */}
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <h1 className="text-lg font-semibold text-gray-900">{task.name}</h1>
+          {/* Left: Task Name & Difficulty */}
+          <div className="flex items-center gap-3">
+            <h1 className="text-base font-semibold text-foreground">{task.name}</h1>
             <Badge className={difficultyColors[task.difficulty]}>
               {task.difficulty}
             </Badge>
           </div>
 
-          <div className="flex items-center gap-6 text-sm">
-            {/* Estimated Time */}
-            <div className="flex items-center gap-1.5 text-gray-600">
-              <Clock className="h-4 w-4" />
-              <span>{task.estimatedMinutes} min estimated</span>
+          {/* Right: Quick Stats */}
+          <div className="flex items-center gap-4 text-xs text-muted-foreground">
+            <div className="flex items-center gap-1">
+              <Clock className="h-3.5 w-3.5" />
+              <span>{task.estimatedMinutes} min</span>
             </div>
-
-            {/* Questions Progress */}
-            <div className="flex items-center gap-1.5 text-gray-600">
-              <Target className="h-4 w-4" />
-              <span>
-                {sessionState.correctAnswers}/{sessionState.questionsAnswered} correct
-              </span>
+            <div className="flex items-center gap-1">
+              <Target className="h-3.5 w-3.5" />
+              <span>{sessionState.correctAnswers}/{sessionState.questionsAnswered}</span>
             </div>
-
-            {/* Difficulty Indicator */}
-            <div className="flex items-center gap-1.5 text-gray-600">
-              <Gauge className="h-4 w-4" />
-              <span>{overallProgress}% complete</span>
+            <div className="flex items-center gap-1">
+              <Gauge className="h-3.5 w-3.5" />
+              <span>{overallProgress}%</span>
             </div>
+            {task.scheduleReason && (
+              <span className="text-muted-foreground/70">| {task.scheduleReason}</span>
+            )}
           </div>
         </div>
-
-        {/* Progress Bar */}
-        <div className="mt-3">
-          <Progress value={overallProgress} className="h-1.5" />
-        </div>
-
-        {/* Schedule Reason (if any) */}
-        {task.scheduleReason && (
-          <div className="mt-2 text-xs text-gray-500 bg-gray-50 px-2 py-1 rounded">
-            📅 {task.scheduleReason}
-          </div>
-        )}
       </div>
     </div>
   );

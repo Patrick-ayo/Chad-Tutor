@@ -53,42 +53,24 @@ export function SessionFooter({
   };
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-40">
-      <div className="max-w-4xl mx-auto px-4 py-3">
+    <div className="fixed bottom-0 left-0 right-0 bg-background border-t border-border z-40">
+      <div className="px-6 py-2">
         <div className="flex items-center justify-between">
-          {/* Left: Session Stats */}
+          {/* Left: Timer & Stats */}
           <div className="flex items-center gap-4">
-            {/* Timer */}
+            {/* Compact Timer */}
             <div className="flex items-center gap-2">
-              <div
-                className={`p-2 rounded-full ${
-                  isRunning ? "bg-green-100" : "bg-yellow-100"
-                }`}
-              >
-                <Clock
-                  className={`h-5 w-5 ${
-                    isRunning ? "text-green-600" : "text-yellow-600"
-                  }`}
-                />
+              <div className={`p-1.5 rounded-full ${isRunning ? "bg-green-100 dark:bg-green-900" : "bg-amber-100 dark:bg-amber-900"}`}>
+                <Clock className={`h-4 w-4 ${isRunning ? "text-green-600 dark:text-green-400" : "text-amber-600 dark:text-amber-400"}`} />
               </div>
-              <div>
-                <p className="text-2xl font-mono font-bold text-gray-900 timer-text" data-timer>
-                  {formatTime(displayTime)}
-                </p>
-                <p className="text-xs text-gray-500">
-                  {isRunning ? "Session active" : "Paused"}
-                </p>
-              </div>
+              <span className="text-xl font-mono font-semibold text-foreground">
+                {formatTime(displayTime)}
+              </span>
             </div>
 
-            {/* Stats Badges */}
-            <div className="flex items-center gap-2 border-l border-gray-200 pl-4">
-              {pauseCount > 0 && (
-                <Badge variant="outline" className="text-yellow-600">
-                  {pauseCount} pause{pauseCount > 1 ? "s" : ""}
-                </Badge>
-              )}
-              <Badge variant="outline" className="text-blue-600">
+            {/* Stats */}
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Badge variant="outline" className="text-xs">
                 <MessageCircle className="h-3 w-3 mr-1" />
                 {aiHelpCount} AI help
               </Badge>
@@ -96,49 +78,26 @@ export function SessionFooter({
           </div>
 
           {/* Right: Controls */}
-          <div className="flex items-center gap-3">
-            {/* AI Help Button */}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={onOpenAIHelp}
-              className="hidden sm:flex"
-            >
-              <MessageCircle className="h-4 w-4 mr-1.5" />
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={onOpenAIHelp}>
+              <MessageCircle className="h-4 w-4 mr-1" />
               AI Coach
             </Button>
 
-            {/* Pause/Resume Button */}
             {isRunning ? (
-              <Button
-                variant="outline"
-                size="lg"
-                onClick={onPause}
-                className="gap-2"
-              >
-                <Pause className="h-5 w-5" />
+              <Button variant="outline" size="sm" onClick={onPause}>
+                <Pause className="h-4 w-4 mr-1" />
                 Pause
               </Button>
             ) : (
-              <Button
-                variant="default"
-                size="lg"
-                onClick={onResume}
-                className="gap-2 bg-green-600 hover:bg-green-700"
-              >
-                <Play className="h-5 w-5" />
+              <Button size="sm" onClick={onResume} className="bg-green-600 hover:bg-green-700">
+                <Play className="h-4 w-4 mr-1" />
                 Resume
               </Button>
             )}
 
-            {/* End Session Button */}
-            <Button
-              variant="destructive"
-              size="lg"
-              onClick={onEndSession}
-              className="gap-2"
-            >
-              <Square className="h-5 w-5" />
+            <Button variant="destructive" size="sm" onClick={onEndSession}>
+              <Square className="h-4 w-4 mr-1" />
               End Session
             </Button>
           </div>

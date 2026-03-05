@@ -4,26 +4,43 @@ import { AlertCircle } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { TaskContextBar } from "./TaskContextBar";
-import { ContentViewer } from "./ContentViewer";
-import { PracticeSection } from "./PracticeSection";
+import { SessionSidebar } from "./SessionSidebar";
 import { AIHelpDrawer } from "./AIHelpDrawer";
 import { SessionFooter } from "./SessionFooter";
 import { EndSessionDialog } from "./EndSessionDialog";
+import { 
+  VideoMode, 
+  NotesMode, 
+  AISummaryMode, 
+  ExamplesMode, 
+  PracticeMode, 
+  MiniTestMode, 
+  BookmarksMode, 
+  MyNotesMode 
+} from "./modes";
 import {
   mockSessionTasks,
-  mockTaskContent,
-  mockQuestions,
   getAIResponse,
 } from "@/data/mockSession";
+import {
+  mockVideoData,
+  mockConceptTags,
+  mockNotesContent,
+  mockExampleProblems,
+  mockPracticeQuestions,
+  mockTestQuestions,
+  mockAISummary,
+  mockBookmarks,
+  mockUserNotes
+} from "@/data/mockSessionData";
 import type {
   SessionTask,
-  TaskContent,
-  Question,
   SessionState,
   AnswerSubmission,
   AIHelpRequest,
   SessionEvent,
   EndSessionData,
+  SessionMode
 } from "@/types/session";
 
 export function LearningSessionPage() {
@@ -32,8 +49,6 @@ export function LearningSessionPage() {
 
   // Task data
   const [task, setTask] = useState<SessionTask | null>(null);
-  const [content, setContent] = useState<TaskContent[]>([]);
-  const [questions, setQuestions] = useState<Question[]>([]);
 
   // Session state
   const [sessionState, setSessionState] = useState<SessionState>({
@@ -49,14 +64,14 @@ export function LearningSessionPage() {
   });
 
   // Progress tracking
-  const [viewedContentIds, setViewedContentIds] = useState<Set<string>>(new Set());
-  const [answers, setAnswers] = useState<AnswerSubmission[]>([]);
+  const [answers] = useState<AnswerSubmission[]>([]);
   const [aiHelpRequests, setAIHelpRequests] = useState<AIHelpRequest[]>([]);
   const [events, setEvents] = useState<SessionEvent[]>([]);
 
   // UI state
+  const [activeMode, setActiveMode] = useState<SessionMode>('video');
   const [isAIDrawerOpen, setIsAIDrawerOpen] = useState(false);
-  const [aiHelpContext, setAIHelpContext] = useState("");
+  const [aiHelpContext] = useState("");
   const [showEndDialog, setShowEndDialog] = useState(false);
   const [pauseCount, setPauseCount] = useState(0);
   const [pauseStartTime, setPauseStartTime] = useState<number | null>(null);
@@ -79,8 +94,6 @@ export function LearningSessionPage() {
     }
 
     setTask(taskData);
-    setContent(mockTaskContent[taskId] || []);
-    setQuestions(mockQuestions[taskId] || []);
 
     // Log session start
     logEvent("session_start", { taskId });
@@ -111,75 +124,7 @@ export function LearningSessionPage() {
     []
   );
 
-  // Content viewed handler
-  const handleContentViewed = useCallback(
-    (contentId: string) => {
-      setViewedContentIds((prev) => {
-        const newSet = new Set(prev);
-        newSet.add(contentId);
-
-        // Update content progress
-        const progress = (newSet.size / content.length) * 100;
-        setSessionState((state) => ({
-          ...state,
-          contentProgress: progress,
-        }));
-
-        return newSet;
-      });
-      logEvent("content_viewed", { contentId });
-    },
-    [content.length, logEvent]
-  );
-
-  // Answer submission handler
-  const handleAnswerSubmit = useCallback(
-    (
-      questionId: string,
-      answer: string | number,
-      isCorrect: boolean,
-      timeSpent: number,
-      attempts: number
-    ) => {
-      const submission: AnswerSubmission = {
-        questionId,
-        answer,
-        isCorrect,
-        timeSpentSeconds: timeSpent,
-        attempts,
-        submittedAt: new Date().toISOString(),
-      };
-
-      setAnswers((prev) => {
-        // Remove previous answer for this question if exists
-        const filtered = prev.filter((a) => a.questionId !== questionId);
-        return [...filtered, submission];
-      });
-
-      // Update session state
-      setSessionState((state) => {
-        const allAnswers = [...answers.filter((a) => a.questionId !== questionId), submission];
-        return {
-          ...state,
-          questionsAnswered: allAnswers.length,
-          correctAnswers: allAnswers.filter((a) => a.isCorrect).length,
-        };
-      });
-
-      logEvent("answer_submitted", { questionId, isCorrect, attempts });
-    },
-    [answers, logEvent]
-  );
-
   // AI Help handlers
-  const handleRequestHelp = useCallback(
-    (_questionId: string, questionText: string) => {
-      setAIHelpContext(questionText);
-      setIsAIDrawerOpen(true);
-    },
-    []
-  );
-
   const handleAIHelpRequest = useCallback(
     async (type: AIHelpRequest["type"], context: string) => {
       const response = await getAIResponse(type, context);
@@ -312,31 +257,77 @@ export function LearningSessionPage() {
     );
   }
 
+  // Render main content based on active mode
+  const renderMainContent = () => {
+    switch (activeMode) {
+      case 'video':
+        return <VideoMode videoData={mockVideoData} />;
+      case 'notes':
+        return <NotesMode conceptTags={mockConceptTags} structuredNotes={mockNotesContent} />;
+      case 'ai-summary':
+        return (
+          <AISummaryMode
+            topic={mockAISummary.topic}
+            summary={mockAISummary.summary}
+            keyInsights={mockAISummary.keyInsights}
+            analogies={mockAISummary.analogies}
+            onSummaryRead={() => setActiveMode('examples')}
+          />
+        );
+      case 'examples':
+        return <ExamplesMode examples={mockExampleProblems} />;
+      case 'practice':
+        return (
+          <PracticeMode 
+            topic={mockConceptTags.topic}
+            questions={mockPracticeQuestions}
+            onComplete={(score: number) => {
+              console.log(`Practice completed: ${score}%`);
+              setActiveMode('mini-test');
+            }}
+          />
+        );
+      case 'mini-test':
+        return (
+          <MiniTestMode
+            topic={mockConceptTags.topic}
+            questions={mockTestQuestions}
+            timeLimit={900}
+            passingScore={70}
+            onComplete={(score: number, passed: boolean) => {
+              console.log(`Test ${passed ? 'passed' : 'failed'}: ${score}%`);
+            }}
+          />
+        );
+      case 'bookmarks':
+        return <BookmarksMode bookmarks={mockBookmarks} />;
+      case 'my-notes':
+        return <MyNotesMode notes={mockUserNotes} />;
+      default:
+        return <VideoMode videoData={mockVideoData} />;
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-gray-50 pb-24">
-      {/* Task Context Bar - Always visible at top */}
+    <div className="min-h-screen bg-background">
+      {/* Task Context Bar - Compact top bar */}
       <TaskContextBar task={task} sessionState={sessionState} />
 
-      {/* Main Content Area */}
-      <div className="max-w-6xl mx-auto px-4 py-6">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Left: Content Viewer */}
-          <div className="min-h-[500px]">
-            <ContentViewer
-              content={content}
-              onContentViewed={handleContentViewed}
-              viewedContentIds={viewedContentIds}
-            />
-          </div>
+      {/* Two-Panel Layout */}
+      <div className="flex h-[calc(100vh-90px)]">
+        {/* Left Sidebar Navigation */}
+        <SessionSidebar 
+          activeMode={activeMode}
+          onModeChange={setActiveMode}
+          completedModes={new Set<SessionMode>()}
+          bookmarkCount={mockBookmarks.length}
+          noteCount={mockUserNotes.length}
+        />
 
-          {/* Right: Practice Section */}
-          <div className="min-h-[500px]">
-            <PracticeSection
-              questions={questions}
-              answers={answers}
-              onAnswerSubmit={handleAnswerSubmit}
-              onRequestHelp={handleRequestHelp}
-            />
+        {/* Main Content Area */}
+        <div className="flex-1 overflow-y-auto bg-card">
+          <div className="p-6 max-w-4xl mx-auto">
+            {renderMainContent()}
           </div>
         </div>
       </div>

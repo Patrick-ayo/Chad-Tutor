@@ -11,6 +11,83 @@ export type SessionEventType =
   | "content_viewed"
   | "session_end";
 
+// Session Mode Types
+export type SessionMode = 
+  | "video" 
+  | "notes" 
+  | "ai-summary" 
+  | "examples" 
+  | "visualizer" 
+  | "practice" 
+  | "mini-test" 
+  | "bookmarks" 
+  | "my-notes";
+
+// Video and Content Types
+export interface VideoMetadata {
+  videoId: string;
+  title: string;
+  duration: number; // seconds
+  chapters?: VideoChapter[];
+  keyTakeaways?: string[];
+  transcript?: string;
+}
+
+export interface VideoChapter {
+  title: string;
+  startTime: number; // seconds
+  endTime: number;
+}
+
+export interface ConceptTags {
+  topic: string;
+  category: string;
+  concepts: string[];
+  complexity: "O(1)" | "O(log n)" | "O(n)" | "O(n log n)" | "O(n²)" | "O(2^n)";
+  prerequisites: string[];
+}
+
+export interface ExampleProblem {
+  id: string;
+  title: string;
+  difficulty: "easy" | "medium" | "hard";
+  description: string;
+  codeTemplate: string;
+  stepByStepSolution: StepExplanation[];
+  fullSolution: string;
+  timeComplexity: string;
+  spaceComplexity: string;
+  isBookmarked: boolean;
+  hasNarration: boolean;
+}
+
+export interface StepExplanation {
+  step: number;
+  title: string;
+  explanation: string;
+  code: string;
+}
+
+export interface Bookmark {
+  id: string;
+  type: "note" | "example" | "question" | "video-timestamp";
+  content: string;
+  topicRef: string;
+  sourceVideoRef?: string;
+  timestamp?: number; // for video bookmarks
+  createdAt: string;
+  tags: string[];
+}
+
+export interface UserNote {
+  id: string;
+  content: string;
+  linkedToContent?: string; // content ID
+  timestamp?: number; // video timestamp if linked to video
+  createdAt: string;
+  lastModified: string;
+}
+
 // Task context for the session
 export interface SessionTask {
   id: string;
