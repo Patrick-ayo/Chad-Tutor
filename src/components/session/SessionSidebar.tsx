@@ -7,7 +7,6 @@ import {
   Eye, 
   PenTool,
   TestTube,
-  Bookmark,
   StickyNote
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -20,7 +19,6 @@ interface SessionSidebarProps {
   activeMode: SessionMode;
   onModeChange: (mode: SessionMode) => void;
   completedModes: Set<SessionMode>;
-  bookmarkCount: number;
   noteCount: number;
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
@@ -52,8 +50,7 @@ const sidebarSections = [
   {
     title: "PERSONAL",
     items: [
-      { mode: "bookmarks" as SessionMode, label: "Bookmarks", icon: Bookmark },
-      { mode: "my-notes" as SessionMode, label: "My Notes", icon: StickyNote },
+      { mode: "my-notes" as SessionMode, label: "Notes", icon: StickyNote },
     ]
   }
 ];
@@ -62,7 +59,6 @@ export function SessionSidebar({
   activeMode, 
   onModeChange, 
   completedModes, 
-  bookmarkCount, 
   noteCount,
   isCollapsed = false,
   onToggleCollapse 
@@ -70,7 +66,6 @@ export function SessionSidebar({
   const [hoveredMode, setHoveredMode] = useState<SessionMode | null>(null);
 
   const getBadgeCount = (mode: SessionMode) => {
-    if (mode === "bookmarks") return bookmarkCount;
     if (mode === "my-notes") return noteCount;
     return 0;
   };

@@ -1,6 +1,6 @@
 import { Link, useLocation, Outlet } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { LayoutDashboard, Target, BookOpen, Settings, Play, BarChart3, CalendarDays, Compass } from "lucide-react";
+import { LayoutDashboard, Target, BookOpen, Settings, Play, BarChart3, CalendarDays, Compass, Bookmark, StickyNote } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -59,7 +59,29 @@ export function Layout() {
           </div>
 
           {/* Right side */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-1">
+              <Button
+                variant={location.pathname === "/bookmarks" ? "secondary" : "ghost"}
+                size="icon"
+                asChild
+                title="Bookmarks"
+              >
+                <Link to="/bookmarks">
+                  <Bookmark className="h-4 w-4" />
+                </Link>
+              </Button>
+              <Button
+                variant={location.pathname === "/my-notes" ? "secondary" : "ghost"}
+                size="icon"
+                asChild
+                title="Notes"
+              >
+                <Link to="/my-notes">
+                  <StickyNote className="h-4 w-4" />
+                </Link>
+              </Button>
+            </div>
             <Button
               variant={location.pathname === "/settings" ? "secondary" : "ghost"}
               size="icon"

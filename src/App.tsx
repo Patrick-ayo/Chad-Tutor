@@ -8,6 +8,8 @@ import { ProgressAnalyticsPage } from "@/components/analytics";
 import { PlannerPage } from "@/components/planner/PlannerPage";
 import { SettingsPage } from "@/components/settings";
 import { ExplorePage } from "@/components/explore";
+import { BookmarksPage } from "@/components/bookmarks";
+import { MyNotesPage } from "@/components/notes";
 import { AccessibilityProvider } from "@/contexts/AccessibilityContext";
 import { mockDashboardData } from "@/data/mockDashboard";
 import { mockPlannerData } from "@/data/mockPlanner";
@@ -42,6 +44,8 @@ function App() {
             <Route path="/planner" element={<PlannerPage data={mockPlannerData} />} />
             <Route path="/settings" element={<SettingsPage initialSettings={settings} onSave={handleSettingsSave} />} />
             <Route path="/explore" element={<ExplorePage />} />
+            <Route path="/bookmarks" element={<BookmarksPage />} />
+            <Route path="/my-notes" element={<MyNotesPage />} />
           </Route>
         </Routes>
       </BrowserRouter>

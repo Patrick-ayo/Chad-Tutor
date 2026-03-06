@@ -15,7 +15,6 @@ import {
   ExamplesMode, 
   PracticeMode, 
   MiniTestMode, 
-  BookmarksMode, 
   MyNotesMode 
 } from "./modes";
 import {
@@ -30,7 +29,6 @@ import {
   mockPracticeQuestions,
   mockTestQuestions,
   mockAISummary,
-  mockBookmarks,
   mockUserNotes
 } from "@/data/mockSessionData";
 import type {
@@ -299,8 +297,6 @@ export function LearningSessionPage() {
             }}
           />
         );
-      case 'bookmarks':
-        return <BookmarksMode bookmarks={mockBookmarks} />;
       case 'my-notes':
         return <MyNotesMode notes={mockUserNotes} />;
       default:
@@ -320,7 +316,6 @@ export function LearningSessionPage() {
           activeMode={activeMode}
           onModeChange={setActiveMode}
           completedModes={new Set<SessionMode>()}
-          bookmarkCount={mockBookmarks.length}
           noteCount={mockUserNotes.length}
         />
 
