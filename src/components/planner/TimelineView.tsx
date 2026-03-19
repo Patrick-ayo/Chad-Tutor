@@ -40,7 +40,7 @@ function ScheduledTaskCard({
       case "completed":
         return <CheckCircle2 className="h-4 w-4 text-green-600" />;
       case "in-progress":
-        return <PlayCircle className="h-4 w-4 text-blue-600" />;
+        return <PlayCircle className="h-4 w-4 text-red-600" />;
       case "blocked":
         return <Lock className="h-4 w-4 text-red-600" />;
       case "overdue":
@@ -74,9 +74,9 @@ function ScheduledTaskCard({
 
   const getCardBackground = () => {
     if (task.status === "completed") return "bg-green-50";
+    if (task.status === "in-progress") return "bg-red-50";
     if (isOverdue) return "bg-red-50";
     if (task.status === "blocked") return "bg-gray-100";
-    if (isRevision) return "bg-blue-50";
     return "bg-white";
   };
 
@@ -122,7 +122,7 @@ function ScheduledTaskCard({
       {task.partialProgress !== undefined && task.partialProgress > 0 && task.partialProgress < 100 && (
         <div className="mt-2">
           <Progress value={task.partialProgress} className="h-1" />
-          <p className="text-xs text-gray-500 mt-0.5">
+          <p className="text-xs text-red-600 mt-0.5">
             {task.partialProgress}% complete
           </p>
         </div>

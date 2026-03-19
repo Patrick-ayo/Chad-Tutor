@@ -92,7 +92,7 @@ function generateTasksForDay(
         ? "completed"
         : isOverdue
         ? "overdue"
-        : dayOffset === 0
+        : dayOffset === 0 && i === 0
         ? "in-progress"
         : "pending",
       dependencies: i > 0 ? [`task-${dayOffset}-${i - 1}`] : [],

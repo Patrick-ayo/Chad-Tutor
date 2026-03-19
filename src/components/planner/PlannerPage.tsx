@@ -1,22 +1,23 @@
-import { useState } from "react";
-import { CalendarDays, Settings2, RefreshCw, ListVideo } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { CalendarDays, Settings2, RefreshCw, ListVideo, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { TimelineView } from "./TimelineView";
-import { MissedTaskResolver } from "./MissedTaskResolver";
-import { WorkloadControl } from "./WorkloadControl";
-import { BurnoutWarningPanel } from "./BurnoutWarningPanel";
-import { ChangeSummaryModal } from "./ChangeSummaryModal";
-import { resolveMissedTask, ingestPlaylist, fetchPlaylists, generateScheduleFromPlaylists } from "@/lib/plannerApi";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { ingestPlaylist, fetchPlaylists, generateScheduleFromPlaylists, resolveMissedTask } from "@/lib/plannerApi";
 import type {
   PlannerData,
-  WorkloadIntensity,
-  MissedTaskResolution,
-  ScheduleChange,
+  ScheduledTask,
 } from "@/types/planner";
 
 interface PlannerPageProps {
@@ -25,10 +26,7 @@ interface PlannerPageProps {
 }
 
 export function PlannerPage({ data, onSync }: PlannerPageProps) {
-  const [activeTab, setActiveTab] = useState("timeline");
-  const [intensity, setIntensity] = useState<WorkloadIntensity>(data.workloadIntensity);
-  const [showChangeSummary, setShowChangeSummary] = useState(false);
-  const [pendingChanges, setPendingChanges] = useState<ScheduleChange[]>([]);
+  const [activeTab, setActiveTab] = useState("previous");
   const [isSyncing, setIsSyncing] = useState(false);
   const [playlistName, setPlaylistName] = useState("");
   const [playlistSource, setPlaylistSource] = useState("youtube");
@@ -41,78 +39,36 @@ export function PlannerPage({ data, onSync }: PlannerPageProps) {
   const [isGeneratingSchedule, setIsGeneratingSchedule] = useState(false);
   const [showFurtherSessions, setShowFurtherSessions] = useState(false);
   const [expandedTodayTaskIds, setExpandedTodayTaskIds] = useState<string[]>([]);
+  const [previousSearch, setPreviousSearch] = useState("");
+  const [previousDateFilter, setPreviousDateFilter] = useState("");
+  const [previousMinMinutes, setPreviousMinMinutes] = useState("");
+  const [previousMaxMinutes, setPreviousMaxMinutes] = useState("");
+  const [revisedMode, setRevisedMode] = useState<"all" | "planned" | "done">("all");
+  const [importantSessionIds, setImportantSessionIds] = useState<string[]>([]);
+  const [isRescheduleDialogOpen, setIsRescheduleDialogOpen] = useState(false);
+  const [selectedRescheduleTask, setSelectedRescheduleTask] = useState<ScheduledTask | null>(null);
+  const [selectedRescheduleDate, setSelectedRescheduleDate] = useState<string | null>(null);
+  const [isRescheduling, setIsRescheduling] = useState(false);
 
-  const handleIntensityChange = (newIntensity: WorkloadIntensity) => {
-    setIntensity(newIntensity);
-    // In real app, this would recalculate schedule and show changes
-    const simulatedChanges: ScheduleChange[] = [
-      {
-        id: "change-1",
-        type: "task-moved",
-        taskId: "task-1",
-        taskTitle: "Example Task",
-        previousDate: new Date().toISOString(),
-        newDate: new Date(Date.now() + 86400000).toISOString(),
-        reason: `Adjusted due to ${newIntensity} intensity setting`,
-        impact: "This will shift dependent tasks by 1 day",
-      },
-    ];
-    setPendingChanges(simulatedChanges);
-    setShowChangeSummary(true);
-  };
-
-  const handleMissedTaskResolve = (
-    taskId: string,
-    resolution: MissedTaskResolution
-  ) => {
-    // In real app, this would apply the resolution and update schedule
-    console.log(`Resolving task ${taskId} with ${resolution.type}`);
-    void (async () => {
-      try {
-        await resolveMissedTask(taskId, resolution.type);
-        if (onSync) {
-          await onSync();
-        }
-      } catch (error) {
-        console.error("Failed to resolve missed task:", error);
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem("planner-important-session-ids");
+      if (!raw) {
+        return;
       }
-    })();
 
-    const change: ScheduleChange = {
-      id: `change-${Date.now()}`,
-      type: resolution.type === "drop" ? "task-removed" : "task-moved",
-      taskId,
-      taskTitle: data.missedTasks.find((t) => t.id === taskId)?.title || "Task",
-      reason: `User chose to ${resolution.type.replace("-", " ")} this task`,
-      newDate:
-        resolution.type !== "drop"
-          ? new Date(Date.now() + 86400000 * 2).toISOString()
-          : undefined,
-    };
-    setPendingChanges([change]);
-    setShowChangeSummary(true);
-  };
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        setImportantSessionIds(parsed.filter((value): value is string => typeof value === "string"));
+      }
+    } catch {
+      setImportantSessionIds([]);
+    }
+  }, []);
 
-  const handleBurnoutAction = (
-    action: "reduce-load" | "add-break" | "skip-day"
-  ) => {
-    console.log(`Burnout action: ${action}`);
-    // In real app, this would adjust schedule based on action
-  };
-
-  const handleConfirmChanges = () => {
-    // In real app, this would apply changes to the schedule
-    console.log("Changes confirmed:", pendingChanges);
-    setShowChangeSummary(false);
-    setPendingChanges([]);
-  };
-
-  const handleRejectChanges = () => {
-    // Revert any pending changes
-    setIntensity(data.workloadIntensity);
-    setShowChangeSummary(false);
-    setPendingChanges([]);
-  };
+  useEffect(() => {
+    window.localStorage.setItem("planner-important-session-ids", JSON.stringify(importantSessionIds));
+  }, [importantSessionIds]);
 
   const handleSync = async () => {
     if (!onSync) {
@@ -224,7 +180,9 @@ export function PlannerPage({ data, onSync }: PlannerPageProps) {
 
   const hasMissedTasks = data.missedTasks.length > 0;
   const hasBurnoutWarning = data.burnoutSignals.riskLevel !== "low";
-  const today = new Date().toDateString();
+  const todayDate = new Date();
+  const today = todayDate.toDateString();
+  const startOfToday = new Date(todayDate.getFullYear(), todayDate.getMonth(), todayDate.getDate());
   const todaySchedule = data.scheduleDays.find(
     (day) => new Date(day.date).toDateString() === today
   );
@@ -237,6 +195,210 @@ export function PlannerPage({ data, onSync }: PlannerPageProps) {
       prev.includes(taskId)
         ? prev.filter((id) => id !== taskId)
         : [...prev, taskId]
+    );
+  };
+
+  const toggleImportantSession = (taskId: string) => {
+    setImportantSessionIds((prev) =>
+      prev.includes(taskId) ? prev.filter((id) => id !== taskId) : [...prev, taskId]
+    );
+  };
+
+  const openRescheduleDialog = (task: ScheduledTask, dayDate: string) => {
+    setSelectedRescheduleTask(task);
+    setSelectedRescheduleDate(dayDate);
+    setIsRescheduleDialogOpen(true);
+  };
+
+  const handleConfirmReschedule = async () => {
+    if (!selectedRescheduleTask) {
+      return;
+    }
+
+    setIsRescheduling(true);
+    setPlannerError(null);
+    setPlannerMessage(null);
+
+    try {
+      await resolveMissedTask(selectedRescheduleTask.id, "push-forward");
+      setPlannerMessage(`Rescheduled session: ${selectedRescheduleTask.title}`);
+      setIsRescheduleDialogOpen(false);
+      setSelectedRescheduleTask(null);
+      setSelectedRescheduleDate(null);
+
+      if (onSync) {
+        await onSync();
+      }
+    } catch (error) {
+      setPlannerError(error instanceof Error ? error.message : "Failed to reschedule session");
+    } finally {
+      setIsRescheduling(false);
+    }
+  };
+
+  type SessionRecord = {
+    dayDate: string;
+    sortDate: number;
+    task: ScheduledTask;
+  };
+
+  const allSessions = useMemo<SessionRecord[]>(() => {
+    return data.scheduleDays
+      .flatMap((day) =>
+        day.tasks.map((task) => ({
+          dayDate: day.date,
+          sortDate: new Date(day.date).getTime(),
+          task,
+        }))
+      )
+      .sort((a, b) => b.sortDate - a.sortDate);
+  }, [data.scheduleDays]);
+
+  const previousSessions = useMemo(() => {
+    const minMinutes = previousMinMinutes ? Number(previousMinMinutes) : undefined;
+    const maxMinutes = previousMaxMinutes ? Number(previousMaxMinutes) : undefined;
+
+    return allSessions
+      .filter((session) => new Date(session.dayDate) < startOfToday)
+      .filter((session) => {
+        if (!previousSearch.trim()) {
+          return true;
+        }
+
+        return session.task.title.toLowerCase().includes(previousSearch.trim().toLowerCase());
+      })
+      .filter((session) => {
+        if (!previousDateFilter) {
+          return true;
+        }
+
+        const sessionDate = new Date(session.dayDate).toISOString().slice(0, 10);
+        return sessionDate === previousDateFilter;
+      })
+      .filter((session) => {
+        const minutesSpent = session.task.actualMinutes ?? session.task.estimatedMinutes;
+
+        if (typeof minMinutes === "number" && Number.isFinite(minMinutes) && minutesSpent < minMinutes) {
+          return false;
+        }
+
+        if (typeof maxMinutes === "number" && Number.isFinite(maxMinutes) && minutesSpent > maxMinutes) {
+          return false;
+        }
+
+        return true;
+      });
+  }, [allSessions, previousSearch, previousDateFilter, previousMinMinutes, previousMaxMinutes, startOfToday]);
+
+  const revisedSessions = useMemo(() => {
+    return allSessions
+      .filter((session) => session.task.type === "revision")
+      .filter((session) => {
+        if (revisedMode === "all") {
+          return true;
+        }
+
+        if (revisedMode === "done") {
+          return session.task.status === "completed";
+        }
+
+        return session.task.status !== "completed";
+      });
+  }, [allSessions, revisedMode]);
+
+  const importantSessions = useMemo(() => {
+    return allSessions.filter(
+      (session) => session.task.priority === "high" || importantSessionIds.includes(session.task.id)
+    );
+  }, [allSessions, importantSessionIds]);
+
+  const weakSessions = useMemo(() => {
+    return allSessions.filter((session) => {
+      const isPartiallyDone =
+        typeof session.task.partialProgress === "number" &&
+        session.task.partialProgress > 0 &&
+        session.task.partialProgress < 60;
+
+      return (
+        session.task.status === "overdue" ||
+        session.task.status === "blocked" ||
+        isPartiallyDone
+      );
+    });
+  }, [allSessions]);
+
+  const burnoutSessions = useMemo(() => {
+    return allSessions.filter((session) => {
+      if (typeof session.task.actualMinutes !== "number") {
+        return false;
+      }
+
+      return session.task.actualMinutes > session.task.estimatedMinutes;
+    });
+  }, [allSessions]);
+
+  const formatSessionDate = (isoDate: string) => {
+    return new Date(isoDate).toLocaleDateString("en-US", {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+  };
+
+  const renderSessionList = (sessions: SessionRecord[], emptyMessage: string) => {
+    if (sessions.length === 0) {
+      return <p className="text-sm text-muted-foreground">{emptyMessage}</p>;
+    }
+
+    return (
+      <div className="space-y-2.5">
+        {sessions.map((session) => {
+          const isImportant =
+            session.task.priority === "high" || importantSessionIds.includes(session.task.id);
+          const minutesSpent = session.task.actualMinutes ?? session.task.estimatedMinutes;
+
+          return (
+            <div key={`${session.dayDate}-${session.task.id}`} className="rounded-lg border bg-card p-3 space-y-1.5">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-medium">{session.task.title}</p>
+                  <p className="text-xs text-muted-foreground capitalize">
+                    {session.task.type} • {session.task.status.replace("-", " ")}
+                  </p>
+                </div>
+                <Button
+                  variant={isImportant ? "default" : "outline"}
+                  size="sm"
+                  className="h-7 px-2 text-xs"
+                  onClick={() => toggleImportantSession(session.task.id)}
+                >
+                  <Star className="h-3.5 w-3.5 mr-1" />
+                  {isImportant ? "Important" : "Mark important"}
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {formatSessionDate(session.dayDate)} • {minutesSpent} min • {session.task.priority} priority
+              </p>
+              <div className="pt-0.5">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 px-2 text-xs"
+                  onClick={() => openRescheduleDialog(session.task, session.dayDate)}
+                >
+                  Reschedule
+                </Button>
+              </div>
+              {session.task.actualMinutes && session.task.actualMinutes > session.task.estimatedMinutes && (
+                <p className="text-xs text-orange-700">
+                  Burnout session: exceeded schedule by {session.task.actualMinutes - session.task.estimatedMinutes} min.
+                </p>
+              )}
+            </div>
+          );
+        })}
+      </div>
     );
   };
 
@@ -262,6 +424,24 @@ export function PlannerPage({ data, onSync }: PlannerPageProps) {
       questions: 5,
       minutes: 10,
     };
+  };
+
+  const getTodayTaskCardClass = (task: { status: string; partialProgress?: number }) => {
+    const isHalfDone =
+      task.status === "in-progress" ||
+      (typeof task.partialProgress === "number" &&
+        task.partialProgress > 0 &&
+        task.partialProgress < 100);
+
+    if (task.status === "completed") {
+      return "rounded-lg border border-green-300 bg-green-50/70 p-3";
+    }
+
+    if (isHalfDone) {
+      return "rounded-lg border border-red-300 bg-red-50/70 p-3";
+    }
+
+    return "rounded-lg border bg-card p-3";
   };
 
   return (
@@ -296,7 +476,7 @@ export function PlannerPage({ data, onSync }: PlannerPageProps) {
             <Button
               variant="outline"
               className="border-orange-300 bg-orange-50 text-orange-800 hover:bg-orange-100"
-              onClick={() => setActiveTab("resolve")}
+              onClick={() => setActiveTab("weak")}
             >
               {data.missedTasks.length} missed task
               {data.missedTasks.length > 1 ? "s" : ""} need attention
@@ -306,7 +486,7 @@ export function PlannerPage({ data, onSync }: PlannerPageProps) {
             <Button
               variant="outline"
               className="border-red-300 bg-red-50 text-red-800 hover:bg-red-100"
-              onClick={() => setActiveTab("health")}
+              onClick={() => setActiveTab("burnout")}
             >
               Burnout warning detected
             </Button>
@@ -330,7 +510,7 @@ export function PlannerPage({ data, onSync }: PlannerPageProps) {
               return (
                 <div
                   key={task.id}
-                  className="rounded-lg border bg-card p-3"
+                  className={getTodayTaskCardClass(task)}
                 >
                   <div className="flex items-center justify-between gap-3">
                     <div>
@@ -339,16 +519,26 @@ export function PlannerPage({ data, onSync }: PlannerPageProps) {
                         {task.type} • {task.priority} priority
                       </p>
                     </div>
-                    <div className="text-right">
+                    <div className="text-right space-y-1">
                       <p className="text-xs text-muted-foreground whitespace-nowrap">{task.estimatedMinutes} min</p>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-6 px-2 text-xs"
-                        onClick={() => toggleTodayTaskExpand(task.id)}
-                      >
-                        {isExpanded ? "Hide" : "Expand"}
-                      </Button>
+                      <div className="flex justify-end gap-1">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-6 px-2 text-xs"
+                          onClick={() => openRescheduleDialog(task, todaySchedule.date)}
+                        >
+                          Reschedule
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 px-2 text-xs"
+                          onClick={() => toggleTodayTaskExpand(task.id)}
+                        >
+                          {isExpanded ? "Hide" : "Expand"}
+                        </Button>
+                      </div>
                     </div>
                   </div>
 
@@ -445,10 +635,22 @@ export function PlannerPage({ data, onSync }: PlannerPageProps) {
 
                       {day.tasks.map((task) => (
                         <div key={task.id} className="rounded-md border bg-card p-2 space-y-1.5">
-                          <p className="text-sm font-medium">{task.title}</p>
-                          <p className="text-xs text-muted-foreground capitalize">
-                            {task.estimatedMinutes} min • {task.priority} priority • {task.type}
-                          </p>
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <p className="text-sm font-medium">{task.title}</p>
+                              <p className="text-xs text-muted-foreground capitalize">
+                                {task.estimatedMinutes} min • {task.priority} priority • {task.type}
+                              </p>
+                            </div>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-7 px-2 text-xs"
+                              onClick={() => openRescheduleDialog(task, day.date)}
+                            >
+                              Reschedule
+                            </Button>
+                          </div>
 
                           {task.keyPoints && task.keyPoints.length > 0 && (
                             <div className="space-y-1">
@@ -565,75 +767,179 @@ export function PlannerPage({ data, onSync }: PlannerPageProps) {
         </CardContent>
       </Card>
 
-      {/* Main Tabs */}
+      {/* Session Filters */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList>
-          <TabsTrigger value="timeline">Schedule</TabsTrigger>
-          <TabsTrigger value="resolve" className="relative">
-            Resolve
+        <TabsList className="flex flex-wrap h-auto">
+          <TabsTrigger value="previous">Prev Sessions</TabsTrigger>
+          <TabsTrigger value="revised">Revised Sessions</TabsTrigger>
+          <TabsTrigger value="important">Important Sessions</TabsTrigger>
+          <TabsTrigger value="weak" className="relative">
+            My Weak Sessions
             {hasMissedTasks && (
               <span className="absolute -top-1 -right-1 h-4 w-4 bg-orange-500 text-white text-xs rounded-full flex items-center justify-center">
                 {data.missedTasks.length}
               </span>
             )}
           </TabsTrigger>
-          <TabsTrigger value="workload">Workload</TabsTrigger>
-          <TabsTrigger value="health" className="relative">
-            Health
+          <TabsTrigger value="burnout" className="relative">
+            Burnout Sessions
             {hasBurnoutWarning && (
               <span className="absolute -top-1 -right-1 h-2 w-2 bg-red-500 rounded-full" />
             )}
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="timeline" className="mt-6">
-          <TimelineView days={data.scheduleDays} />
+        <TabsContent value="previous" className="mt-6 space-y-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg">Previous Sessions</CardTitle>
+              <CardDescription>
+                Search by topic, date, or time spent. Results are sorted by latest date first.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="grid md:grid-cols-4 gap-3">
+                <Input
+                  value={previousSearch}
+                  onChange={(event) => setPreviousSearch(event.target.value)}
+                  placeholder="Search session topic"
+                />
+                <Input
+                  type="date"
+                  value={previousDateFilter}
+                  onChange={(event) => setPreviousDateFilter(event.target.value)}
+                />
+                <Input
+                  type="number"
+                  min={0}
+                  value={previousMinMinutes}
+                  onChange={(event) => setPreviousMinMinutes(event.target.value)}
+                  placeholder="Min time (minutes)"
+                />
+                <Input
+                  type="number"
+                  min={0}
+                  value={previousMaxMinutes}
+                  onChange={(event) => setPreviousMaxMinutes(event.target.value)}
+                  placeholder="Max time (minutes)"
+                />
+              </div>
+              {renderSessionList(previousSessions, "No previous sessions match this search.")}
+            </CardContent>
+          </Card>
         </TabsContent>
 
-        <TabsContent value="resolve" className="mt-6">
-          {hasMissedTasks ? (
-            <MissedTaskResolver
-              missedTasks={data.missedTasks}
-              onResolve={handleMissedTaskResolve}
-            />
-          ) : (
-            <div className="text-center py-12 text-gray-500">
-              <CalendarDays className="h-12 w-12 mx-auto mb-3 opacity-50" />
-              <p className="font-medium">No missed tasks</p>
-              <p className="text-sm">You're on track! Keep it up.</p>
-            </div>
-          )}
+        <TabsContent value="revised" className="mt-6 space-y-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg">Revised Sessions</CardTitle>
+              <CardDescription>
+                View planned or completed revision sessions.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex gap-2 flex-wrap">
+                <Button
+                  size="sm"
+                  variant={revisedMode === "all" ? "default" : "outline"}
+                  onClick={() => setRevisedMode("all")}
+                >
+                  All
+                </Button>
+                <Button
+                  size="sm"
+                  variant={revisedMode === "planned" ? "default" : "outline"}
+                  onClick={() => setRevisedMode("planned")}
+                >
+                  Planned
+                </Button>
+                <Button
+                  size="sm"
+                  variant={revisedMode === "done" ? "default" : "outline"}
+                  onClick={() => setRevisedMode("done")}
+                >
+                  Done
+                </Button>
+              </div>
+              {renderSessionList(revisedSessions, "No revision sessions available for this filter.")}
+            </CardContent>
+          </Card>
         </TabsContent>
 
-        <TabsContent value="workload" className="mt-6">
-          <div className="max-w-xl">
-            <WorkloadControl
-              intensity={intensity}
-              onIntensityChange={handleIntensityChange}
-              stats={data.workloadStats}
-              currentLoad={data.currentLoad}
-            />
-          </div>
+        <TabsContent value="important" className="mt-6">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg">Important Sessions</CardTitle>
+              <CardDescription>
+                Core backbone sessions plus anything you mark as important.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {renderSessionList(importantSessions, "No important sessions yet. Mark sessions to pin them here.")}
+            </CardContent>
+          </Card>
         </TabsContent>
 
-        <TabsContent value="health" className="mt-6">
-          <div className="max-w-xl">
-            <BurnoutWarningPanel
-              signals={data.burnoutSignals}
-              onTakeAction={handleBurnoutAction}
-            />
-          </div>
+        <TabsContent value="weak" className="mt-6">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg">My Weak Sessions</CardTitle>
+              <CardDescription>
+                Sessions that were overdue, blocked, or only partially completed.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {renderSessionList(weakSessions, "No weak sessions detected right now.")}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="burnout" className="mt-6">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg">Burnout Sessions</CardTitle>
+              <CardDescription>
+                Sessions where actual time went above scheduled time, useful for recap.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {renderSessionList(burnoutSessions, "No burnout sessions found yet.")}
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
 
-      {/* Change Summary Modal */}
-      <ChangeSummaryModal
-        open={showChangeSummary}
-        onOpenChange={setShowChangeSummary}
-        changes={pendingChanges}
-        onConfirm={handleConfirmChanges}
-        onReject={handleRejectChanges}
-      />
+      <Dialog open={isRescheduleDialogOpen} onOpenChange={setIsRescheduleDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirm Reschedule</DialogTitle>
+            <DialogDescription>
+              {selectedRescheduleTask
+                ? `Reschedule "${selectedRescheduleTask.title}" from ${selectedRescheduleDate ? formatSessionDate(selectedRescheduleDate) : "this date"}?`
+                : "Confirm this reschedule action."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="text-sm text-muted-foreground">
+            This will move the session forward based on your active days and current workload.
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsRescheduleDialogOpen(false);
+                setSelectedRescheduleTask(null);
+                setSelectedRescheduleDate(null);
+              }}
+              disabled={isRescheduling}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleConfirmReschedule} disabled={isRescheduling || !selectedRescheduleTask}>
+              {isRescheduling ? "Rescheduling..." : "Confirm Reschedule"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
