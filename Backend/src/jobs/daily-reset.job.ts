@@ -9,7 +9,7 @@
  * - Generate daily reports
  */
 
-import { userService } from '../services';
+import { userService, rescheduleService } from '../services';
 import { userRepo } from '../repositories';
 
 // ============================================================================
@@ -42,6 +42,7 @@ export async function processDailyReset(): Promise<{
     for (const userId of users) {
       try {
         await userService.resetDailyCounters(userId);
+        await rescheduleService.rescheduleMissedTasks(userId, new Date());
         stats.usersReset++;
       } catch (error) {
         console.error(`Failed to reset counters for user ${userId}:`, error);

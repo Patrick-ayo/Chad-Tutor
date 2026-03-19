@@ -5,7 +5,19 @@ import config from './config';
 import { connectDatabase, disconnectDatabase } from './db';
 import { cacheService } from './services';
 import { registerAllJobs } from './jobs';
-import { userRoutes, settingsRoutes, examRoutes, goalsRoutes, universityRoutes, skillsRoutes, roadmapsRoutes } from './routes';
+import {
+  userRoutes,
+  settingsRoutes,
+  examRoutes,
+  goalsRoutes,
+  universityRoutes,
+  skillsRoutes,
+  roadmapsRoutes,
+  plannerRoutes,
+  tasksRoutes,
+  playlistsRoutes,
+  quizRoutes,
+} from './routes';
 import { errorHandler, notFoundHandler } from './middleware';
 import { HipolabsProvider } from './external/providers/HipolabsProvider';
 
@@ -1131,6 +1143,10 @@ app.use('/api/exam', examRoutes);
 app.use('/api/goals', goalsRoutes);
 app.use('/api/universities', universityRoutes);
 app.use('/api/skills', skillsRoutes);
+app.use('/api/planner', plannerRoutes);
+app.use('/api/tasks', tasksRoutes);
+app.use('/api/playlists', playlistsRoutes);
+app.use('/api/quiz', quizRoutes);
 
 // 404 handler
 app.use(notFoundHandler);

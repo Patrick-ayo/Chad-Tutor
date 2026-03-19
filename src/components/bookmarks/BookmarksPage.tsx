@@ -1,10 +1,10 @@
 import { useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Bookmark, Search, Trash2, ExternalLink, Clock, Tag, Play, FileText, Code2, HelpCircle } from "lucide-react";
+import { Bookmark, Search, Trash2, Clock, Tag, Play, FileText, Code2, HelpCircle } from "lucide-react";
 import { mockBookmarks } from "@/data/mockSessionData";
 import type { Bookmark as BookmarkType } from "@/types/session";
 
@@ -150,7 +150,7 @@ export function BookmarksPage() {
       </Card>
 
       {/* Bookmarks List */}
-      <ScrollArea className="h-[calc(100vh-420px)]">
+      <ScrollArea className="h-[calc(100vh-450px)] md:h-[calc(100vh-420px)]">
         {filteredBookmarks.length === 0 ? (
           <Card>
             <CardContent className="py-16 text-center">
@@ -170,7 +170,7 @@ export function BookmarksPage() {
               return (
                 <Card key={bookmark.id} className="hover:shadow-md transition-shadow">
                   <CardContent className="py-4">
-                    <div className="flex items-start gap-4">
+                    <div className="flex flex-col sm:flex-row items-start gap-4">
                       <div className={`p-2 rounded-lg ${getTypeColor(bookmark.type)}`}>
                         <TypeIcon className="h-5 w-5" />
                       </div>
@@ -192,7 +192,7 @@ export function BookmarksPage() {
                           </span>
                         </div>
                       </div>
-                      <div className="flex items-center gap-1 flex-shrink-0">
+                      <div className="flex items-center gap-1 flex-shrink-0 w-full sm:w-auto justify-end sm:justify-start">
                         {bookmark.timestamp !== undefined && (
                           <Button
                             variant="outline"

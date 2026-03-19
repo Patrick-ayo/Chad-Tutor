@@ -27,3 +27,9 @@ export * as cacheRepo from './cache.repo';
 export * as searchLogRepo from './searchLog.repo';
 export * as contentRefreshRepo from './contentRefresh.repo';
 export * as contentUsageRepo from './contentUsage.repo';
+
+// Session planner repositories
+export * as taskRepo from './task.repo';
+export * as playlistRepo from './playlist.repo';
+export * as quizRepo from './quiz.repo';
+export * as testCacheRepo from './testCache.repo';

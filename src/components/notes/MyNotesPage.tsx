@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -87,7 +87,7 @@ export function MyNotesPage() {
   return (
     <div className="py-8 px-6 max-w-5xl mx-auto">
       {/* Page Header */}
-      <div className="flex items-start justify-between mb-8">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-8">
         <div>
           <h1 className="text-3xl font-bold flex items-center gap-3">
             <StickyNote className="h-8 w-8 text-primary" />
@@ -131,7 +131,7 @@ export function MyNotesPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
         <Card>
           <CardContent className="pt-4 pb-4 text-center">
             <div className="text-2xl font-bold text-primary">{notes.length}</div>

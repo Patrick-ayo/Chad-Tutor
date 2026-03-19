@@ -1,0 +1,8 @@
+i want to design a session planner , which will try to create and manage the session according to the time provided, assume i have submitted the video playlist of 3 different subjects, it will plan the schedule according to it ansd after planning it it will look after it, so if i missed any task for the day, at the end of the day it will see the priority of the task and then it will reschedule the task, it will look for 3 things:
+1.the priority of the task skipped: if high then it will plan that task for the next day of in 2 to 3 active Days
+2. the priority of other task scheduled for the other days so that their schedule wont be missed or in any kind of issue 
+3. to look that it will be schedule in the limit of the time u designated for your study of the day
+it should also shoew what is the keypoints and what we gonna learn from each video
+
+after looking for these 3 thiings,it will remanage the tasks and then it will decide what work should be done accordingly, and it also must keep the questions ready when you start prep. the tests and when the task is done, it will show the tests and its data to you.
+try to keep the data of the tests in the cache memory so that you can sccess the test result form your own memory which will save the memory and is good for the dummy test.

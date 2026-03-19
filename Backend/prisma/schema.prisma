@@ -38,6 +38,22 @@ enum GoalStatus {
   ABANDONED
 }
 
+enum TaskStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  MISSED
+  RESCHEDULED
+  SKIPPED
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
 enum EntityType {
   UNIVERSITY
   COURSE
@@ -112,6 +128,11 @@ model User {
   contentUsage     ContentUsage[]
   skillProgress    UserSkillProgress[]
   selectedSkills   UserSelectedSkill[]
+  tasks            StudyTask[]
+  playlists        LearningPlaylist[]
+  quizAttempts     QuizAttempt[]
+  testResultCache  TestResultCache[]
+  skillPlaylists   SkillPlaylistLink[]
 
   @@index([clerkId])
   @@index([email])
@@ -197,7 +218,8 @@ model Goal {
   updatedAt DateTime @updatedAt
 
   // Relations
-  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+  user  User        @relation(fields: [userId], references: [id], onDelete: Restrict)
+  tasks StudyTask[]
 
   @@index([userId, status])
   @@index([deadline])
@@ -577,6 +599,10 @@ model Skill {
   // User relations
   userProgress    UserSkillProgress[]
   userSelections  UserSelectedSkill[]
+  tasks           StudyTask[]
+  quizAttempts    QuizAttempt[]
+  testResultCache TestResultCache[]
+  playlistLinks   SkillPlaylistLink[]
   
   // Metadata
   isPublished     Boolean  @default(false)
@@ -683,4 +709,166 @@ model UserSelectedSkill {
   @@unique([userId, skillId])
   @@index([userId])
   @@index([sourceType])
+}
+
+// ============================================================================
+// SESSION PLANNER MODELS
+// ============================================================================
+
+model StudyTask {
+  id            String   @id @default(uuid())
+  userId        String
+  skillId       String?
+  goalId        String?
+  playlistId    String?
+  playlistItemId String?
+
+  title           String  @db.VarChar(255)
+  description     String? @db.Text
+  scheduledDate   DateTime
+  scheduledTime   String? @db.VarChar(10)
+  estimatedMinutes Int    @default(25)
+
+  priority TaskPriority @default(MEDIUM)
+  status   TaskStatus   @default(SCHEDULED)
+
+  keyPoints        Json?
+  learningOutcomes Json?
+
+  attemptCount              Int      @default(0)
+  rescheduleCount           Int      @default(0)
+  originalScheduledDate     DateTime?
+  rescheduledReason         String?  @db.VarChar(255)
+  completedAt               DateTime?
+  completedDurationMinutes  Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user         User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  skill        Skill?           @relation(fields: [skillId], references: [id], onDelete: SetNull)
+  goal         Goal?            @relation(fields: [goalId], references: [id], onDelete: SetNull)
+  playlist     LearningPlaylist? @relation(fields: [playlistId], references: [id], onDelete: SetNull)
+  playlistItem PlaylistItem?    @relation(fields: [playlistItemId], references: [id], onDelete: SetNull)
+  quizAttempts QuizAttempt[]
+
+  @@index([userId, scheduledDate, status])
+  @@index([userId, status])
+  @@index([priority, status])
+  @@index([skillId])
+  @@index([goalId])
+  @@index([playlistId])
+}
+
+model LearningPlaylist {
+  id         String @id @default(uuid())
+  userId     String
+
+  name        String  @db.VarChar(255)
+  description String? @db.Text
+
+  externalSource String  @db.VarChar(50)
+  externalId     String? @db.VarChar(255)
+  externalUrl    String? @db.VarChar(500)
+
+  estimatedHours Float?
+  resourceCount  Int      @default(0)
+  thumbnailUrl   String?  @db.VarChar(500)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user       User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items      PlaylistItem[]
+  skillLinks SkillPlaylistLink[]
+  tasks      StudyTask[]
+
+  @@index([userId, createdAt])
+  @@index([externalSource, externalId])
+}
+
+model PlaylistItem {
+  id         String @id @default(uuid())
+  playlistId String
+
+  title          String  @db.VarChar(255)
+  description    String? @db.Text
+  externalId     String? @db.VarChar(255)
+  externalUrl    String? @db.VarChar(500)
+  sequence       Int     @default(0)
+  estimatedMinutes Int?
+
+  keyPoints        Json?
+  learningOutcomes Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  playlist LearningPlaylist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+  tasks    StudyTask[]
+
+  @@index([playlistId, sequence])
+}
+
+model SkillPlaylistLink {
+  id         String @id @default(uuid())
+  userId     String
+  skillId    String
+  playlistId String
+
+  resourceType String   @default("primary") @db.VarChar(50)
+  sequence     Int      @default(0)
+  createdAt    DateTime @default(now())
+
+  user     User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  skill    Skill            @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  playlist LearningPlaylist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, skillId, playlistId, resourceType])
+  @@index([userId, skillId])
+  @@index([playlistId])
+}
+
+model QuizAttempt {
+  id      String  @id @default(uuid())
+  userId  String
+  skillId String?
+  taskId  String?
+
+  questionsCount Int   @default(0)
+  correctCount   Int   @default(0)
+  score          Float @default(0)
+
+  timeSpentSeconds Int?
+  metadata        Json?
+  completedAt     DateTime @default(now())
+  createdAt       DateTime @default(now())
+
+  user User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  skill Skill?   @relation(fields: [skillId], references: [id], onDelete: SetNull)
+  task  StudyTask? @relation(fields: [taskId], references: [id], onDelete: SetNull)
+
+  @@index([userId, completedAt])
+  @@index([userId, skillId])
+  @@index([taskId])
+}
+
+model TestResultCache {
+  id      String @id @default(uuid())
+  userId  String
+  skillId String?
+
+  latestScore     Float    @default(0)
+  latestAttemptAt DateTime?
+  totalAttempts   Int      @default(0)
+  averageScore    Float    @default(0)
+  bestScore       Float    @default(0)
+
+  lastCachedAt DateTime @default(now())
+  expiresAt    DateTime
+
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  skill Skill? @relation(fields: [skillId], references: [id], onDelete: SetNull)
+
+  @@unique([userId, skillId])
+  @@index([userId, expiresAt])
 }

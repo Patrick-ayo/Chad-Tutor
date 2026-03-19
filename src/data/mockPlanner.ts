@@ -28,18 +28,65 @@ function generateTasksForDay(
     "Greedy Algorithms",
   ];
   const types: ScheduledTask["type"][] = ["learn", "practice", "revision"];
+  const topicDetails: Record<string, { keyPoints: string[]; outcomes: string[] }> = {
+    "Binary Search Trees": {
+      keyPoints: ["BST insertion rules", "In-order traversal", "Search complexity"],
+      outcomes: ["Implement BST operations", "Trace tree traversal paths"],
+    },
+    "Graph Traversal": {
+      keyPoints: ["BFS queue workflow", "DFS recursion stack", "Visited set strategy"],
+      outcomes: ["Pick BFS vs DFS confidently", "Avoid cycles in traversal"],
+    },
+    "Dynamic Programming": {
+      keyPoints: ["State definition", "Transition formula", "Memoization table"],
+      outcomes: ["Solve basic DP patterns", "Optimize repeated subproblems"],
+    },
+    "Hash Tables": {
+      keyPoints: ["Hash collisions", "Load factor", "Rehashing strategy"],
+      outcomes: ["Use hash maps efficiently", "Reason about average-case lookup"],
+    },
+    "Recursion Basics": {
+      keyPoints: ["Base case design", "Recursive decomposition", "Stack frames"],
+      outcomes: ["Write safe recursive functions", "Debug recursion depth issues"],
+    },
+    "Sorting Algorithms": {
+      keyPoints: ["Partition logic", "Stability concept", "Complexity comparison"],
+      outcomes: ["Select sorting by constraints", "Explain time/space tradeoffs"],
+    },
+    "Tree Balancing": {
+      keyPoints: ["Balance factor", "Rotation triggers", "AVL invariants"],
+      outcomes: ["Maintain balanced trees", "Diagnose imbalance cases"],
+    },
+    "BFS vs DFS": {
+      keyPoints: ["Traversal order", "Memory behavior", "Use-case selection"],
+      outcomes: ["Choose traversal by problem type", "Estimate traversal cost"],
+    },
+    "Memoization": {
+      keyPoints: ["Cache key design", "Top-down DP", "Avoid duplicate calls"],
+      outcomes: ["Speed up recursive problems", "Apply memoization patterns"],
+    },
+    "Greedy Algorithms": {
+      keyPoints: ["Local optimal choice", "Proof intuition", "Counterexample checks"],
+      outcomes: ["Apply greedy where valid", "Validate greedy assumptions"],
+    },
+  };
 
   for (let i = 0; i < count; i++) {
     const type = types[i % types.length];
     const isOverdue = dayOffset < 0;
     const isCompleted = dayOffset < -1 || (dayOffset === -1 && Math.random() > 0.5);
 
+    const topic = topics[(dayOffset + i + 10) % topics.length];
+    const details = topicDetails[topic];
+
     tasks.push({
       id: `task-${dayOffset}-${i}`,
-      title: topics[(dayOffset + i + 10) % topics.length],
+      title: topic,
       type,
       scheduledDate: addDays(today, dayOffset).toISOString(),
       estimatedMinutes: type === "learn" ? 45 : type === "practice" ? 30 : 20,
+      keyPoints: details?.keyPoints ?? [],
+      learningOutcomes: details?.outcomes ?? [],
       priority: i === 0 ? "high" : i === 1 ? "medium" : "low",
       status: isCompleted
         ? "completed"

@@ -5,6 +5,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { TaskContextBar } from "./TaskContextBar";
 import { SessionSidebar } from "./SessionSidebar";
+import { SessionMobileNav } from "./SessionMobileNav";
 import { AIHelpDrawer } from "./AIHelpDrawer";
 import { SessionFooter } from "./SessionFooter";
 import { EndSessionDialog } from "./EndSessionDialog";
@@ -40,6 +41,7 @@ import type {
   EndSessionData,
   SessionMode
 } from "@/types/session";
+import { completeTask } from "@/lib/plannerApi";
 
 export function LearningSessionPage() {
   const { taskId } = useParams<{ taskId: string }>();
@@ -183,7 +185,7 @@ export function LearningSessionPage() {
   }, []);
 
   const handleConfirmEnd = useCallback(
-    (data: EndSessionData) => {
+    async (data: EndSessionData) => {
       setSessionState((state) => ({
         ...state,
         status: "ended",
@@ -221,11 +223,34 @@ export function LearningSessionPage() {
         },
       });
 
+      if (taskId) {
+        try {
+          const quizPayload = answers.length
+            ? {
+                questionsCount: answers.length,
+                correctCount: answers.filter((answer) => answer.isCorrect).length,
+                metadata: {
+                  confidenceRating: data.confidenceRating,
+                  completionStatus: data.completionStatus,
+                },
+              }
+            : undefined;
+
+          await completeTask(taskId, {
+            completedDurationMinutes: Math.round(elapsedSeconds / 60),
+            quiz: quizPayload,
+          });
+        } catch (error) {
+          console.error("Failed to sync session completion with planner backend:", error);
+        }
+      }
+
       // Navigate back to dashboard
       navigate("/");
     },
     [
       task,
+      taskId,
       answers,
       aiHelpRequests,
       events,
@@ -310,20 +335,31 @@ export function LearningSessionPage() {
       <TaskContextBar task={task} sessionState={sessionState} />
 
       {/* Two-Panel Layout */}
-      <div className="flex h-[calc(100vh-90px)]">
-        {/* Left Sidebar Navigation */}
-        <SessionSidebar 
-          activeMode={activeMode}
-          onModeChange={setActiveMode}
-          completedModes={new Set<SessionMode>()}
-          noteCount={mockUserNotes.length}
-        />
+      <div className="flex flex-col md:flex-row h-[calc(100vh-90px)]">
+        {/* Left Sidebar Navigation - Hidden on mobile */}
+        <div className="hidden md:block">
+          <SessionSidebar 
+            activeMode={activeMode}
+            onModeChange={setActiveMode}
+            completedModes={new Set<SessionMode>()}
+            noteCount={mockUserNotes.length}
+          />
+        </div>
 
         {/* Main Content Area */}
-        <div className="flex-1 overflow-y-auto bg-card">
-          <div className="p-6 max-w-4xl mx-auto">
+        <div className="flex-1 overflow-y-auto bg-card pb-32 md:pb-0">
+          <div className="p-4 md:p-6 max-w-4xl mx-auto">
             {renderMainContent()}
           </div>
+        </div>
+
+        {/* Mobile Mode Selector - Visible only on mobile, positioned above footer */}
+        <div className="md:hidden fixed bottom-12 left-0 right-0 bg-background border-t z-40">
+          <SessionMobileNav
+            activeMode={activeMode}
+            onModeChange={setActiveMode}
+            noteCount={mockUserNotes.length}
+          />
         </div>
       </div>
 

@@ -37,6 +37,8 @@ export interface ScheduledTask {
   scheduledDate: string;
   estimatedMinutes: number;
   actualMinutes?: number;
+  keyPoints?: string[];
+  learningOutcomes?: string[];
   status: TaskStatus;
   priority: "high" | "medium" | "low";
   dependencies: string[];

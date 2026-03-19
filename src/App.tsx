@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Layout } from "@/components/layout";
 import { Dashboard } from "@/components/dashboard";
 import { GoalBuilderPage } from "@/components/goal-builder";
@@ -14,10 +14,27 @@ import { AccessibilityProvider } from "@/contexts/AccessibilityContext";
 import { mockDashboardData } from "@/data/mockDashboard";
 import { mockPlannerData } from "@/data/mockPlanner";
 import { mockSettings } from "@/data/mockSettings";
+import { fetchPlannerSnapshot } from "@/lib/plannerApi";
 import type { UserSettings } from "@/types/settings";
+import type { PlannerData } from "@/types/planner";
 
 function App() {
   const [settings, setSettings] = useState<UserSettings>(mockSettings);
+  const [plannerData, setPlannerData] = useState<PlannerData>(mockPlannerData);
+
+  const refreshPlanner = async () => {
+    try {
+      const planner = await fetchPlannerSnapshot();
+      setPlannerData(planner);
+    } catch (error) {
+      console.error("Planner API fallback to mock data:", error);
+      setPlannerData(mockPlannerData);
+    }
+  };
+
+  useEffect(() => {
+    void refreshPlanner();
+  }, []);
 
   const handleSettingsSave = (newSettings: UserSettings) => {
     console.log("Settings saved:", newSettings);
@@ -41,7 +58,8 @@ function App() {
             <Route path="/goals" element={<GoalBuilderPage />} />
             <Route path="/session/:taskId" element={<LearningSessionPage />} />
             <Route path="/progress" element={<ProgressAnalyticsPage />} />
-            <Route path="/planner" element={<PlannerPage data={mockPlannerData} />} />
+            <Route path="/schedule" element={<PlannerPage data={plannerData} onSync={refreshPlanner} />} />
+            <Route path="/planner" element={<Navigate to="/schedule" replace />} />
             <Route path="/settings" element={<SettingsPage initialSettings={settings} onSave={handleSettingsSave} />} />
             <Route path="/explore" element={<ExplorePage />} />
             <Route path="/bookmarks" element={<BookmarksPage />} />

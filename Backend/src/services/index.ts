@@ -19,3 +19,10 @@ export * as universityService from './university.service';
 
 // Analytics
 export * as analyticsService from './analytics.service';
+
+// Session planner services
+export * as plannerService from './planner.service';
+export * as taskService from './task.service';
+export * as playlistService from './playlist.service';
+export * as quizService from './quiz.service';
+export * as rescheduleService from './reschedule.service';

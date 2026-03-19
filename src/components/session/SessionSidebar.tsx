@@ -60,8 +60,7 @@ export function SessionSidebar({
   onModeChange, 
   completedModes, 
   noteCount,
-  isCollapsed = false,
-  onToggleCollapse 
+  isCollapsed = false
 }: SessionSidebarProps) {
   const [hoveredMode, setHoveredMode] = useState<SessionMode | null>(null);
 

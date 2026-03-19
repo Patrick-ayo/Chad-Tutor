@@ -5,3 +5,7 @@ export { default as goalsRoutes } from './goals';
 export { default as universityRoutes } from './university.routes';
 export { default as skillsRoutes } from './skills';
 export { default as roadmapsRoutes } from './roadmaps';
+export { default as plannerRoutes } from './planner';
+export { default as tasksRoutes } from './tasks';
+export { default as playlistsRoutes } from './playlists';
+export { default as quizRoutes } from './quiz';
