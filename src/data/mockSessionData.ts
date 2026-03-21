@@ -3,7 +3,8 @@ import type {
   ConceptTags, 
   ExampleProblem, 
   Bookmark, 
-  UserNote 
+  UserNote,
+  SuggestedVideo
 } from '@/types/session';
 
 // Mock Video Data
@@ -475,5 +476,54 @@ Avoid BSTs when:
 Rule of thumb: BSTs shine when you have mixed read/write workloads with sorted data needs.`,
     createdAt: '2024-01-15T17:20:00Z',
     lastModified: '2024-01-15T17:30:00Z'
+  }
+];
+
+// Mock Suggested Videos for Chad Me Up Feature
+export const mockSuggestedVideos: SuggestedVideo[] = [
+  {
+    videoId: 'RBSGKlAvoiM',
+    title: 'AVL Trees & Self-Balancing',
+    description: 'Learn how AVL trees maintain balance to guarantee O(log n) performance. This builds on your BST knowledge and shows advanced tree structures.',
+    duration: 1200,
+    subject: 'Data Structures',
+    topic: 'Binary Search Trees',
+    relatedTopics: ['Tree Balancing', 'Rotation Operations', 'Height Properties']
+  },
+  {
+    videoId: '7W0QejWnUUE',
+    title: 'Red-Black Trees Explained',
+    description: 'Explore Red-Black trees, another self-balancing BST variant used in production systems. Understand how color properties maintain balance.',
+    duration: 1500,
+    subject: 'Data Structures',
+    topic: 'Binary Search Trees',
+    relatedTopics: ['Tree Properties', 'Color Constraint', 'Complex Rotations']
+  },
+  {
+    videoId: 'dQw4w9WgXcQ',
+    title: 'Advanced Tree Traversal Techniques',
+    description: 'Go deeper with tree traversal methods including Morris and level-order traversal algorithms used in real applications.',
+    duration: 900,
+    subject: 'Data Structures',
+    topic: 'Binary Search Trees',
+    relatedTopics: ['In-order Traversal', 'Morris Traversal', 'Level-order']
+  },
+  {
+    videoId: 'ySp2epYKhyA',
+    title: 'BST Problem-Solving Patterns',
+    description: 'Master common BST interview problems including LCA, path sum, and serialization techniques.',
+    duration: 1800,
+    subject: 'Data Structures',
+    topic: 'Binary Search Trees',
+    relatedTopics: ['LCA', 'Path Problems', 'Serialization']
+  },
+  {
+    videoId: 'oSfAqpgP2-M',
+    title: 'General Tree Concepts Foundation',
+    description: 'Strengthen your foundation with general tree concepts that apply across all tree types.',
+    duration: 1080,
+    subject: 'Data Structures',
+    topic: 'Trees',
+    relatedTopics: ['Tree Terminology', 'DFS/BFS', 'Recursion']
   }
 ];

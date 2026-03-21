@@ -9,6 +9,7 @@ import { SessionMobileNav } from "./SessionMobileNav";
 import { AIHelpDrawer } from "./AIHelpDrawer";
 import { SessionFooter } from "./SessionFooter";
 import { EndSessionDialog } from "./EndSessionDialog";
+import { ChadMeUpDialog } from "./ChadMeUpDialog";
 import { 
   VideoMode, 
   NotesMode, 
@@ -30,7 +31,8 @@ import {
   mockPracticeQuestions,
   mockTestQuestions,
   mockAISummary,
-  mockUserNotes
+  mockUserNotes,
+  mockSuggestedVideos
 } from "@/data/mockSessionData";
 import type {
   SessionTask,
@@ -39,7 +41,9 @@ import type {
   AIHelpRequest,
   SessionEvent,
   EndSessionData,
-  SessionMode
+  SessionMode,
+  VideoMetadata,
+  SuggestedVideo
 } from "@/types/session";
 import { completeTask } from "@/lib/plannerApi";
 
@@ -73,11 +77,15 @@ export function LearningSessionPage() {
   const [isAIDrawerOpen, setIsAIDrawerOpen] = useState(false);
   const [aiHelpContext] = useState("");
   const [showEndDialog, setShowEndDialog] = useState(false);
+  const [showChadMeUpDialog, setShowChadMeUpDialog] = useState(false);
   const [pauseCount, setPauseCount] = useState(0);
   const [pauseStartTime, setPauseStartTime] = useState<number | null>(null);
 
   // Timer
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+
+  // Video management
+  const [currentVideoData, setCurrentVideoData] = useState<VideoMetadata>(mockVideoData);
 
   // Load task data
   useEffect(() => {
@@ -97,6 +105,19 @@ export function LearningSessionPage() {
 
     // Log session start
     logEvent("session_start", { taskId });
+
+    // Load saved primary video from localStorage if available
+    const savedSessionData = localStorage.getItem(`session_${taskId}`);
+    if (savedSessionData) {
+      try {
+        const sessionData = JSON.parse(savedSessionData);
+        if (sessionData.primaryVideo) {
+          setCurrentVideoData(sessionData.primaryVideo);
+        }
+      } catch (error) {
+        console.error("Failed to load saved video data:", error);
+      }
+    }
   }, [taskId, navigate]);
 
   // Timer effect
@@ -183,6 +204,65 @@ export function LearningSessionPage() {
   const handleEndSession = useCallback(() => {
     setShowEndDialog(true);
   }, []);
+
+  // Chad Me Up handler
+  const handleChadMeUp = useCallback(() => {
+    logEvent("chad_me_up_clicked", {
+      activeMode,
+      timestamp: new Date().toISOString(),
+    });
+    setShowChadMeUpDialog(true);
+  }, [activeMode, logEvent]);
+
+  // Handle playlist rescheduling from Chad Me Up
+  const handleReschedulePlaylist = useCallback((videoIds: string[]) => {
+    logEvent("playlist_rescheduled", {
+      videoIds,
+      subject: task?.topicName,
+      timestamp: new Date().toISOString(),
+    });
+    
+    // Update session state to reflect rescheduling action
+    setSessionState((state) => ({
+      ...state,
+      contentProgress: state.contentProgress + 10, // Add some progress for taking action
+    }));
+    
+    // Here you would typically send this to the backend to reschedule tasks
+    console.log("Playlist rescheduled with videos:", videoIds);
+    console.log("Subject:", task?.topicName);
+  }, [task, logEvent]);
+
+  // Handle setting a suggested video as primary
+  const handleSetPrimaryVideo = useCallback((suggestedVideo: SuggestedVideo) => {
+    // Create VideoMetadata from SuggestedVideo
+    const newVideoData: VideoMetadata = {
+      videoId: suggestedVideo.videoId,
+      title: suggestedVideo.title,
+      duration: suggestedVideo.duration,
+      keyTakeaways: suggestedVideo.relatedTopics || [],
+      transcript: suggestedVideo.description,
+    };
+
+    // Update state
+    setCurrentVideoData(newVideoData);
+    setElapsedSeconds(0); // Reset playback
+
+    // Save to localStorage for persistence
+    const savedSessionData = localStorage.getItem(`session_${taskId}`);
+    const sessionData = savedSessionData ? JSON.parse(savedSessionData) : {};
+    sessionData.primaryVideo = newVideoData;
+    localStorage.setItem(`session_${taskId}`, JSON.stringify(sessionData));
+
+    // Log event
+    logEvent("primary_video_updated", {
+      videoId: suggestedVideo.videoId,
+      videoTitle: suggestedVideo.title,
+      timestamp: new Date().toISOString(),
+    });
+
+    console.log("Primary video updated to:", suggestedVideo.title);
+  }, [taskId, logEvent]);
 
   const handleConfirmEnd = useCallback(
     async (data: EndSessionData) => {
@@ -284,7 +364,7 @@ export function LearningSessionPage() {
   const renderMainContent = () => {
     switch (activeMode) {
       case 'video':
-        return <VideoMode videoData={mockVideoData} />;
+        return <VideoMode key={currentVideoData.videoId} videoData={currentVideoData} />;
       case 'notes':
         return <NotesMode conceptTags={mockConceptTags} structuredNotes={mockNotesContent} />;
       case 'ai-summary':
@@ -325,7 +405,7 @@ export function LearningSessionPage() {
       case 'my-notes':
         return <MyNotesMode notes={mockUserNotes} />;
       default:
-        return <VideoMode videoData={mockVideoData} />;
+        return <VideoMode videoData={currentVideoData} />;
     }
   };
 
@@ -383,6 +463,7 @@ export function LearningSessionPage() {
         onResume={handleResume}
         onEndSession={handleEndSession}
         onOpenAIHelp={() => setIsAIDrawerOpen(true)}
+        onChadMeUp={handleChadMeUp}
       />
 
       {/* End Session Dialog */}
@@ -395,6 +476,21 @@ export function LearningSessionPage() {
         questionsTotal={answers.length}
         timeSpentMinutes={Math.round(elapsedSeconds / 60)}
       />
+
+      {/* Chad Me Up Dialog */}
+      {task && (
+        <ChadMeUpDialog
+          isOpen={showChadMeUpDialog}
+          onClose={() => setShowChadMeUpDialog(false)}
+          currentTopic={task.topicName}
+          currentSubject={task.topicName}
+          suggestedVideos={mockSuggestedVideos}
+          onReschedulePlaylist={handleReschedulePlaylist}
+          onSetPrimaryVideo={handleSetPrimaryVideo}
+          onPause={handlePause}
+          onResume={handleResume}
+        />
+      )}
     </div>
   );
 }

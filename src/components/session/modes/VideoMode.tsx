@@ -1,6 +1,7 @@
-import { Play, Clock, ExternalLink } from "lucide-react";
+import { Play, Clock, ExternalLink, Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { useState, useCallback, useEffect } from "react";
 import type { VideoMetadata } from "@/types/session";
 
 interface VideoModeProps {
@@ -9,33 +10,46 @@ interface VideoModeProps {
 }
 
 export function VideoMode({ videoData, onVideoWatched }: VideoModeProps) {
+  const [videoLoaded, setVideoLoaded] = useState(false);
+  const [hasCalledOnWatch, setHasCalledOnWatch] = useState(false);
+
   const formatDuration = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const handleVideoEnd = () => {
-    onVideoWatched?.();
-  };
+  const handleVideoLoad = useCallback(() => {
+    setVideoLoaded(true);
+  }, []);
+
+  // Only call onVideoWatched once when component mounts
+  useEffect(() => {
+    if (videoLoaded && !hasCalledOnWatch) {
+      setHasCalledOnWatch(true);
+      onVideoWatched?.();
+    }
+  }, [videoLoaded, hasCalledOnWatch, onVideoWatched]);
 
   return (
     <div className="space-y-6">
       {/* Video Player */}
       <Card>
         <CardContent className="p-0">
-          <div className="aspect-video bg-muted rounded-lg overflow-hidden">
+          <div className="aspect-video bg-muted rounded-lg overflow-hidden relative">
+            {!videoLoaded && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              </div>
+            )}
             <iframe
+              key={videoData.videoId}
               src={`https://www.youtube.com/embed/${videoData.videoId}?rel=0`}
-              className="w-full h-full"
+              className="w-full h-full border-0"
               title={videoData.title}
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
               allowFullScreen
-              onLoad={() => {
-                // In real implementation, you'd listen for video end event
-                // For demo, we'll simulate it after 5 seconds
-                setTimeout(handleVideoEnd, 5000);
-              }}
+              onLoad={handleVideoLoad}
             />
           </div>
         </CardContent>
