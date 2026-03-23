@@ -277,7 +277,7 @@ interface RoadmapNode {
 
 const ROADMAP_NODES: RoadmapNode[] = ROADMAP_NODES_DATA.map((node) => ({
   ...node,
-  resources: buildNodeResources(node.name, node.slug),
+  resources: buildNodeResources(node.name, node.slug, { sortOrder: node.sortOrder, nodeType: (node as any).type }),
 })) as RoadmapNode[];
 
 async function main() {
@@ -405,3 +405,4 @@ main()
   .finally(async () => {
     await prisma.$disconnect();
   });
+

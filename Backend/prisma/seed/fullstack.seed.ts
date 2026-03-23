@@ -12,6 +12,23 @@ import { buildNodeResources } from './resources';
 
 const prisma = new PrismaClient();
 
+type RoadmapNodeType = 'topic' | 'subtopic' | 'section' | 'checkpoint';
+
+interface Resource {
+  type: 'article' | 'video' | 'course';
+  title: string;
+  url: string;
+  discount?: string;
+}
+
+interface NodeResources {
+  free: Resource[];
+  premium: Resource[];
+  metadata?: {
+    nodeType?: RoadmapNodeType;
+  };
+}
+
 // Full Stack Roadmap - Complete Structure
 const ROADMAP_NODES_DATA = [
   // Root
@@ -217,14 +234,44 @@ interface RoadmapNode {
   slug: string;
   name: string;
   description: string;
-  difficulty: any;
+  type: RoadmapNodeType;
+  difficulty: Difficulty;
   sortOrder: number;
+  resources?: NodeResources;
 }
 
-const ROADMAP_NODES: RoadmapNode[] = ROADMAP_NODES_DATA.map((node) => ({
-  ...node,
-  resources: buildNodeResources(node.name, node.slug),
-})) as RoadmapNode[];
+const CHECKPOINT_SLUGS = new Set([
+  'cp-static-webpages',
+  'cp-interactivity',
+  'cp-collaborative-work',
+  'cp-external-packages',
+  'cp-frontend-apps',
+  'cp-cli-apps',
+  'cp-simple-crud',
+  'cp-complete-app',
+  'cp-deployment',
+  'cp-ci-cd',
+  'cp-automation',
+  'cp-monitoring',
+  'cp-infrastructure',
+]);
+
+const ROADMAP_NODES: RoadmapNode[] = ROADMAP_NODES_DATA.map((node) => {
+  const nodeType: RoadmapNodeType = CHECKPOINT_SLUGS.has(node.slug) ? 'checkpoint' : 'topic';
+  const baseResources = buildNodeResources(node.name, node.slug, { sortOrder: node.sortOrder, nodeType }) as NodeResources;
+
+  return {
+    ...node,
+    type: nodeType,
+    resources: {
+      ...baseResources,
+      metadata: {
+        ...(baseResources.metadata ?? {}),
+        nodeType,
+      },
+    },
+  };
+}) as RoadmapNode[];
 
 async function main() {
   console.log('Starting Full Stack roadmap seed...\n');
@@ -351,3 +398,4 @@ main()
   .finally(async () => {
     await prisma.$disconnect();
   });
+

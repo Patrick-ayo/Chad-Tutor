@@ -19,6 +19,7 @@ import {
   quizRoutes,
   youtubeRoutes,
   aiRoutes,
+  geminiRoutes,
 } from './routes';
 import { errorHandler, notFoundHandler } from './middleware';
 import { HipolabsProvider } from './external/providers/HipolabsProvider';
@@ -1135,6 +1136,7 @@ app.get('/api/universities/suggest', async (req, res) => {
 app.use('/api/roadmaps', roadmapsRoutes);
 app.use('/api/youtube', youtubeRoutes);
 app.use('/api/ai', aiRoutes);
+app.use('/api/gemini', geminiRoutes);
 
 // Clerk authentication middleware
 // This makes req.auth available on all routes

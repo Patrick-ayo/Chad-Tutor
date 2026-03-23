@@ -26,13 +26,6 @@ interface RoadmapSidebarProps {
   onClose: () => void;
 }
 
-type ResourceItem = {
-  type: "article" | "video" | "course";
-  title: string;
-  url: string;
-  discount?: string;
-};
-
 type YoutubeVideo = {
   title: string;
   url: string;
@@ -57,9 +50,7 @@ export function RoadmapSidebar({ node, roadmapId, isOpen, onClose }: RoadmapSide
   console.log("RoadmapSidebar node prop:", node);
 
   const [activeTab, setActiveTab] = useState<"resources" | "ai-tutor">("resources");
-  const [isLoading, setIsLoading] = useState(false);
   const [resourcesData, setResourcesData] = useState<any>(null);
-  const [error, setError] = useState<string | null>(null);
   const [youtubeVideos, setYoutubeVideos] = useState<any[]>([]);
   const [isLoadingVideos, setIsLoadingVideos] = useState(false);
   const [studyPlan, setStudyPlan] = useState<StudyPlan | null>(null);
@@ -135,9 +126,6 @@ export function RoadmapSidebar({ node, roadmapId, isOpen, onClose }: RoadmapSide
     if (!node || !isOpen) return;
 
     const fetchResources = async () => {
-      setIsLoading(true);
-      setError(null);
-
       try {
         const response = await fetch(`/api/roadmaps/${roadmapId}/nodes/${node.id}`);
 
@@ -149,9 +137,6 @@ export function RoadmapSidebar({ node, roadmapId, isOpen, onClose }: RoadmapSide
         setResourcesData(data?.data?.resources ?? null);
       } catch (err) {
         console.error("Error fetching resources:", err);
-        setError("Failed to load resources. Please try again.");
-      } finally {
-        setIsLoading(false);
       }
     };
 

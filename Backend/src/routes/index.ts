@@ -11,3 +11,4 @@ export { default as playlistsRoutes } from './playlists';
 export { default as quizRoutes } from './quiz';
 export { default as youtubeRoutes } from './youtube.routes';
 export { default as aiRoutes } from './ai.routes';
+export { default as geminiRoutes } from './gemini.routes';

@@ -10,6 +10,127 @@ import { Prisma } from '@prisma/client';
 
 const router = Router();
 
+type RoadmapNodeType = 'topic' | 'subtopic' | 'section' | 'checkpoint';
+
+interface NarrowLayout {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+interface InfoBlock {
+  text: string;
+  position: { x: number; y: number };
+  width: number;
+  type: 'tip' | 'warning' | 'info' | 'recommendation';
+}
+
+function deriveNodeType(skill: { name: string; slug: string; resources: Prisma.JsonValue | null }): RoadmapNodeType {
+  const resources = skill.resources;
+
+  if (resources && typeof resources === 'object' && !Array.isArray(resources)) {
+    const metadata = (resources as Record<string, unknown>).metadata;
+    if (metadata && typeof metadata === 'object' && !Array.isArray(metadata)) {
+      const nodeType = (metadata as Record<string, unknown>).nodeType;
+      if (nodeType === 'topic' || nodeType === 'subtopic' || nodeType === 'section' || nodeType === 'checkpoint') {
+        return nodeType;
+      }
+    }
+  }
+
+  if (skill.slug.startsWith('cp-') || /checkpoint/i.test(skill.name)) {
+    return 'checkpoint';
+  }
+
+  return 'topic';
+}
+
+function extractLayout(skill: { resources: Prisma.JsonValue | null }): NarrowLayout | null {
+  const resources = skill.resources;
+
+  if (!resources || typeof resources !== 'object' || Array.isArray(resources)) {
+    return null;
+  }
+
+  const metadata = (resources as Record<string, unknown>).metadata;
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
+    return null;
+  }
+
+  const layout = (metadata as Record<string, unknown>).layout;
+  if (!layout || typeof layout !== 'object' || Array.isArray(layout)) {
+    return null;
+  }
+
+  const l = layout as Record<string, unknown>;
+  const x = typeof l.x === 'number' ? l.x : null;
+  const y = typeof l.y === 'number' ? l.y : null;
+  const width = typeof l.width === 'number' ? l.width : null;
+  const height = typeof l.height === 'number' ? l.height : null;
+
+  if (x === null || y === null || width === null || height === null) {
+    return null;
+  }
+
+  return { x, y, width, height };
+}
+
+function extractInfoBlocks(skill: { resources: Prisma.JsonValue | null } | null | undefined): InfoBlock[] {
+  if (!skill?.resources || typeof skill.resources !== 'object' || Array.isArray(skill.resources)) {
+    return [];
+  }
+
+  const metadata = (skill.resources as Record<string, unknown>).metadata;
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
+    return [];
+  }
+
+  const infoBlocks = (metadata as Record<string, unknown>).infoBlocks;
+  if (!Array.isArray(infoBlocks)) {
+    return [];
+  }
+
+  return infoBlocks
+    .map((item) => {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) {
+        return null;
+      }
+      const block = item as Record<string, unknown>;
+      const text = typeof block.text === 'string' ? block.text : null;
+      const width = typeof block.width === 'number' ? block.width : null;
+      const type = block.type;
+      const position = block.position;
+
+      if (
+        !text ||
+        width === null ||
+        (type !== 'tip' && type !== 'warning' && type !== 'info' && type !== 'recommendation') ||
+        !position ||
+        typeof position !== 'object' ||
+        Array.isArray(position)
+      ) {
+        return null;
+      }
+
+      const pos = position as Record<string, unknown>;
+      const x = typeof pos.x === 'number' ? pos.x : null;
+      const y = typeof pos.y === 'number' ? pos.y : null;
+
+      if (x === null || y === null) {
+        return null;
+      }
+
+      return {
+        text,
+        position: { x, y },
+        width,
+        type,
+      } as InfoBlock;
+    })
+    .filter((block): block is InfoBlock => Boolean(block));
+}
+
 // Type for roadmap with skills included
 type RoadmapWithSkills = Prisma.RoadmapGetPayload<{
   include: {
@@ -108,7 +229,10 @@ router.get(
 
       return res.json({
         success: true,
-        data: node,
+        data: {
+          ...node,
+          type: deriveNodeType(node),
+        },
       });
     } catch (error) {
       console.error('Error fetching node:', error);
@@ -173,6 +297,23 @@ router.get('/:slug', async (req: Request<{ slug: string }>, res: Response, next:
       },
     });
 
+    const nodes = roadmap.skills.map((skill) => {
+      const layout = extractLayout(skill);
+      return {
+        ...skill,
+        type: deriveNodeType(skill),
+        ...(layout
+          ? {
+              position: { x: layout.x, y: layout.y },
+              width: layout.width,
+              height: layout.height,
+            }
+          : {}),
+      };
+    });
+
+    const rootInfoBlocks = extractInfoBlocks(roadmap.rootSkill as any);
+
     res.json({
       id: roadmap.id,
       name: roadmap.name,
@@ -181,7 +322,8 @@ router.get('/:slug', async (req: Request<{ slug: string }>, res: Response, next:
       icon: roadmap.icon,
       color: roadmap.color,
       rootSkillId: roadmap.rootSkillId,
-      nodes: roadmap.skills,
+      infoBlocks: rootInfoBlocks,
+      nodes,
       edges: edges,
     });
   } catch (error) {

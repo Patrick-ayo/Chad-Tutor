@@ -273,7 +273,7 @@ async function main() {
     ...node,
     categoryId: category.id,
     normalizedName: node.name.toLowerCase(),
-    resources: buildNodeResources(node.name, node.slug),
+    resources: buildNodeResources(node.name, node.slug, { sortOrder: node.sortOrder, nodeType: (node as any).type }),
   }));
 
   // Insert all nodes (skills)
@@ -393,3 +393,4 @@ main()
   .finally(async () => {
     await prisma.$disconnect();
   });
+

@@ -379,6 +379,33 @@ const ROADMAP_EDGES_DATA = [
   { source: 'buffer-overflow', target: 'threats', type: SkillEdgeType.SUBSKILL_OF },
 ];
 
+const CYBER_SECURITY_INFO_BLOCKS = [
+  {
+    text: 'Start with networking fundamentals before diving into security tools.',
+    position: { x: 80, y: 200 },
+    width: 250,
+    type: 'recommendation' as const,
+  },
+  {
+    text: 'Practice with hands-on labs before moving to advanced tooling topics.',
+    position: { x: 780, y: 350 },
+    width: 260,
+    type: 'tip' as const,
+  },
+  {
+    text: 'Review your weekly progress and reinforce weak areas with exercises.',
+    position: { x: 80, y: 750 },
+    width: 250,
+    type: 'info' as const,
+  },
+  {
+    text: 'Build a home lab for safe penetration testing practice.',
+    position: { x: 780, y: 980 },
+    width: 260,
+    type: 'warning' as const,
+  },
+];
+
 async function main() {
   console.log('Starting Cyber Security roadmap seed...');
   
@@ -402,7 +429,11 @@ async function main() {
     ...node,
     categoryId: category.id,
     normalizedName: node.name.toLowerCase(),
-    resources: buildNodeResources(node.name, node.slug),
+    resources: buildNodeResources(node.name, node.slug, {
+      sortOrder: node.sortOrder,
+      nodeType: (node as any).type,
+      infoBlocks: node.sortOrder === 0 ? CYBER_SECURITY_INFO_BLOCKS : undefined,
+    }),
   }));
 
   // Insert all nodes (skills)
@@ -522,3 +553,4 @@ main()
   .finally(async () => {
     await prisma.$disconnect();
   });
+
