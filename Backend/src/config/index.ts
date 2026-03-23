@@ -25,6 +25,17 @@ const config = {
   // External API Configuration
   examApiKey: process.env.EXAM_API_KEY || '',
   examApiEndpoint: process.env.EXAM_API_ENDPOINT || 'https://api.examdb.example.com',
+
+  // Mr Chad chatbot AI configuration (unique env keys)
+  chatbot: {
+    bytezApiKey:
+      process.env.MR_CHAD_CHATBOT_BYTEZ_API_KEY ||
+      process.env.BYTEZ_API_KEY ||
+      '',
+    model:
+      process.env.MR_CHAD_CHATBOT_MODEL ||
+      'Qwen/Qwen3-8B',
+  },
   
   isDevelopment: process.env.NODE_ENV === 'development',
   isProduction: process.env.NODE_ENV === 'production',

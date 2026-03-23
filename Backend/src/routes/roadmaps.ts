@@ -136,19 +136,18 @@ type RoadmapWithSkills = Prisma.RoadmapGetPayload<{
   include: {
     skills: {
       select: {
-        id: true;
-        name: true;
-        slug: true;
-        description: true;
-        difficulty: true;
-        sortOrder: true;
-        icon: true;
-        color: true;
-        resources: true;
-      };
-    };
-    rootSkill: true;
-  };
+        id: true,
+        name: true,
+        slug: true,
+        description: true,
+        difficulty: true,
+        sortOrder: true,
+        icon: true,
+        color: true,
+      },
+    },
+    rootSkill: true,
+  },
 }>;
 
 // ============================================================================
@@ -215,8 +214,6 @@ router.get(
           sortOrder: true,
           icon: true,
           color: true,
-          resources: true,
-          roadmapId: true,
         },
       });
 
@@ -267,7 +264,6 @@ router.get('/:slug', async (req: Request<{ slug: string }>, res: Response, next:
             sortOrder: true,
             icon: true,
             color: true,
-            resources: true,
           },
         },
         rootSkill: true,

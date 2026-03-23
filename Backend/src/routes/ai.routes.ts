@@ -1,64 +1,131 @@
 import express, { Request, Response } from 'express';
-import Bytez from 'bytez.js';
+import Bytez from '../lib/bytez';
 import type { QuizResponse, StudyPlan } from '../types';
+import config from '../config';
+import { getChatFlowResponse } from '../services/chatbot-flow.service';
 
 const router = express.Router();
 
-const BYTEZ_API_KEY = process.env.BYTEZ_API_KEY || '280eb3a93486f789f71f1283d5ff7835';
+router.post('/chat-flow', (req: Request, res: Response) => {
+  try {
+    const { state, input, selectedOptions, context } = req.body as {
+      state: 'context_collection' | 'confirmation' | 'execution_choice' | 'active_plan';
+      input?: string;
+      selectedOptions?: string[];
+      context?: unknown;
+    };
+
+    const response = getChatFlowResponse({
+      state,
+      input,
+      selectedOptions,
+      context: context as any,
+    });
+
+    return res.json({
+      success: true,
+      ...response,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to process chat flow',
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+const BYTEZ_API_KEY = config.chatbot.bytezApiKey || 'your-free-key';
 const sdk = new Bytez(BYTEZ_API_KEY);
-const MODEL_NAME = 'anthropic/claude-opus-4-5';
+const MODEL_NAME = config.chatbot.model;
 
 function cleanClaudeJsonResponse(text: string): string {
   return text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
 }
 
-async function runModelPrompt(prompt: string): Promise<{ error: unknown; output: string }> {
-  const model = sdk.model(MODEL_NAME);
-  const { error, output } = await model.run([
-    {
-      role: 'user',
-      content: prompt,
-    },
-  ]);
-  // Normalize output to a usable string. Bytez may return strings, arrays, or objects.
-  const normalize = (o: unknown): string => {
-    if (typeof o === 'string') return o;
-    if (o == null) return '';
-    if (Array.isArray(o)) {
-      for (const el of o) {
-        if (el && typeof (el as any).content === 'string') return (el as any).content;
-        if (typeof el === 'string') return el as string;
-      }
-      try {
-        return JSON.stringify(o);
-      } catch {
-        return String(o);
-      }
-    }
-    if (typeof o === 'object') {
-      const obj = o as any;
-      if (typeof obj.content === 'string') return obj.content;
-      if (typeof obj.output === 'string') return obj.output;
-      if (typeof obj.text === 'string') return obj.text;
-      if (obj.message && typeof obj.message.content === 'string') return obj.message.content;
-      if (obj.choices && Array.isArray(obj.choices) && obj.choices.length > 0) {
-        const c = obj.choices[0];
-        if (typeof c.text === 'string') return c.text;
-        if (c.message && typeof c.message.content === 'string') return c.message.content;
-      }
-      try {
-        return JSON.stringify(o);
-      } catch {
-        return String(o);
-      }
-    }
-    return String(o);
-  };
-
+function buildFallbackResources(nodeTitle: string, nodeDescription?: string) {
   return {
-    error,
-    output: normalize(output),
+    description:
+      nodeDescription ||
+      `${nodeTitle} is an important learning topic. Start with core concepts, then practice with hands-on examples to build confidence and long-term understanding.`,
+    freeResources: [
+      {
+        type: 'article',
+        title: `Introduction to ${nodeTitle}`,
+        url: 'https://developer.mozilla.org/',
+      },
+      {
+        type: 'video',
+        title: `${nodeTitle} tutorial playlist`,
+        url: 'https://www.youtube.com/',
+      },
+    ],
+    premiumResources: [
+      {
+        type: 'course',
+        title: `${nodeTitle} professional course`,
+        url: 'https://www.coursera.org/',
+        discount: 'Free Trial',
+      },
+    ],
   };
+}
+
+async function runModelPrompt(prompt: string): Promise<{ error: unknown; output: string }> {
+  try {
+    const model = sdk.model(MODEL_NAME);
+    const { error, output } = await model.run([
+      {
+        role: 'user',
+        content: prompt,
+      },
+    ]);
+
+    // Normalize output to a usable string
+    const normalize = (o: unknown): string => {
+      if (typeof o === 'string') return o;
+      if (o == null) return '';
+      if (Array.isArray(o)) {
+        for (const el of o) {
+          if (el && typeof (el as any).content === 'string') return (el as any).content;
+          if (typeof el === 'string') return el as string;
+        }
+        try {
+          return JSON.stringify(o);
+        } catch {
+          return String(o);
+        }
+      }
+      if (typeof o === 'object') {
+        const obj = o as any;
+        if (typeof obj.output === 'string') return obj.output;
+        if (typeof obj.text === 'string') return obj.text;
+        if (obj.message && typeof obj.message.content === 'string') return obj.message.content;
+        if (obj.choices && Array.isArray(obj.choices) && obj.choices.length > 0) {
+          const c = obj.choices[0];
+          if (typeof c.text === 'string') return c.text;
+          if (c.message && typeof c.message.content === 'string') return c.message.content;
+        }
+        try {
+          return JSON.stringify(o);
+        } catch {
+          return String(o);
+        }
+      }
+      return String(o);
+    };
+
+    return {
+      error,
+      output: normalize(output),
+    };
+  } catch (err) {
+    console.error('[Bytez AI Error]', err);
+    return {
+      error: err,
+      output: '',
+    };
+  }
 }
 
 router.post('/generate-study-plan', async (req: Request, res: Response) => {
@@ -341,8 +408,17 @@ Focus on quality, reputable sources. Research current, popular resources for thi
     let text = (typeof output === 'string' ? output : String(output ?? '')).trim();
     text = cleanClaudeJsonResponse(text);
 
-    // Parse JSON
-    const resourceData = JSON.parse(text);
+    let resourceData: {
+      description: string;
+      freeResources: Array<{ type: string; title: string; url: string }>;
+      premiumResources: Array<{ type: string; title: string; url: string; discount?: string }>;
+    };
+
+    try {
+      resourceData = JSON.parse(text);
+    } catch {
+      resourceData = buildFallbackResources(nodeTitle, nodeDescription);
+    }
 
     return res.json({
       success: true,
@@ -374,8 +450,6 @@ router.post('/enrich-node', async (req: Request, res: Response) => {
         message: 'Node title is required',
       });
     }
-
-    const model = sdk.model('anthropic/claude-opus-4-5');
 
     const prompt = `For the learning topic "${nodeTitle}", provide enriched information and curated resources.
 

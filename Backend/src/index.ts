@@ -1140,7 +1140,11 @@ app.use('/api/gemini', geminiRoutes);
 
 // Clerk authentication middleware
 // This makes req.auth available on all routes
-app.use(clerkMiddleware());
+if (config.clerk.publishableKey && config.clerk.secretKey) {
+  app.use(clerkMiddleware());
+} else {
+  console.warn('Clerk keys missing. Running without Clerk middleware in development mode.');
+}
 
 // API Routes
 app.use('/api/user', userRoutes);
