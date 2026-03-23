@@ -1,0 +1,150 @@
+/* Roadmap Canvas - roadmap.sh exact styling */
+
+.roadmap-canvas-container {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  background-color: white;
+}
+
+/* Central vertical spine - roadmap.sh signature feature */
+.roadmap-spine {
+  pointer-events: none;
+  transition: stroke-width 0.3s ease;
+  z-index: 1;  /* Behind nodes but in front of background */
+}
+
+/* Optional: Animate spine on hover for visual feedback */
+/* Uncomment to enable */
+/*
+.roadmap-canvas-container:hover .roadmap-spine {
+  stroke-width: 6px;
+  opacity: 0.8;
+}
+*/
+
+/* Connection line styles */
+.connection-path {
+  pointer-events: none;
+  transition: all 0.3s ease;
+  z-index: 2;
+}
+
+/* Curved connections for distant nodes */
+.connection-curved {
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Straight connections for adjacent nodes */
+.connection-straight {
+  stroke-linecap: round;
+}
+
+/* Hover effect on connections - subtle opacity change */
+.roadmap-node:hover ~ .connection-path,
+.connection-path:hover {
+  opacity: 0.8;
+}
+
+/* Required vs Optional connection styles */
+.connection-path[stroke="#3b82f6"],
+.connection-path[stroke^="url"] {
+  /* Solid blue for required paths */
+  filter: drop-shadow(0 0 2px rgba(59, 130, 246, 0.2));
+}
+
+.connection-path[stroke="#94a3b8"] {
+  /* Dotted gray for optional paths */
+  filter: drop-shadow(0 0 1px rgba(148, 163, 184, 0.1));
+  opacity: 0.7;
+}
+
+/* Node hover effect - subtle border glow */
+.roadmap-node:hover .hover-border {
+  stroke-width: 2px;
+}
+
+/* Node hover scale effect */
+.roadmap-node:hover rect:first-child {
+  filter: brightness(0.98) !important;
+}
+
+/* Info block styling */
+.info-block {
+  pointer-events: auto;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+  backdrop-filter: none;
+  z-index: 3;  /* Above connections */
+}
+
+/* SVG responsive container */
+svg {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Ensure nodes are interactive */
+.roadmap-node {
+  cursor: pointer;
+  z-index: 4;  /* Above everything */
+}
+
+.roadmap-node:hover {
+  opacity: 0.95;
+}
+
+/* Completion checkmark styling */
+.roadmap-node circle {
+  transition: all 0.2s ease;
+}
+
+/* Arrow markers for connections */
+marker {
+  overflow: visible;
+}
+
+/* Typography for roadmap nodes */
+@font-feature-settings "cv11" 1;
+.roadmap-canvas-container {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue',
+    Arial, 'Noto Sans', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
+    'Segoe UI Symbol', 'Noto Color Emoji';
+}
+
+/* Animation for animated dotted lines (optional enhancement) */
+@keyframes dashflow {
+  0% {
+    stroke-dashoffset: 0;
+  }
+  100% {
+    stroke-dashoffset: 12;
+  }
+}
+
+/* Optional: Apply animation to optional connections for visual effect */
+/* Uncomment below to enable animated dashed lines */
+/*
+.connection-path[stroke="#94a3b8"] {
+  animation: dashflow 20s linear infinite;
+}
+*/
+
+/* Optional: Spine pulse animation for subtle motion */
+@keyframes spinePulse {
+  0%, 100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+
+/* Uncomment below to enable subtle spine pulse */
+/*
+.roadmap-spine {
+  animation: spinePulse 8s ease-in-out infinite;
+}
+*/
+
+

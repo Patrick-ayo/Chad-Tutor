@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { X } from "lucide-react";
 import ResourceCard from "@/components/roadmap/ResourceCard";
 
@@ -58,6 +58,28 @@ export function RoadmapSidebar({ node, roadmapId, isOpen, onClose }: RoadmapSide
   const [resourceData, setResourceData] = useState<any>(null);
   const [isLoadingResources, setIsLoadingResources] = useState(false);
   const [resourceError, setResourceError] = useState<string | null>(null);
+
+  const normalizeResourcePayload = useCallback((payload: any) => {
+    if (!payload) return null;
+
+    const freeResources = Array.isArray(payload.freeResources)
+      ? payload.freeResources
+      : Array.isArray(payload.free)
+        ? payload.free
+        : [];
+
+    const premiumResources = Array.isArray(payload.premiumResources)
+      ? payload.premiumResources
+      : Array.isArray(payload.premium)
+        ? payload.premium
+        : [];
+
+    return {
+      description: payload.description || node?.description || "No description available",
+      freeResources,
+      premiumResources,
+    };
+  }, [node?.description]);
 
   const handleSearchYouTube = async () => {
     if (!node) return;
@@ -134,7 +156,14 @@ export function RoadmapSidebar({ node, roadmapId, isOpen, onClose }: RoadmapSide
         }
 
         const data = await response.json();
-        setResourcesData(data?.data?.resources ?? null);
+        const dbResources = data?.data?.resources ?? null;
+        setResourcesData(dbResources);
+
+        // Warm UI with DB-backed resources immediately if available.
+        const normalized = normalizeResourcePayload(dbResources);
+        if (normalized) {
+          setResourceData(normalized);
+        }
       } catch (err) {
         console.error("Error fetching resources:", err);
       }
@@ -143,56 +172,81 @@ export function RoadmapSidebar({ node, roadmapId, isOpen, onClose }: RoadmapSide
     fetchResources();
   }, [node?.id, isOpen, roadmapId]);
 
-  useEffect(() => {
-    // Only fetch if sidebar is open and we have a node
-    if (!isOpen || !node) {
-      return;
+  const loadResources = useCallback(async () => {
+    if (!isOpen || !node) return;
+
+    setIsLoadingResources(true);
+    setResourceError(null);
+
+    const fallback = normalizeResourcePayload(resourcesData ?? node.resources);
+    if (fallback) {
+      setResourceData(fallback);
     }
 
-    const fetchResources = async () => {
-      setIsLoadingResources(true);
-      setResourceError(null);
+    try {
+      const response = await fetch("/api/ai/generate-resources", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          nodeTitle: node.title,
+          nodeDescription: node.description || "",
+        }),
+      });
 
-      try {
-        const response = await fetch("/api/ai/generate-resources", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            nodeTitle: node.title,
-            nodeDescription: node.description || "",
-          }),
-        });
-
-        if (!response.ok) {
-          throw new Error("Failed to fetch resources");
-        }
-
-        const result = await response.json();
-
-        if (result.success) {
-          setResourceData(result.data);
-        } else {
-          throw new Error(result.message || "Failed to load resources");
-        }
-      } catch (error) {
-        console.error("Error fetching resources:", error);
-        setResourceError("Failed to load resources. Please try again.");
-      } finally {
-        setIsLoadingResources(false);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch resources: ${response.status}`);
       }
-    };
 
-    fetchResources();
-  }, [node?.title, isOpen]);
+      const result = await response.json();
+      if (result?.success && result?.data) {
+        const normalized = normalizeResourcePayload(result.data);
+        setResourceData(normalized);
+        return;
+      }
+
+      throw new Error(result?.message || "Failed to load resources");
+    } catch (error) {
+      console.error("Error fetching resources:", error);
+
+      // Keep fallback content visible; show blocking error only when no data exists.
+      if (!fallback) {
+        setResourceError("Failed to load resources. Please try again.");
+      }
+    } finally {
+      setIsLoadingResources(false);
+    }
+  }, [isOpen, node, normalizeResourcePayload, resourcesData]);
+
+  useEffect(() => {
+    void loadResources();
+  }, [loadResources]);
 
   if (!node) return null;
+
+  const buildReadableDescription = (base: string | undefined, title: string): string => {
+    const raw = (base || '').trim();
+    if (raw.length >= 120) {
+      return raw;
+    }
+
+    if (!raw) {
+      return `${title} is an important topic in this roadmap. Focus on the fundamentals first, then move into practical implementation patterns and common real-world use cases. As you progress, aim to connect concepts with hands-on tasks so the knowledge becomes durable and job-ready.`;
+    }
+
+    return `${raw}. In practice, this topic includes core principles, essential tools, and repeatable workflows you will use in real projects. Build confidence by learning the concepts in sequence and applying them through small exercises before advancing to more complex scenarios.`;
+  };
 
   const mergedNode = {
     ...node,
     resources: resourcesData ?? node.resources,
   };
+
+  const shownDescription = buildReadableDescription(
+    resourceData?.description || mergedNode.description,
+    mergedNode.title
+  );
 
   return (
     <aside
@@ -265,7 +319,7 @@ export function RoadmapSidebar({ node, roadmapId, isOpen, onClose }: RoadmapSide
                 <div className="bg-red-900/20 border border-red-500 rounded-lg p-4">
                   <p className="text-red-400 text-sm">{resourceError}</p>
                   <button
-                    onClick={() => window.location.reload()}
+                    onClick={() => void loadResources()}
                     className="mt-2 text-red-300 underline text-sm"
                   >
                     Retry
@@ -274,12 +328,12 @@ export function RoadmapSidebar({ node, roadmapId, isOpen, onClose }: RoadmapSide
               ) : resourceData?.description ? (
                 <div className="bg-gray-800/50 rounded-lg p-4">
                   <p className="text-gray-300 text-sm leading-relaxed">
-                    {resourceData.description}
+                    {shownDescription}
                   </p>
                 </div>
               ) : (
                 <p className="text-gray-400 text-sm">
-                  {node?.description || "No description available"}
+                  {shownDescription}
                 </p>
               )}
 

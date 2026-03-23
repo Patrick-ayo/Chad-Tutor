@@ -50,31 +50,31 @@ function buildRoadmapInfoBlocks(roadmapName: string): InfoBlock[] {
   return [
     {
       text: `If you are a beginner in ${roadmapName}, start with the fundamentals and avoid skipping the basics.`,
-      position: { x: 80, y: 150 },
+      position: { x: 90, y: 180 },
       width: 250,
       type: 'recommendation',
     },
     {
       text: `Practice consistently with small hands-on projects to strengthen your ${roadmapName} skills.`,
-      position: { x: 780, y: 330 },
+      position: { x: 800, y: 300 },
       width: 260,
       type: 'tip',
     },
     {
       text: `Join communities and discuss real-world problems to accelerate your learning journey.`,
-      position: { x: 80, y: 510 },
+      position: { x: 90, y: 560 },
       width: 250,
       type: 'info',
     },
     {
       text: `Do not focus only on credentials; build real projects and validate practical outcomes.`,
-      position: { x: 780, y: 690 },
+      position: { x: 800, y: 760 },
       width: 260,
       type: 'warning',
     },
     {
       text: `Create a personal learning lab and document your progress as you complete major nodes.`,
-      position: { x: 80, y: 870 },
+      position: { x: 90, y: 980 },
       width: 250,
       type: 'tip',
     },
@@ -88,16 +88,35 @@ export function buildNodeResources(name: string, slug: string, options?: BuildNo
   const nodeType = options?.nodeType;
   const infoBlocks = options?.infoBlocks;
 
-  // Spread node x positions for the wider 1100px canvas.
-  const x =
-    sortOrder === 0
-      ? 550
-      : sortOrder % 3 === 1
-        ? 300
-        : sortOrder % 3 === 2
-          ? 700
-          : 550;
-  const y = 50 + sortOrder * 85;
+  // roadmap.sh-style geometry:
+  // - main progression nodes on center column (x ~= 470 for 160px nodes)
+  // - branch nodes alternate left/right columns
+  // - vertical rhythm keeps rows readable on 1100px viewBox
+  const CENTER_X = 470;
+  const LEFT_X = 250;
+  const RIGHT_X = 690;
+  const ROOT_Y = 80;
+  const ROW_START_Y = 200;
+  const ROW_STEP_Y = 120;
+
+  let x = CENTER_X;
+  let y = ROOT_Y;
+
+  if (sortOrder > 0) {
+    const laneIndex = (sortOrder - 1) % 3;
+    const rowIndex = Math.floor((sortOrder - 1) / 3);
+
+    // Per row: center main-path node, then left branch, then right branch.
+    if (laneIndex === 0) {
+      x = CENTER_X;
+    } else if (laneIndex === 1) {
+      x = LEFT_X;
+    } else {
+      x = RIGHT_X;
+    }
+
+    y = ROW_START_Y + rowIndex * ROW_STEP_Y;
+  }
 
   const baseWidth = name.length > 32 ? 180 : name.length > 20 ? 160 : 140;
   const width = nodeType === 'checkpoint' ? Math.max(160, baseWidth) : baseWidth;
