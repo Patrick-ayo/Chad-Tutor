@@ -1,5 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
 import { clerkClient, getAuth } from '@clerk/express';
+import config from '../config';
+
+const hasClerkConfig = Boolean(config.clerk.publishableKey && config.clerk.secretKey);
 
 // Extend Express Request to include auth info
 declare global {
@@ -25,6 +28,15 @@ declare global {
  */
 export async function requireAuth(req: Request, res: Response, next: NextFunction) {
   try {
+    // Local dev fallback when Clerk keys are intentionally not configured.
+    if (!hasClerkConfig && config.isDevelopment) {
+      req.auth = {
+        userId: 'dev-local-user',
+        sessionId: 'dev-local-session',
+      };
+      return next();
+    }
+
     const auth = getAuth(req);
     
     if (!auth.userId) {
@@ -55,6 +67,14 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
  */
 export async function optionalAuth(req: Request, res: Response, next: NextFunction) {
   try {
+    if (!hasClerkConfig && config.isDevelopment) {
+      req.auth = {
+        userId: 'dev-local-user',
+        sessionId: 'dev-local-session',
+      };
+      return next();
+    }
+
     const auth = getAuth(req);
     
     if (auth.userId) {

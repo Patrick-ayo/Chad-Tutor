@@ -5,4 +5,25 @@ i want to design a session planner , which will try to create and manage the ses
 it should also shoew what is the keypoints and what we gonna learn from each video
 
 after looking for these 3 thiings,it will remanage the tasks and then it will decide what work should be done accordingly, and it also must keep the questions ready when you start prep. the tests and when the task is done, it will show the tests and its data to you.
-try to keep the data of the tests in the cache memory so that you can sccess the test result form your own memory which will save the memory and is good for the dummy test.
+try to keep the data of the tests in the cache memory so that you can sccess the test result form your own memory which will save the memory and is good for the dummy test.z``
+
+
+
+
+
+session manager plan:
+When you decide wht is going to be done by user, we get the video content where we can see that what the user wants as the course, then we make a schedule according to the user and then it makes a plan
+Stage 1: when user add a new course/skill/etc. the algorithm must understand the priority of the task and reschedule the tasks, like when you select a certain task as a higher priority or have the less time deadline, it is considered as mor prior to other
+stage 2: If we miss a certain task , then it should manage task reschedule, it can ask the user or directly manage it on itself, foe now we will keep the auto management, after the missed task, it will calculate the priority of the missed task to the task of next day, if it has a less proiorty t it, then it will get suspended to the next day to it. 
+Stage 3: We will keep a scheduled extra time, where you can make the task coverup of the missed tasks where we can reschedule the missed task if it does not have the higher priority.
+Stage 4.: Consider if we misss the task of subj. A lec. 11, then it will get rescheduled on the lec.12 time and date and the lec.12 will be get scheduled on the nexrt day, also if we have to schedulw the lec.13 to the scheduled extra time if ithe lec. is near to that date and time.
+
+I wanna train the chatbot so that i should make some parameters, like if i ask something else than the study rrelated orr any course related things, it should ask me that  is it really related to the course, and if someone says yes then it should ask them to specify  themself.
+If i said that i know this and that from certain subject then it should  remember the convo and consider the keywords like certain language, certain job course, certain position or any certainity, and after the person is done with the explai nation, i mean the chatbot should ask them that are you done with the context in polite way and then it should show the data they told in the chat, like the languages, structures, the goals and all. 
+under that, it should show the skills they already learnt in the course so that they get the clear idea that where is their ground level of skils, and then after proposing all of those stuff, if the chatbot gets any kind of yes abt comencing the plan, it should give them the options of doing 3 things:
+1. Generate a quiz or test to comfirm that you have the skills in you or not, 
+2. To create a recap video of all the things we have studied till now
+3. generate a roadmap and schedule all of these things for it accordingly.
+the options are multiple choice ones, so you could choose the all 3 of those.
+
+
