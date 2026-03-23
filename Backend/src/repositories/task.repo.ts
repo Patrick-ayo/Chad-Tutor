@@ -4,8 +4,8 @@
  * Data access layer for StudyTask model.
  */
 
-import { prisma, TransactionClient } from './base.repo';
-import type { Prisma, TaskPriority, TaskStatus } from '@prisma/client';
+import { prisma, TransactionClient } from "./base.repo";
+import type { Prisma, TaskPriority, TaskStatus } from "@prisma/client";
 
 export type StudyTask = Prisma.StudyTaskGetPayload<{
   include: {
@@ -33,7 +33,7 @@ export interface CreateStudyTaskData {
 
 export async function create(
   data: CreateStudyTaskData,
-  tx?: TransactionClient
+  tx?: TransactionClient,
 ): Promise<StudyTask> {
   const client = tx || prisma;
   return client.studyTask.create({
@@ -48,7 +48,7 @@ export async function create(
       scheduledDate: data.scheduledDate,
       scheduledTime: data.scheduledTime,
       estimatedMinutes: data.estimatedMinutes ?? 25,
-      priority: data.priority ?? 'MEDIUM',
+      priority: data.priority ?? "MEDIUM",
       ...(data.keyPoints !== undefined && { keyPoints: data.keyPoints }),
       ...(data.learningOutcomes !== undefined && {
         learningOutcomes: data.learningOutcomes,
@@ -64,7 +64,7 @@ export async function create(
 
 export async function createMany(
   data: CreateStudyTaskData[],
-  tx?: TransactionClient
+  tx?: TransactionClient,
 ): Promise<number> {
   if (data.length === 0) {
     return 0;
@@ -83,7 +83,7 @@ export async function createMany(
       scheduledDate: task.scheduledDate,
       scheduledTime: task.scheduledTime,
       estimatedMinutes: task.estimatedMinutes ?? 25,
-      priority: task.priority ?? 'MEDIUM',
+      priority: task.priority ?? "MEDIUM",
       ...(task.keyPoints !== undefined && { keyPoints: task.keyPoints }),
       ...(task.learningOutcomes !== undefined && {
         learningOutcomes: task.learningOutcomes,
@@ -96,7 +96,7 @@ export async function createMany(
 
 export async function findById(
   id: string,
-  tx?: TransactionClient
+  tx?: TransactionClient,
 ): Promise<StudyTask | null> {
   const client = tx || prisma;
   return client.studyTask.findUnique({
@@ -113,7 +113,7 @@ export async function findByUserAndDateRange(
   userId: string,
   startDate: Date,
   endDate: Date,
-  tx?: TransactionClient
+  tx?: TransactionClient,
 ): Promise<StudyTask[]> {
   const client = tx || prisma;
   return client.studyTask.findMany({
@@ -130,9 +130,9 @@ export async function findByUserAndDateRange(
       playlistItem: true,
     },
     orderBy: [
-      { scheduledDate: 'asc' },
-      { priority: 'desc' },
-      { createdAt: 'asc' },
+      { scheduledDate: "asc" },
+      { priority: "desc" },
+      { createdAt: "asc" },
     ],
   });
 }
@@ -140,7 +140,7 @@ export async function findByUserAndDateRange(
 export async function findMissedBeforeDate(
   userId: string,
   asOfDate: Date,
-  tx?: TransactionClient
+  tx?: TransactionClient,
 ): Promise<StudyTask[]> {
   const client = tx || prisma;
   return client.studyTask.findMany({
@@ -148,7 +148,7 @@ export async function findMissedBeforeDate(
       userId,
       scheduledDate: { lt: asOfDate },
       status: {
-        in: ['SCHEDULED', 'IN_PROGRESS'],
+        in: ["SCHEDULED", "IN_PROGRESS"],
       },
     },
     include: {
@@ -156,10 +156,7 @@ export async function findMissedBeforeDate(
       goal: true,
       playlistItem: true,
     },
-    orderBy: [
-      { priority: 'desc' },
-      { scheduledDate: 'asc' },
-    ],
+    orderBy: [{ priority: "desc" }, { scheduledDate: "asc" }],
   });
 }
 
@@ -174,7 +171,7 @@ export async function updateStatus(
     scheduledDate?: Date;
     rescheduleCountIncrement?: number;
   },
-  tx?: TransactionClient
+  tx?: TransactionClient,
 ): Promise<StudyTask> {
   const client = tx || prisma;
   return client.studyTask.update({
@@ -185,7 +182,9 @@ export async function updateStatus(
       ...(extras?.completedDurationMinutes !== undefined && {
         completedDurationMinutes: extras.completedDurationMinutes,
       }),
-      ...(extras?.rescheduledReason && { rescheduledReason: extras.rescheduledReason }),
+      ...(extras?.rescheduledReason && {
+        rescheduledReason: extras.rescheduledReason,
+      }),
       ...(extras?.originalScheduledDate && {
         originalScheduledDate: extras.originalScheduledDate,
       }),
@@ -205,7 +204,7 @@ export async function updateStatus(
 export async function getDailyScheduledMinutes(
   userId: string,
   date: Date,
-  tx?: TransactionClient
+  tx?: TransactionClient,
 ): Promise<number> {
   const client = tx || prisma;
 
@@ -223,7 +222,7 @@ export async function getDailyScheduledMinutes(
         lte: dayEnd,
       },
       status: {
-        in: ['SCHEDULED', 'IN_PROGRESS', 'RESCHEDULED'],
+        in: ["SCHEDULED", "IN_PROGRESS", "RESCHEDULED"],
       },
     },
     select: {
@@ -237,7 +236,7 @@ export async function getDailyScheduledMinutes(
 export async function updatePriority(
   id: string,
   priority: TaskPriority,
-  tx?: TransactionClient
+  tx?: TransactionClient,
 ): Promise<StudyTask> {
   const client = tx || prisma;
   return client.studyTask.update({
@@ -248,5 +247,26 @@ export async function updatePriority(
       goal: true,
       playlistItem: true,
     },
+  });
+}
+
+export async function findByPlaylistOrdered(
+  userId: string,
+  playlistId: string,
+  tx?: TransactionClient,
+): Promise<StudyTask[]> {
+  const client = tx || prisma;
+
+  return client.studyTask.findMany({
+    where: {
+      userId,
+      playlistId,
+    },
+    include: {
+      skill: true,
+      goal: true,
+      playlistItem: true,
+    },
+    orderBy: [{ scheduledDate: "asc" }, { createdAt: "asc" }],
   });
 }

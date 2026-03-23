@@ -4,9 +4,9 @@
  * Handles missed-task remanagement while respecting active days and daily budget.
  */
 
-import { settingsRepo, taskRepo } from '../repositories';
+import { settingsRepo, taskRepo } from "../repositories";
 
-type PriorityLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+type PriorityLevel = "LOW" | "MEDIUM" | "HIGH" | "URGENT";
 
 const PRIORITY_WEIGHT: Record<PriorityLevel, number> = {
   URGENT: 4,
@@ -15,6 +15,9 @@ const PRIORITY_WEIGHT: Record<PriorityLevel, number> = {
   LOW: 1,
 };
 
+const DAILY_BUFFER_MINUTES = 60;
+const DEFAULT_DAILY_LIMIT = 120;
+
 function startOfDay(date: Date): Date {
   const d = new Date(date);
   d.setHours(0, 0, 0, 0);
@@ -22,26 +25,45 @@ function startOfDay(date: Date): Date {
 }
 
 function isActiveDay(date: Date, activeDays: string[]): boolean {
-  const weekday = date.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
+  const weekday = date
+    .toLocaleDateString("en-US", { weekday: "long" })
+    .toLowerCase();
   return activeDays.includes(weekday);
 }
 
 function getDailyMinutesBudget(
   dailyMinutes: unknown,
   dayName: string,
-  fallback: number
+  fallback: number,
 ): number {
-  if (!dailyMinutes || typeof dailyMinutes !== 'object') {
-    return fallback;
+  let base = fallback;
+
+  if (dailyMinutes && typeof dailyMinutes === "object") {
+    const record = dailyMinutes as Record<string, unknown>;
+    const value = record[dayName];
+
+    if (typeof value === "number" && value > 0) {
+      base = value;
+    }
   }
 
-  const record = dailyMinutes as Record<string, unknown>;
-  const value = record[dayName];
-  if (typeof value === 'number' && value > 0) {
-    return value;
-  }
+  // 🔥 ALWAYS reserve buffer
+  const effective = base - DAILY_BUFFER_MINUTES;
 
-  return fallback;
+  // safety: never go below zero
+  return Math.max(effective, 0);
+}
+
+/**
+ * 🔥 NEW HELPER: Fetch tasks scheduled for a given day
+ */
+async function getNextDayTasks(userId: string, date: Date) {
+  const start = startOfDay(date);
+  const end = new Date(start);
+  end.setHours(23, 59, 59, 999);
+
+  // make sure your repo supports this
+  return taskRepo.findByUserAndDateRange(userId, start, end);
 }
 
 async function findNextSlot(
@@ -50,14 +72,16 @@ async function findNextSlot(
   activeDays: string[],
   dailyMinutes: unknown,
   estimatedMinutes: number,
-  maxActiveDayLookahead: number
+  maxActiveDayLookahead: number,
 ): Promise<Date | null> {
   let cursor = startOfDay(fromDate);
   let activeDayCount = 0;
 
   for (let i = 0; i < 30; i++) {
     cursor = new Date(cursor.getTime() + 24 * 60 * 60 * 1000);
-    const dayName = cursor.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
+    const dayName = cursor
+      .toLocaleDateString("en-US", { weekday: "long" })
+      .toLowerCase();
 
     if (!isActiveDay(cursor, activeDays)) {
       continue;
@@ -79,12 +103,39 @@ async function findNextSlot(
   return null;
 }
 
+async function findBufferSlot(
+  userId: string,
+  fromDate: Date,
+  estimatedMinutes: number,
+): Promise<Date | null> {
+  let cursor = new Date(fromDate);
+
+  for (let i = 0; i < 7; i++) {
+    cursor.setDate(cursor.getDate() + 1);
+
+    const scheduled = await taskRepo.getDailyScheduledMinutes(userId, cursor);
+
+    // only allow into buffer zone
+    if (scheduled + estimatedMinutes <= DEFAULT_DAILY_LIMIT) {
+      return new Date(cursor);
+    }
+  }
+
+  return null;
+}
+
 export async function rescheduleMissedTasks(
   userId: string,
-  asOfDate: Date = new Date()
+  asOfDate: Date = new Date(),
 ): Promise<{ rescheduledCount: number; skippedCount: number }> {
   const settings = await settingsRepo.findByUserId(userId);
-  const activeDays = settings?.activeDays ?? ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
+  const activeDays = settings?.activeDays ?? [
+    "monday",
+    "tuesday",
+    "wednesday",
+    "thursday",
+    "friday",
+  ];
   const dailyMinutes = settings?.dailyMinutes ?? {};
 
   const missed = await taskRepo.findMissedBeforeDate(userId, asOfDate);
@@ -94,9 +145,8 @@ export async function rescheduleMissedTasks(
     const priorityDelta =
       PRIORITY_WEIGHT[b.priority as PriorityLevel] -
       PRIORITY_WEIGHT[a.priority as PriorityLevel];
-    if (priorityDelta !== 0) {
-      return priorityDelta;
-    }
+
+    if (priorityDelta !== 0) return priorityDelta;
 
     return a.scheduledDate.getTime() - b.scheduledDate.getTime();
   });
@@ -105,38 +155,77 @@ export async function rescheduleMissedTasks(
   let skippedCount = 0;
 
   for (const task of sorted) {
-    const preferred = await findNextSlot(
-      userId,
-      asOfDate,
-      activeDays,
-      dailyMinutes,
-      task.estimatedMinutes,
-      1
+    /**
+     * 🔥 NEW LOGIC STARTS HERE
+     * Compare with next day tasks before deciding slot
+     */
+    const nextDayTasks = await getNextDayTasks(userId, asOfDate);
+
+    const higherPriorityExists = nextDayTasks.some(
+      (t) => PRIORITY_WEIGHT[t.priority] > PRIORITY_WEIGHT[task.priority],
     );
 
-    const fallback = preferred
-      ? preferred
-      : await findNextSlot(
-          userId,
-          asOfDate,
-          activeDays,
-          dailyMinutes,
-          task.estimatedMinutes,
-          3
-        );
+    let fallback: Date | null = null;
 
+    if (higherPriorityExists) {
+      // lower priority → delay (buffer style)
+      fallback = await findNextSlot(
+        userId,
+        asOfDate,
+        activeDays,
+        dailyMinutes,
+        task.estimatedMinutes,
+        3,
+      );
+    } else {
+      // higher priority → try earlier insertion
+      fallback = await findNextSlot(
+        userId,
+        asOfDate,
+        activeDays,
+        dailyMinutes,
+        task.estimatedMinutes,
+        1,
+      );
+    }
+
+    /**
+     * 🔥 EXISTING LOGIC (UNCHANGED)
+     */
     if (!fallback) {
-      await taskRepo.updateStatus(task.id, 'SKIPPED', {
-        rescheduledReason: 'No available budget within next active windows',
+      // 🔥 try buffer slot
+      const bufferSlot = await findBufferSlot(
+        userId,
+        asOfDate,
+        task.estimatedMinutes,
+      );
+
+      if (bufferSlot) {
+        await taskRepo.updateStatus(task.id, "RESCHEDULED", {
+          originalScheduledDate:
+            task.originalScheduledDate ?? task.scheduledDate,
+          scheduledDate: bufferSlot,
+          rescheduledReason: "Moved to buffer slot",
+          rescheduleCountIncrement: 1,
+        });
+
+        rescheduledCount++;
+        continue;
+      }
+
+      // still no space → skip
+      await taskRepo.updateStatus(task.id, "SKIPPED", {
+        rescheduledReason: "No available slots including buffer",
       });
-      skippedCount += 1;
+
+      skippedCount++;
       continue;
     }
 
-    await taskRepo.updateStatus(task.id, 'RESCHEDULED', {
+    await taskRepo.updateStatus(task.id, "RESCHEDULED", {
       originalScheduledDate: task.originalScheduledDate ?? task.scheduledDate,
       scheduledDate: fallback,
-      rescheduledReason: 'Auto-rescheduled after missed day',
+      rescheduledReason: "Auto-rescheduled after missed day",
       rescheduleCountIncrement: 1,
     });
 
