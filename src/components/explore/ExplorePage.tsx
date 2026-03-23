@@ -162,7 +162,7 @@ function buildCanvasRoadmap(graph: RoadmapGraph, blocks: InfoBlock[]): { nodes: 
   const SPINE_X = 550;
   const LEFT_X = 80;
   const RIGHT_X = 820;
-  const ROOT_Y = 70;
+  const ROOT_Y = 200;
   const MIN_SIBLING_GAP_Y = 80;
   const MIN_GROUP_GAP_Y = 120;
   const ROOT_TO_FIRST_GROUP_GAP_Y = 140;
@@ -239,13 +239,11 @@ function buildCanvasRoadmap(graph: RoadmapGraph, blocks: InfoBlock[]): { nodes: 
     });
 
     const laneSize = (laneIds: string[]) => {
-      const laneNodeHeight = laneIds.length > 0
-        ? Math.max(...laneIds.map((id) => heightById.get(id) ?? 50))
-        : 0;
+      const heights = laneIds.map((id) => heightById.get(id) ?? 50);
       const totalGroupHeight = laneIds.length > 0
-        ? laneIds.length * laneNodeHeight + (laneIds.length - 1) * MIN_SIBLING_GAP_Y
+        ? heights.reduce((s, h) => s + h, 0) + Math.max(0, laneIds.length - 1) * MIN_SIBLING_GAP_Y
         : 0;
-      return { laneNodeHeight, totalGroupHeight };
+      return { heights, totalGroupHeight } as { heights: number[]; totalGroupHeight: number };
     };
 
     const leftMetrics = laneSize(leftIds);
@@ -265,7 +263,7 @@ function buildCanvasRoadmap(graph: RoadmapGraph, blocks: InfoBlock[]): { nodes: 
     const placeLaneByFormula = (
       laneIds: string[],
       laneX: number,
-      laneNodeHeight: number,
+      heights: number[],
       totalGroupHeight: number
     ) => {
       let laneBottom = Math.round(mainY + mainHeight);
@@ -273,25 +271,27 @@ function buildCanvasRoadmap(graph: RoadmapGraph, blocks: InfoBlock[]): { nodes: 
         return laneBottom;
       }
 
-      // Formula:
-      // totalGroupHeight = (nodeCount * nodeHeight) + ((nodeCount - 1) * gap)
+      // totalGroupHeight = sum(heights) + ((nodeCount - 1) * gap)
       // startY = parentCenterY - totalGroupHeight / 2
-      // childY[i] = startY + i * (nodeHeight + gap)
+      // childY[i] = startY + sum(prevHeights) + i * gap
       const startY = mainCenterY() - totalGroupHeight / 2;
 
+      let cursor = startY;
       laneIds.forEach((id, index) => {
-        const y = Math.round(startY + index * (laneNodeHeight + MIN_SIBLING_GAP_Y));
+        const nodeH = heights[index] ?? (heightById.get(id) ?? 50);
+        const y = Math.round(cursor);
         positioned.set(id, { x: laneX, y });
         assignedResources.add(id);
-        const h = heightById.get(id) ?? laneNodeHeight;
-        laneBottom = Math.max(laneBottom, y + h);
+        laneBottom = Math.max(laneBottom, y + nodeH);
+        // advance cursor by this node height + gap
+        cursor += nodeH + MIN_SIBLING_GAP_Y;
       });
 
       return laneBottom;
     };
 
-    const leftBottom = placeLaneByFormula(leftIds, LEFT_X, leftMetrics.laneNodeHeight, leftMetrics.totalGroupHeight);
-    const rightBottom = placeLaneByFormula(rightIds, RIGHT_X, rightMetrics.laneNodeHeight, rightMetrics.totalGroupHeight);
+    const leftBottom = placeLaneByFormula(leftIds, LEFT_X, leftMetrics.heights ?? [], leftMetrics.totalGroupHeight);
+    const rightBottom = placeLaneByFormula(rightIds, RIGHT_X, rightMetrics.heights ?? [], rightMetrics.totalGroupHeight);
 
     // Recenter parent vertically between first/last child bounds without moving children.
     const allChildren = [...leftIds, ...rightIds];
@@ -848,7 +848,7 @@ export function ExplorePage() {
                     <div className="mb-3 text-xs text-gray-500">Generating AI info blocks...</div>
                   )}
                   <RoadmapCanvas
-                    roadmap={buildCanvasRoadmap(graphData, infoBlocks)}
+                    roadmap={buildCanvasRoadmap(graphData, infoBlocks) as any}
                     roadmapId={expandedRoadmap.slug}
                     onNodeClick={handleCanvasNodeClick}
                   />

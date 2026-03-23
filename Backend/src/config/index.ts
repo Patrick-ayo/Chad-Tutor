@@ -35,6 +35,11 @@ const config = {
     model:
       process.env.MR_CHAD_CHATBOT_MODEL ||
       'Qwen/Qwen3-8B',
+    // Optional Gemini / Google Generative API key. If present, routes will prefer Gemini.
+    geminiApiKey:
+      process.env.MR_CHAD_CHATBOT_GEMINI_API_KEY || process.env.GEMINI_API_KEY || '',
+    // Optional Gemini model name (e.g., "models/text-bison-001" or "models/gemini-1.0")
+    geminiModel: process.env.MR_CHAD_CHATBOT_GEMINI_MODEL || process.env.GEMINI_MODEL || '',
   },
   
   isDevelopment: process.env.NODE_ENV === 'development',

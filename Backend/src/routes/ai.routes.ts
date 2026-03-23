@@ -1,5 +1,6 @@
 import express, { Request, Response } from 'express';
 import Bytez from '../lib/bytez';
+import { runGeminiPrompt } from '../services/gemini.service';
 import type { QuizResponse, StudyPlan } from '../types';
 import config from '../config';
 import { getChatFlowResponse } from '../services/chatbot-flow.service';
@@ -72,7 +73,15 @@ function buildFallbackResources(nodeTitle: string, nodeDescription?: string) {
 }
 
 async function runModelPrompt(prompt: string): Promise<{ error: unknown; output: string }> {
+  // Prefer Gemini if configured, otherwise fall back to Bytez SDK
   try {
+    if (config.chatbot.geminiApiKey) {
+      const res = await runGeminiPrompt(prompt);
+      if (!res.error) return { error: null, output: res.output };
+      // fallback to Bytez if Gemini returned an error
+      console.warn('[AI] Gemini returned error, falling back to Bytez:', res.error);
+    }
+
     const model = sdk.model(MODEL_NAME);
     const { error, output } = await model.run([
       {

@@ -91,12 +91,13 @@ export function RoadmapSidebar({ node, roadmapId, isOpen, onClose }: RoadmapSide
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           topic: node.title,
-          maxResults: 5,
+          maxResults: 3,
         }),
       });
 
       const data = await response.json();
-      setYoutubeVideos(data.videos || []);
+      const topVideos = Array.isArray(data?.videos) ? data.videos.slice(0, 3) : [];
+      setYoutubeVideos(topVideos);
     } catch (fetchError) {
       console.error("YouTube search failed:", fetchError);
       alert("Failed to search YouTube. Please try again.");
@@ -422,6 +423,7 @@ export function RoadmapSidebar({ node, roadmapId, isOpen, onClose }: RoadmapSide
 
                 {youtubeVideos.length > 0 && (
                   <div className="mt-4 space-y-3">
+                    <p className="text-xs text-gray-400">Showing top 3 videos</p>
                     {youtubeVideos.map((video: YoutubeVideo, idx: number) => (
                       <a
                         key={idx}
@@ -451,50 +453,7 @@ export function RoadmapSidebar({ node, roadmapId, isOpen, onClose }: RoadmapSide
                 )}
               </div>
 
-              <div>
-                <h3 className="mb-3 font-semibold text-white">📅 Generate Study Plan</h3>
-                <div className="mb-3">
-                  <label className="mb-2 block text-sm text-gray-400">How many days do you have?</label>
-                  <input
-                    type="number"
-                    defaultValue={7}
-                    min={1}
-                    max={30}
-                    className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-white focus:border-purple-500 focus:outline-none"
-                    id="study-days-input"
-                  />
-                </div>
-                <button
-                  onClick={handleGenerateStudyPlan}
-                  disabled={isGeneratingPlan}
-                  className="w-full rounded-lg bg-purple-600 px-4 py-2 text-white transition-colors hover:bg-purple-700 disabled:opacity-50"
-                >
-                  {isGeneratingPlan ? "Generating..." : "Generate Study Plan"}
-                </button>
 
-                {studyPlan && (
-                  <div className="mt-4 space-y-3">
-                    <p className="text-sm text-green-400">
-                      ✓ {studyPlan.totalDays}-day plan created ({studyPlan.totalHours}h total)
-                    </p>
-                    {studyPlan.sessions?.map((session: StudySession, idx: number) => (
-                      <div key={idx} className="rounded-lg bg-gray-800 p-3">
-                        <h4 className="font-medium text-white">
-                          Day {session.day}: {session.title}
-                        </h4>
-                        <p className="mt-1 text-sm text-gray-400">{session.duration} minutes</p>
-                        <ul className="mt-2 space-y-1">
-                          {session.topics?.map((topic: string, i: number) => (
-                            <li key={i} className="text-sm text-gray-300">
-                              • {topic}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
 
               <div>
                 <h3 className="mb-3 font-semibold text-white">✍️ Practice Quiz</h3>

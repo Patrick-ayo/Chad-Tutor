@@ -15,6 +15,17 @@ const ResourceCard: React.FC<ResourceCardProps> = ({
   discount, 
   isPremium = false 
 }) => {
+  const getDomainFromUrl = (resourceUrl: string) => {
+    try {
+      const parsed = new URL(resourceUrl);
+      return parsed.hostname.replace(/^www\./i, '').toLowerCase();
+    } catch {
+      return '';
+    }
+  };
+
+  const domainName = getDomainFromUrl(url);
+
   // Badge colors based on type
   const getBadgeStyle = () => {
     switch (type) {
@@ -62,7 +73,7 @@ const ResourceCard: React.FC<ResourceCardProps> = ({
       
       {/* External Link Icon */}
       <div className="mt-2 flex items-center text-gray-400 text-xs">
-        <span>View Resource</span>
+        <span>{domainName || 'View Resource'}</span>
         <svg 
           className="w-3 h-3 ml-1 group-hover:translate-x-1 transition-transform" 
           fill="none" 

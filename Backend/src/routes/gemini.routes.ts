@@ -1,10 +1,11 @@
 import express, { Request, Response } from 'express';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import config from '../config';
 
 const router = express.Router();
 
 // Initialize Gemini
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
+const GEMINI_API_KEY = config.chatbot.geminiApiKey || process.env.GEMINI_API_KEY || '';
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 const FALLBACK_MODELS = [
   'gemini-2.0-flash',
