@@ -191,7 +191,11 @@ export function ExplorePage() {
                 <span className="ml-3 text-muted-foreground">Loading roadmap...</span>
               </div>
             ) : graphData ? (
-              <RoadmapFlowchart nodes={graphData.nodes} edges={graphData.edges} />
+              <RoadmapFlowchart
+                nodes={graphData.nodes}
+                edges={graphData.edges}
+                roadmapId={expandedRoadmap.slug}
+              />
             ) : (
               <div className="text-center py-8 text-muted-foreground">
                 <Database className="h-10 w-10 mx-auto mb-3 opacity-50" />

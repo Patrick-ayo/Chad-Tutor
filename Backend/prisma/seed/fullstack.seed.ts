@@ -8,6 +8,7 @@
  */
 
 import { PrismaClient, SkillEdgeType, Difficulty } from '@prisma/client';
+import { buildNodeResources } from './resources';
 
 const prisma = new PrismaClient();
 
@@ -220,7 +221,10 @@ interface RoadmapNode {
   sortOrder: number;
 }
 
-const ROADMAP_NODES: RoadmapNode[] = ROADMAP_NODES_DATA as RoadmapNode[];
+const ROADMAP_NODES: RoadmapNode[] = ROADMAP_NODES_DATA.map((node) => ({
+  ...node,
+  resources: buildNodeResources(node.name, node.slug),
+})) as RoadmapNode[];
 
 async function main() {
   console.log('Starting Full Stack roadmap seed...\n');
@@ -245,6 +249,7 @@ async function main() {
       update: {
         name: node.name,
         description: node.description,
+        resources: (node as any).resources,
         difficulty: node.difficulty,
         categoryId: category.id,
       },
@@ -253,6 +258,7 @@ async function main() {
         name: node.name,
         normalizedName: node.name.toLowerCase().replace(/\s+/g, '-'),
         description: node.description,
+        resources: (node as any).resources,
         difficulty: node.difficulty,
         categoryId: category.id,
       },

@@ -23,6 +23,7 @@ type RoadmapWithSkills = Prisma.RoadmapGetPayload<{
         sortOrder: true;
         icon: true;
         color: true;
+        resources: true;
       };
     };
     rootSkill: true;
@@ -68,6 +69,59 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
 });
 
 /**
+ * GET /api/roadmaps/:roadmapId/nodes/:nodeId - Get a specific roadmap node with resources
+ *
+ * Supports roadmap lookup by id or slug, and node lookup by id or slug.
+ */
+router.get(
+  '/:roadmapId/nodes/:nodeId',
+  async (req: Request<{ roadmapId: string; nodeId: string }>, res: Response) => {
+    try {
+      const { roadmapId, nodeId } = req.params;
+
+      const node = await prisma.skill.findFirst({
+        where: {
+          OR: [{ id: nodeId }, { slug: nodeId }],
+          roadmap: {
+            OR: [{ id: roadmapId }, { slug: roadmapId }],
+          },
+        },
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          description: true,
+          difficulty: true,
+          sortOrder: true,
+          icon: true,
+          color: true,
+          resources: true,
+          roadmapId: true,
+        },
+      });
+
+      if (!node) {
+        return res.status(404).json({
+          success: false,
+          message: 'Node not found',
+        });
+      }
+
+      return res.json({
+        success: true,
+        data: node,
+      });
+    } catch (error) {
+      console.error('Error fetching node:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Server error',
+      });
+    }
+  }
+);
+
+/**
  * GET /api/roadmaps/:slug - Get roadmap details with graph data
  * 
  * Returns the roadmap with all its skills and edges for flowchart rendering.
@@ -90,6 +144,7 @@ router.get('/:slug', async (req: Request<{ slug: string }>, res: Response, next:
             sortOrder: true,
             icon: true,
             color: true,
+            resources: true,
           },
         },
         rootSkill: true,
