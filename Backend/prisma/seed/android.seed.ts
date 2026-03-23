@@ -8,6 +8,7 @@
  */
 
 import { PrismaClient, SkillEdgeType, Difficulty } from '@prisma/client';
+import { buildNodeResources } from './resources';
 
 const prisma = new PrismaClient();
 
@@ -344,6 +345,7 @@ async function main() {
     ...node,
     categoryId: category.id,
     normalizedName: node.name.toLowerCase(),
+    resources: buildNodeResources(node.name, node.slug, { sortOrder: node.sortOrder, nodeType: (node as any).type }),
   }));
 
   // Insert all nodes (skills)
@@ -354,6 +356,7 @@ async function main() {
       update: {
         name: node.name,
         description: node.description,
+        resources: (node as any).resources,
         categoryId: node.categoryId,
         difficulty: node.difficulty,
         normalizedName: node.normalizedName,
@@ -363,6 +366,7 @@ async function main() {
         slug: node.slug,
         name: node.name,
         description: node.description,
+        resources: (node as any).resources,
         categoryId: node.categoryId,
         difficulty: node.difficulty,
         normalizedName: node.normalizedName,
@@ -461,3 +465,4 @@ main()
   .finally(async () => {
     await prisma.$disconnect();
   });
+

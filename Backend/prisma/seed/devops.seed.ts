@@ -8,6 +8,7 @@
  */
 
 import { PrismaClient, SkillEdgeType, Difficulty } from '@prisma/client';
+import { buildNodeResources } from './resources';
 
 const prisma = new PrismaClient();
 
@@ -357,6 +358,33 @@ const ROADMAP_EDGES_DATA = [
   { source: 'argocd-artifacts', target: 'artifact-management', type: SkillEdgeType.SUBSKILL_OF },
 ];
 
+const DEVOPS_INFO_BLOCKS = [
+  {
+    text: 'Start with Linux and networking fundamentals.',
+    position: { x: 80, y: 150 },
+    width: 250,
+    type: 'recommendation' as const,
+  },
+  {
+    text: 'Practice containerization and CI/CD with real projects weekly.',
+    position: { x: 780, y: 600 },
+    width: 260,
+    type: 'tip' as const,
+  },
+  {
+    text: 'Set up your own CI/CD pipeline to learn automation.',
+    position: { x: 80, y: 900 },
+    width: 250,
+    type: 'info' as const,
+  },
+  {
+    text: 'Review incidents and improve observability dashboards each sprint.',
+    position: { x: 780, y: 1040 },
+    width: 260,
+    type: 'warning' as const,
+  },
+];
+
 interface RoadmapNode {
   slug: string;
   name: string;
@@ -365,7 +393,14 @@ interface RoadmapNode {
   sortOrder: number;
 }
 
-const ROADMAP_NODES: RoadmapNode[] = ROADMAP_NODES_DATA as RoadmapNode[];
+const ROADMAP_NODES: RoadmapNode[] = ROADMAP_NODES_DATA.map((node) => ({
+  ...node,
+  resources: buildNodeResources(node.name, node.slug, {
+    sortOrder: node.sortOrder,
+    nodeType: (node as any).type,
+    infoBlocks: node.sortOrder === 0 ? DEVOPS_INFO_BLOCKS : undefined,
+  }),
+})) as RoadmapNode[];
 
 async function main() {
   console.log('Starting DevOps roadmap seed...\n');
@@ -390,6 +425,7 @@ async function main() {
       update: {
         name: node.name,
         description: node.description,
+        resources: (node as any).resources,
         difficulty: node.difficulty,
         categoryId: category.id,
       },
@@ -398,6 +434,7 @@ async function main() {
         name: node.name,
         normalizedName: node.name.toLowerCase().replace(/\s+/g, '-'),
         description: node.description,
+        resources: (node as any).resources,
         difficulty: node.difficulty,
         categoryId: category.id,
       },
@@ -490,3 +527,4 @@ main()
   .finally(async () => {
     await prisma.$disconnect();
   });
+

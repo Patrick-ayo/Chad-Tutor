@@ -569,6 +569,7 @@ model Skill {
   slug            String   @unique
   normalizedName  String   @db.VarChar(255)
   description     String?  @db.Text
+  resources       Json?
   icon            String?  @db.VarChar(50)
   color           String?  @db.VarChar(20)
   

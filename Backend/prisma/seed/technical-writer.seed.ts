@@ -8,6 +8,7 @@
  */
 
 import { PrismaClient, SkillEdgeType, Difficulty } from '@prisma/client';
+import { buildNodeResources } from './resources';
 
 const prisma = new PrismaClient();
 
@@ -20,7 +21,7 @@ const ROADMAP_NODES_DATA = [
   { slug: 'introduction-tw', name: 'Introduction', description: 'Technical writing introduction', difficulty: Difficulty.BEGINNER, sortOrder: 1 },
   { slug: 'who-is-technical-writer', name: 'Who is a Technical Writer?', description: 'Role and responsibilities of technical writers', difficulty: Difficulty.BEGINNER, sortOrder: 2 },
   { slug: 'what-is-technical-writing', name: 'What is Technical Writing?', description: 'Definition and scope of technical writing', difficulty: Difficulty.BEGINNER, sortOrder: 3 },
-  { slug: 'role-of-technical-writers-in-orgs', name: 'Role of Technical Writers in Organizations', description: 'Organizational role and impact', difficulty: Difficulty.INTERMEDIATE, sortOrder: 4 },
+  { slug: 'role-of-technical-writers-in-orgs', name: 'Role of Technical Writers in Organizations', description: 'Organizational role and impact', difficulty: Difficulty.INTERMEDIATE, sortOrder: 4, width: 180, height: 60 },
   { slug: 'forms-of-technical-writing', name: 'Forms of Technical Writing', description: 'Different types and forms of technical writing', difficulty: Difficulty.INTERMEDIATE, sortOrder: 5 },
   { slug: 'growth-as-technical-writer', name: 'Growth as a Technical Writer', description: 'Career growth and advancement', difficulty: Difficulty.INTERMEDIATE, sortOrder: 6 },
 
@@ -28,7 +29,7 @@ const ROADMAP_NODES_DATA = [
   { slug: 'required-skills-tw', name: 'Required Skills', description: 'Core skills for technical writers', difficulty: Difficulty.INTERMEDIATE, sortOrder: 7 },
   { slug: 'technology-expertise', name: 'Technology Expertise', description: 'Technical knowledge and expertise', difficulty: Difficulty.ADVANCED, sortOrder: 8 },
   { slug: 'language-proficiency', name: 'Language Proficiency', description: 'Language and writing proficiency', difficulty: Difficulty.INTERMEDIATE, sortOrder: 9 },
-  { slug: 'written-communication-proficiency', name: 'Written Communication Proficiency', description: 'Professional communication skills', difficulty: Difficulty.INTERMEDIATE, sortOrder: 10 },
+  { slug: 'written-communication-proficiency', name: 'Written Communication Proficiency', description: 'Professional communication skills', difficulty: Difficulty.INTERMEDIATE, sortOrder: 10, width: 180, height: 60 },
 
   // ==== STORY TELLING ====
   { slug: 'story-telling', name: 'Story Telling', description: 'Narrative and storytelling techniques', difficulty: Difficulty.INTERMEDIATE, sortOrder: 11 },
@@ -227,6 +228,33 @@ const ROADMAP_EDGES_DATA = [
   { source: 'keep-learning-tw', target: 'technical-writer', type: SkillEdgeType.SUBSKILL_OF },
 ];
 
+const TECHNICAL_WRITER_INFO_BLOCKS = [
+  {
+    text: 'Start with fundamentals and avoid skipping writing basics.',
+    position: { x: 80, y: 450 },
+    width: 250,
+    type: 'recommendation' as const,
+  },
+  {
+    text: 'Practice documentation workflows before advanced tooling.',
+    position: { x: 780, y: 480 },
+    width: 260,
+    type: 'tip' as const,
+  },
+  {
+    text: 'Build a portfolio with real documentation samples and revisions.',
+    position: { x: 80, y: 850 },
+    width: 250,
+    type: 'info' as const,
+  },
+  {
+    text: 'Use SEO and analytics to keep technical content discoverable.',
+    position: { x: 780, y: 850 },
+    width: 260,
+    type: 'warning' as const,
+  },
+];
+
 interface RoadmapNode {
   slug: string;
   name: string;
@@ -235,7 +263,14 @@ interface RoadmapNode {
   sortOrder: number;
 }
 
-const ROADMAP_NODES: RoadmapNode[] = ROADMAP_NODES_DATA as RoadmapNode[];
+const ROADMAP_NODES: RoadmapNode[] = ROADMAP_NODES_DATA.map((node) => ({
+  ...node,
+  resources: buildNodeResources(node.name, node.slug, {
+    sortOrder: node.sortOrder,
+    nodeType: (node as any).type,
+    infoBlocks: node.sortOrder === 0 ? TECHNICAL_WRITER_INFO_BLOCKS : undefined,
+  }),
+})) as RoadmapNode[];
 
 async function main() {
   console.log('Starting Technical Writer roadmap seed...\n');
@@ -260,6 +295,7 @@ async function main() {
       update: {
         name: node.name,
         description: node.description,
+        resources: (node as any).resources,
         difficulty: node.difficulty,
         categoryId: category.id,
       },
@@ -268,6 +304,7 @@ async function main() {
         name: node.name,
         normalizedName: node.name.toLowerCase().replace(/\s+/g, '-'),
         description: node.description,
+        resources: (node as any).resources,
         difficulty: node.difficulty,
         categoryId: category.id,
       },
@@ -360,3 +397,4 @@ main()
   .finally(async () => {
     await prisma.$disconnect();
   });
+

@@ -3,6 +3,7 @@ import { Link, useLocation, Outlet } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
 import { LayoutDashboard, Target, BookOpen, Settings, Play, BarChart3, CalendarDays, Compass, Bookmark, StickyNote, Menu } from "lucide-react";
+import { MeditationIcon } from "@/components/icons/MeditationIcon";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -12,6 +13,7 @@ const navItems = [
   { path: "/schedule", label: "Schedule", icon: CalendarDays },
   { path: "/progress", label: "Progress", icon: BarChart3 },
   { path: "/explore", label: "Explore", icon: Compass },
+  { path: "/mr-chad", label: "Mr. Chad", icon: MeditationIcon },
 ];
 
 export function Layout() {

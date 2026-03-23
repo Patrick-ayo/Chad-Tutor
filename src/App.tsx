@@ -10,6 +10,7 @@ import { SettingsPage } from "@/components/settings";
 import { ExplorePage } from "@/components/explore";
 import { BookmarksPage } from "@/components/bookmarks";
 import { MyNotesPage } from "@/components/notes";
+import { MrChadPage } from "@/components/mr-chad/MrChadPage";
 import { AccessibilityProvider } from "@/contexts/AccessibilityContext";
 import { mockDashboardData } from "@/data/mockDashboard";
 import { mockPlannerData } from "@/data/mockPlanner";
@@ -64,6 +65,7 @@ function App() {
             <Route path="/planner" element={<Navigate to="/schedule" replace />} />
             <Route path="/settings" element={<SettingsPage initialSettings={settings} onSave={handleSettingsSave} />} />
             <Route path="/explore" element={<ExplorePage />} />
+            <Route path="/mr-chad" element={<MrChadPage />} />
             <Route path="/bookmarks" element={<BookmarksPage />} />
             <Route path="/my-notes" element={<MyNotesPage />} />
           </Route>

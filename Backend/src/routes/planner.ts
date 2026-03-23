@@ -6,8 +6,36 @@ import { Router, Request, Response } from "express";
 import { requireAuth } from "../middleware";
 import { plannerService, userService } from "../services";
 import { rescheduleMissedTasks } from "../services/reschedule.service";
+import config from "../config";
 
 const router = Router();
+
+function buildDevPlannerSnapshot() {
+  const today = new Date().toISOString().slice(0, 10);
+  return {
+    scheduleDays: [],
+    missedTasks: [],
+    workloadIntensity: "normal" as const,
+    workloadStats: {
+      tasksPerDay: { light: 1, normal: 2, aggressive: 3 },
+      revisionDensity: { light: "20%", normal: "30%", aggressive: "40%" },
+      bufferUsage: { light: "15%", normal: "10%", aggressive: "5%" },
+    },
+    currentLoad: {
+      daily: 0,
+      weekly: 0,
+      maxRecommended: 420,
+    },
+    burnoutSignals: {
+      riskLevel: "low" as const,
+      indicators: [],
+      recommendations: [],
+      detectedPatterns: [],
+    },
+    pendingChanges: [],
+    lastReschedule: today,
+  };
+}
 
 router.get("/", requireAuth, async (req: Request, res: Response) => {
   try {
@@ -15,6 +43,9 @@ router.get("/", requireAuth, async (req: Request, res: Response) => {
     const user = await userService.getUserByClerkId(clerkId);
 
     if (!user) {
+      if (config.isDevelopment) {
+        return res.json({ planner: buildDevPlannerSnapshot() });
+      }
       return res
         .status(404)
         .json({ error: "Not Found", message: "User not found" });
