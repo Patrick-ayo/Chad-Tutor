@@ -6,7 +6,7 @@ import { LayoutDashboard, Target, BookOpen, Settings, Play, BarChart3, CalendarD
 import { cn } from "@/lib/utils";
 
 const navItems = [
-  { path: "/", label: "Dashboard", icon: LayoutDashboard },
+  { path: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { path: "/goals", label: "Goals", icon: Target },
   { path: "/session/task-1", label: "Session", icon: Play },
   { path: "/schedule", label: "Schedule", icon: CalendarDays },
@@ -25,7 +25,7 @@ export function Layout() {
         <div className="flex h-14 items-center justify-between px-4 md:px-6">
           {/* Logo */}
           <div className="flex items-center">
-            <Link to="/" className="flex items-center gap-2">
+            <Link to="/dashboard" className="flex items-center gap-2">
               <BookOpen className="h-6 w-6 text-primary" />
               <span className="font-bold text-lg hidden sm:inline">Chad Tutor</span>
             </Link>

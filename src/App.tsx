@@ -17,6 +17,7 @@ import { mockSettings } from "@/data/mockSettings";
 import { fetchPlannerSnapshot } from "@/lib/plannerApi";
 import type { UserSettings } from "@/types/settings";
 import type { PlannerData } from "@/types/planner";
+import LoginPage from "@/components/login/LoginPage";
 
 function App() {
   const [settings, setSettings] = useState<UserSettings>(mockSettings);
@@ -52,9 +53,10 @@ function App() {
     >
       <BrowserRouter>
         <Routes>
+          <Route path="/" element={<LoginPage />} />
           {/* Main layout pages */}
           <Route element={<Layout />}>
-            <Route path="/" element={<Dashboard data={mockDashboardData} />} />
+            <Route path="/dashboard" element={<Dashboard data={mockDashboardData} />} />
             <Route path="/goals" element={<GoalBuilderPage />} />
             <Route path="/session/:taskId" element={<LearningSessionPage />} />
             <Route path="/progress" element={<ProgressAnalyticsPage />} />
@@ -65,6 +67,7 @@ function App() {
             <Route path="/bookmarks" element={<BookmarksPage />} />
             <Route path="/my-notes" element={<MyNotesPage />} />
           </Route>
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
     </AccessibilityProvider>

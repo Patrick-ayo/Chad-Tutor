@@ -5,3 +5,4 @@ export { PracticeSection } from "./PracticeSection";
 export { AIHelpDrawer } from "./AIHelpDrawer";
 export { SessionFooter } from "./SessionFooter";
 export { EndSessionDialog } from "./EndSessionDialog";
+export { ChadMeUpDialog } from "./ChadMeUpDialog";

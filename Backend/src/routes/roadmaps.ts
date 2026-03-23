@@ -42,7 +42,6 @@ type RoadmapWithSkills = Prisma.RoadmapGetPayload<{
 router.get('/', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const roadmaps = await prisma.roadmap.findMany({
-      where: { isPublished: true },
       orderBy: { sortOrder: 'asc' },
       include: {
         _count: {

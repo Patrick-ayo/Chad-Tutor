@@ -9,7 +9,10 @@ export type SessionEventType =
   | "answer_submitted"
   | "ai_help_requested"
   | "content_viewed"
-  | "session_end";
+  | "session_end"
+  | "chad_me_up_clicked"
+  | "playlist_rescheduled"
+  | "primary_video_updated";
 
 // Session Mode Types
 export type SessionMode = 
@@ -37,6 +40,16 @@ export interface VideoChapter {
   title: string;
   startTime: number; // seconds
   endTime: number;
+}
+
+export interface SuggestedVideo {
+  videoId: string;
+  title: string;
+  description: string;
+  duration: number; // seconds
+  subject: string;
+  topic: string;
+  relatedTopics?: string[];
 }
 
 export interface ConceptTags {

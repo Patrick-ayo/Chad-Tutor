@@ -12,6 +12,7 @@ interface SessionFooterProps {
   onResume: () => void;
   onEndSession: () => void;
   onOpenAIHelp: () => void;
+  onChadMeUp: () => void;
 }
 
 export function SessionFooter({
@@ -23,6 +24,7 @@ export function SessionFooter({
   onResume,
   onEndSession,
   onOpenAIHelp,
+  onChadMeUp,
 }: SessionFooterProps) {
   const [displayTime, setDisplayTime] = useState(elapsedSeconds);
 
@@ -111,6 +113,13 @@ export function SessionFooter({
                 </Button>
               </>
             )}
+
+            <Button variant="default" size="sm" onClick={onChadMeUp} className="hidden md:flex">
+              Chad Me Up
+            </Button>
+            <Button variant="default" size="icon" onClick={onChadMeUp} className="md:hidden h-8 w-8">
+              ↑
+            </Button>
 
             <Button variant="destructive" size="sm" onClick={onEndSession} className="hidden md:flex">
               <Square className="h-4 w-4 mr-1" />
