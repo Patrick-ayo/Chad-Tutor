@@ -36,7 +36,11 @@ const WIZARD_STEPS_OTHER = [
   { id: 4, name: "Preferences", description: "How do you learn?" },
 ];
 
-export function GoalBuilderPage() {
+interface GoalBuilderPageProps {
+  onSaveGoalSchedule?: (roadmap: Roadmap) => void | Promise<void>;
+}
+
+export function GoalBuilderPage({ onSaveGoalSchedule }: GoalBuilderPageProps) {
   // View state
   const [view, setView] = useState<PageView>("wizard");
   const [currentStep, setCurrentStep] = useState<WizardStep>(1);
@@ -290,12 +294,17 @@ export function GoalBuilderPage() {
   }, [roadmap]);
 
   const handleSave = useCallback(async () => {
+    if (!roadmap) {
+      return;
+    }
+
     console.log("Saving goal and roadmap...");
-    // In real app: POST to /goal/create and /roadmap/generate
+    // Session-only save for development: no backend persistence.
     await new Promise((resolve) => setTimeout(resolve, 1000));
+    await onSaveGoalSchedule?.(roadmap);
     setHasChanges(false);
-    alert("Goal saved successfully!");
-  }, []);
+    alert("Goal saved for this session. Check Schedule tab.");
+  }, [onSaveGoalSchedule, roadmap]);
 
   const handleBackToWizard = useCallback(() => {
     setView("wizard");

@@ -16,8 +16,10 @@ import { mockDashboardData } from "@/data/mockDashboard";
 import { mockPlannerData } from "@/data/mockPlanner";
 import { mockSettings } from "@/data/mockSettings";
 import { fetchPlannerSnapshot } from "@/lib/plannerApi";
+import { applyGoalRoadmapToSessionPlanner } from "@/utils/sessionGoalPlanner";
 import type { UserSettings } from "@/types/settings";
 import type { PlannerData } from "@/types/planner";
+import type { Roadmap } from "@/types/goal";
 import LoginPage from "@/components/login/LoginPage";
 
 function App() {
@@ -44,6 +46,15 @@ function App() {
     // In real app, this would persist to backend
   };
 
+  const handleGoalSessionSave = (roadmap: Roadmap) => {
+    setPlannerData((current) =>
+      applyGoalRoadmapToSessionPlanner(current, roadmap, {
+        activeDays: settings.availability.activeDays,
+        minutesPerDay: settings.availability.minutesPerDay,
+      }),
+    );
+  };
+
   return (
     <AccessibilityProvider 
       settings={settings.accessibility} 
@@ -58,7 +69,7 @@ function App() {
           {/* Main layout pages */}
           <Route element={<Layout />}>
             <Route path="/dashboard" element={<Dashboard data={mockDashboardData} />} />
-            <Route path="/goals" element={<GoalBuilderPage />} />
+            <Route path="/goals" element={<GoalBuilderPage onSaveGoalSchedule={handleGoalSessionSave} />} />
             <Route path="/session/:taskId" element={<LearningSessionPage />} />
             <Route path="/progress" element={<ProgressAnalyticsPage />} />
             <Route path="/schedule" element={<PlannerPage data={plannerData} onSync={refreshPlanner} />} />
