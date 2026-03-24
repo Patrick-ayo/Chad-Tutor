@@ -892,18 +892,7 @@ export function ExplorePage() {
                   />
                 </div>
 
-                <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-5 dark:bg-blue-950/40 dark:border-blue-800">
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="text-3xl" role="img" aria-label="AI assistant">🤖</span>
-                    <h3 className="font-bold text-gray-900 dark:text-gray-100">AI Study Assistant</h3>
-                  </div>
-                  <p className="text-sm text-gray-700 dark:text-gray-300 mb-4 leading-relaxed">
-                    Get personalized study plans, quizzes, and resource recommendations powered by AI.
-                  </p>
-                  <button className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 px-6 rounded-lg transition">
-                    Open AI Tutor
-                  </button>
-                </div>
+               
               </div>
             </div>
           ) : (
