@@ -455,4 +455,151 @@ Return ONLY valid JSON, no markdown.`;
   }
 });
 
+/**
+ * POST /api/gemini/generate-node-descriptions
+ * 
+ * Generate AI-powered descriptions for skill nodes that are missing them.
+ * 
+ * Request body:
+ * {
+ *   "nodes": [
+ *     { "id": "node-id", "name": "Node Name", "description": "existing desc or null" },
+ *     ...
+ *   ],
+ *   "roadmapContext": "Data Science Roadmap" (optional)
+ * }
+ * 
+ * Response:
+ * {
+ *   "success": true,
+ *   "data": {
+ *     "descriptions": {
+ *       "node-id": "Generated description...",
+ *       ...
+ *     }
+ *   }
+ * }
+ */
+router.post('/generate-node-descriptions', async (req: Request, res: Response) => {
+  try {
+    const {
+      nodes,
+      roadmapContext = 'learning roadmap',
+    } = req.body as {
+      nodes?: Array<{ id: string; name: string; description?: string | null }>;
+      roadmapContext?: string;
+    };
+
+    if (!Array.isArray(nodes) || nodes.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Nodes array is required and must not be empty',
+      });
+    }
+
+    // Filter nodes that need descriptions
+    const nodesToDescribe = nodes.filter((n) => !n.description || typeof n.description !== 'string');
+
+    if (nodesToDescribe.length === 0) {
+      return res.json({
+        success: true,
+        data: { descriptions: {} },
+      });
+    }
+
+    if (!GEMINI_API_KEY) {
+      // Build fallback descriptions
+      const fallbackDescriptions: Record<string, string> = {};
+      nodesToDescribe.forEach((node) => {
+        fallbackDescriptions[node.id] = `Learn about ${node.name} as part of this ${roadmapContext}. This topic covers core principles, essential tools, and repeatable workflows you will use in real projects.`;
+      });
+      
+      return res.json({
+        success: true,
+        fallback: true,
+        data: { descriptions: fallbackDescriptions },
+      });
+    }
+
+    const nodesList = nodesToDescribe.map((n) => `- "${n.name}"`).join('\n');
+
+    const prompt = `You are an educational content expert. Generate concise, practical descriptions for the following skill topics in a ${roadmapContext}.
+
+Topics to describe:
+${nodesList}
+
+For each topic, generate a description that:
+1. Is 1-2 sentences (40-80 words max)
+2. Explains what the topic covers and why it matters
+3. Focuses on practical application and real-world use
+4. Avoids generic or overly technical language
+5. Motivates the learner
+
+Return ONLY a valid JSON object with this exact structure (no markdown, no extra text):
+{
+  "descriptions": {
+    "topic-name-1": "Description here...",
+    "topic-name-2": "Description here...",
+    ...
+  }
+}
+
+Map the description keys to the exact topic names provided above.`;
+
+    try {
+      const result = await generateWithFallback(prompt);
+      const text = result.response.text();
+      const parsed = parseJsonResponse(text);
+
+      // Map descriptions back to node IDs
+      const descriptions: Record<string, string> = {};
+      nodesToDescribe.forEach((node) => {
+        const desc = (parsed.descriptions as Record<string, string>)?.[node.name];
+        descriptions[node.id] = desc || `Learn about ${node.name} as part of this ${roadmapContext}.`;
+      });
+
+      return res.json({
+        success: true,
+        data: { descriptions },
+      });
+    } catch (parseError) {
+      console.error('Failed to parse Gemini response:', parseError);
+      // Fallback to simple descriptions
+      const fallbackDescriptions: Record<string, string> = {};
+      nodesToDescribe.forEach((node) => {
+        fallbackDescriptions[node.id] = `Learn about ${node.name} as part of this ${roadmapContext}. This topic covers core principles, essential tools, and repeatable workflows you will use in real projects.`;
+      });
+      
+      return res.json({
+        success: true,
+        fallback: true,
+        data: { descriptions: fallbackDescriptions },
+      });
+    }
+  } catch (error) {
+    if (isQuotaError(error)) {
+      console.warn('Gemini quota exceeded for /generate-node-descriptions');
+    } else {
+      console.error('Node descriptions generation error:', error);
+    }
+
+    const nodes = (req.body as any)?.nodes || [];
+    const roadmapContext = (req.body as any)?.roadmapContext || 'learning roadmap';
+    
+    // Return fallback descriptions
+    const fallbackDescriptions: Record<string, string> = {};
+    nodes
+      .filter((n: any) => !n.description || typeof n.description !== 'string')
+      .forEach((node: any) => {
+        fallbackDescriptions[node.id] = `Learn about ${node.name} as part of this ${roadmapContext}. This topic covers core principles, essential tools, and repeatable workflows you will use in real projects.`;
+      });
+
+    return res.json({
+      success: true,
+      fallback: true,
+      data: { descriptions: fallbackDescriptions },
+    });
+  }
+});
+
 export default router;

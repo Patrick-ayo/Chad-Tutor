@@ -573,6 +573,41 @@ export function ExplorePage() {
         setGraphData({ nodes, edges: normalizedEdges, infoBlocks: seededInfoBlocks });
         setInfoBlocks(seededInfoBlocks);
 
+        // Generate AI descriptions for nodes missing descriptions
+        const nodesToDescribe = nodes.filter(
+          (n: any) => !n.description || typeof n.description !== 'string'
+        );
+        
+        if (nodesToDescribe.length > 0) {
+          try {
+            const descResponse = await fetch('/api/gemini/generate-node-descriptions', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                nodes: nodes.map((n: any) => ({
+                  id: n.id,
+                  name: n.name,
+                  description: n.description,
+                })),
+                roadmapContext: roadmapPayload?.name || expandedRoadmap.name,
+              }),
+            });
+
+            const descResult = await descResponse.json();
+            
+            if (descResult?.success && descResult?.data?.descriptions) {
+              const updatedNodes = nodes.map((n: any) => ({
+                ...n,
+                description: descResult.data.descriptions[n.id] || n.description,
+              }));
+              setGraphData({ nodes: updatedNodes, edges: normalizedEdges, infoBlocks: seededInfoBlocks });
+            }
+          } catch (descError) {
+            console.warn('Failed to generate node descriptions:', descError);
+            // Continue with existing data
+          }
+        }
+
         // Progress from node status (if available), fallback to local storage
         const statusCompleted = nodes.filter((n: any) => n?.status === 'completed').length;
         if (statusCompleted > 0) {
