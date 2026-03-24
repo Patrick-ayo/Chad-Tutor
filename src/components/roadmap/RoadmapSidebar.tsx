@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { X } from "lucide-react";
+import { useTheme } from "@/contexts/ThemeContext";
 import ResourceCard from "@/components/roadmap/ResourceCard";
 
 interface RoadmapSidebarProps {
@@ -47,6 +48,7 @@ type StudyPlan = {
 };
 
 export function RoadmapSidebar({ node, roadmapId, isOpen, onClose }: RoadmapSidebarProps) {
+  const { theme } = useTheme();
   console.log("RoadmapSidebar node prop:", node);
 
   const [activeTab, setActiveTab] = useState<"resources" | "ai-tutor">("resources");
@@ -249,21 +251,31 @@ export function RoadmapSidebar({ node, roadmapId, isOpen, onClose }: RoadmapSide
     mergedNode.title
   );
 
+  const isDark = theme === "dark";
+
   return (
     <aside
-      className={`fixed inset-y-0 right-0 z-[1000] h-screen w-[450px] border-l border-white/10 bg-[#1a1a1a] shadow-[-4px_0_20px_rgba(0,0,0,0.5)] transition-transform duration-300 ease-in-out ${
+      className={`fixed inset-y-0 right-0 z-[1000] h-screen w-[450px] border-l transition-transform duration-300 ease-in-out ${
+        isDark
+          ? "border-white/10 bg-[#1a1a1a] shadow-[-4px_0_20px_rgba(0,0,0,0.5)]"
+          : "border-gray-200 bg-white shadow-[-4px_0_20px_rgba(0,0,0,0.12)]"
+      } ${
         isOpen ? "translate-x-0" : "translate-x-full"
       }`}
       aria-hidden={!isOpen}
     >
       <div className="flex h-full flex-col">
-        <header className="border-b border-white/10 px-6 pb-4 pt-5">
+        <header className={`border-b px-6 pb-4 pt-5 ${isDark ? "border-white/10" : "border-gray-200"}`}>
           <div className="mb-4 flex items-start justify-end">
             <button
               type="button"
               onClick={onClose}
               aria-label="Close sidebar"
-              className="rounded-md p-2 text-gray-400 transition-colors hover:bg-white/10 hover:text-white"
+              className={`rounded-md p-2 transition-colors ${
+                isDark
+                  ? "text-gray-400 hover:bg-white/10 hover:text-white"
+                  : "text-gray-500 hover:bg-gray-100 hover:text-gray-900"
+              }`}
             >
               <X className="h-5 w-5" />
             </button>
@@ -273,22 +285,24 @@ export function RoadmapSidebar({ node, roadmapId, isOpen, onClose }: RoadmapSide
         <div className="flex-1 overflow-y-auto p-6">
           {mergedNode && (
             <>
-              <h2 className="mb-4 text-2xl font-bold text-white">{mergedNode.title}</h2>
-              <p className="mb-6 text-sm leading-relaxed text-gray-400">
+              <h2 className={`mb-4 text-2xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}>{mergedNode.title}</h2>
+              <p className={`mb-6 text-sm leading-relaxed ${isDark ? "text-gray-400" : "text-gray-600"}`}>
                 {mergedNode.description || "No description available"}
               </p>
             </>
           )}
 
-          <div className="mb-6 border-b border-white/10">
+          <div className={`mb-6 border-b ${isDark ? "border-white/10" : "border-gray-200"}`}>
             <div className="flex items-center gap-6">
-              <div className="mb-6 flex gap-4 border-b border-gray-700">
+              <div className={`mb-6 flex gap-4 border-b ${isDark ? "border-gray-700" : "border-gray-200"}`}>
                 <button
                   onClick={() => setActiveTab("resources")}
                   className={`pb-2 px-1 transition-colors ${
                     activeTab === "resources"
                       ? "border-b-2 border-green-500 text-green-400"
-                      : "text-gray-400 hover:text-gray-300"
+                      : isDark
+                        ? "text-gray-400 hover:text-gray-300"
+                        : "text-gray-600 hover:text-gray-900"
                   }`}
                 >
                   📚 Resources
@@ -298,7 +312,9 @@ export function RoadmapSidebar({ node, roadmapId, isOpen, onClose }: RoadmapSide
                   className={`pb-2 px-1 transition-colors ${
                     activeTab === "ai-tutor"
                       ? "border-b-2 border-purple-500 text-purple-400"
-                      : "text-gray-400 hover:text-gray-300"
+                      : isDark
+                        ? "text-gray-400 hover:text-gray-300"
+                        : "text-gray-600 hover:text-gray-900"
                   }`}
                 >
                   🤖 AI Tutor
@@ -312,9 +328,9 @@ export function RoadmapSidebar({ node, roadmapId, isOpen, onClose }: RoadmapSide
               {/* Description Section */}
               {isLoadingResources ? (
                 <div className="animate-pulse">
-                  <div className="h-4 bg-gray-700 rounded w-3/4 mb-2"></div>
-                  <div className="h-4 bg-gray-700 rounded w-full mb-2"></div>
-                  <div className="h-4 bg-gray-700 rounded w-5/6"></div>
+                  <div className={`h-4 rounded w-3/4 mb-2 ${isDark ? "bg-gray-700" : "bg-gray-200"}`}></div>
+                  <div className={`h-4 rounded w-full mb-2 ${isDark ? "bg-gray-700" : "bg-gray-200"}`}></div>
+                  <div className={`h-4 rounded w-5/6 ${isDark ? "bg-gray-700" : "bg-gray-200"}`}></div>
                 </div>
               ) : resourceError ? (
                 <div className="bg-red-900/20 border border-red-500 rounded-lg p-4">
@@ -327,13 +343,13 @@ export function RoadmapSidebar({ node, roadmapId, isOpen, onClose }: RoadmapSide
                   </button>
                 </div>
               ) : resourceData?.description ? (
-                <div className="bg-gray-800/50 rounded-lg p-4">
-                  <p className="text-gray-300 text-sm leading-relaxed">
+                <div className={`rounded-lg p-4 ${isDark ? "bg-gray-800/50" : "bg-gray-100"}`}>
+                  <p className={`text-sm leading-relaxed ${isDark ? "text-gray-300" : "text-gray-700"}`}>
                     {shownDescription}
                   </p>
                 </div>
               ) : (
-                <p className="text-gray-400 text-sm">
+                <p className={`text-sm ${isDark ? "text-gray-400" : "text-gray-600"}`}>
                   {shownDescription}
                 </p>
               )}
@@ -349,7 +365,7 @@ export function RoadmapSidebar({ node, roadmapId, isOpen, onClose }: RoadmapSide
                     {[1, 2, 3].map((i) => (
                       <div
                         key={i}
-                        className="animate-pulse bg-gray-700 h-20 rounded-lg"
+                        className={`animate-pulse h-20 rounded-lg ${isDark ? "bg-gray-700" : "bg-gray-200"}`}
                       ></div>
                     ))}
                   </div>
@@ -366,7 +382,7 @@ export function RoadmapSidebar({ node, roadmapId, isOpen, onClose }: RoadmapSide
                     ))}
                   </div>
                 ) : (
-                  <p className="text-gray-500 text-sm">
+                  <p className={`text-sm ${isDark ? "text-gray-500" : "text-gray-500"}`}>
                     No free resources available yet
                   </p>
                 )}
@@ -383,7 +399,7 @@ export function RoadmapSidebar({ node, roadmapId, isOpen, onClose }: RoadmapSide
                     {[1, 2].map((i) => (
                       <div
                         key={i}
-                        className="animate-pulse bg-gray-700 h-20 rounded-lg"
+                        className={`animate-pulse h-20 rounded-lg ${isDark ? "bg-gray-700" : "bg-gray-200"}`}
                       ></div>
                     ))}
                   </div>
@@ -402,7 +418,7 @@ export function RoadmapSidebar({ node, roadmapId, isOpen, onClose }: RoadmapSide
                     ))}
                   </div>
                 ) : (
-                  <p className="text-gray-500 text-sm">
+                  <p className={`text-sm ${isDark ? "text-gray-500" : "text-gray-500"}`}>
                     No premium resources available yet
                   </p>
                 )}
@@ -412,7 +428,7 @@ export function RoadmapSidebar({ node, roadmapId, isOpen, onClose }: RoadmapSide
           {activeTab === "ai-tutor" && (
             <div className="space-y-6">
               <div>
-                <h3 className="mb-3 font-semibold text-white">🎥 Find YouTube Tutorials</h3>
+                <h3 className={`mb-3 font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>🎥 Find YouTube Tutorials</h3>
                 <button
                   onClick={handleSearchYouTube}
                   disabled={isLoadingVideos}
@@ -423,14 +439,16 @@ export function RoadmapSidebar({ node, roadmapId, isOpen, onClose }: RoadmapSide
 
                 {youtubeVideos.length > 0 && (
                   <div className="mt-4 space-y-3">
-                    <p className="text-xs text-gray-400">Showing top 3 videos</p>
+                    <p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>Showing top 3 videos</p>
                     {youtubeVideos.map((video: YoutubeVideo, idx: number) => (
                       <a
                         key={idx}
                         href={video.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="block rounded-lg bg-gray-800 p-3 transition-colors hover:bg-gray-700"
+                        className={`block rounded-lg p-3 transition-colors ${
+                          isDark ? "bg-gray-800 hover:bg-gray-700" : "bg-gray-100 hover:bg-gray-200"
+                        }`}
                       >
                         <div className="flex gap-3">
                           {video.thumbnail && (
@@ -441,10 +459,10 @@ export function RoadmapSidebar({ node, roadmapId, isOpen, onClose }: RoadmapSide
                             />
                           )}
                           <div className="flex-1">
-                            <h4 className="line-clamp-2 text-sm font-medium text-white">
+                            <h4 className={`line-clamp-2 text-sm font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
                               {video.title}
                             </h4>
-                            <p className="mt-1 text-xs text-gray-400">{video.channelName}</p>
+                            <p className={`mt-1 text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>{video.channelName}</p>
                           </div>
                         </div>
                       </a>
@@ -456,7 +474,7 @@ export function RoadmapSidebar({ node, roadmapId, isOpen, onClose }: RoadmapSide
 
 
               <div>
-                <h3 className="mb-3 font-semibold text-white">✍️ Practice Quiz</h3>
+                <h3 className={`mb-3 font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>✍️ Practice Quiz</h3>
                 <button
                   onClick={handleGenerateQuiz}
                   className="w-full rounded-lg bg-blue-600 px-4 py-2 text-white transition-colors hover:bg-blue-700"

@@ -2,8 +2,9 @@ import { useState } from "react";
 import { Link, useLocation, Outlet } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
-import { LayoutDashboard, Target, BookOpen, Settings, Play, BarChart3, CalendarDays, Compass, Bookmark, StickyNote, Menu } from "lucide-react";
+import { LayoutDashboard, Target, BookOpen, Settings, Play, BarChart3, CalendarDays, Compass, Bookmark, StickyNote, Menu, Moon, Sun } from "lucide-react";
 import { MeditationIcon } from "@/components/icons/MeditationIcon";
+import { useTheme } from "@/contexts/ThemeContext";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -19,6 +20,7 @@ const navItems = [
 export function Layout() {
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const { theme, toggleTheme } = useTheme();
 
   return (
     <div className="min-h-screen bg-background">
@@ -87,6 +89,19 @@ export function Layout() {
                 </Link>
               </Button>
             </div>
+            {/* Theme Toggle Button */}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={toggleTheme}
+              title={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
+            >
+              {theme === 'light' ? (
+                <Moon className="h-4 w-4" />
+              ) : (
+                <Sun className="h-4 w-4" />
+              )}
+            </Button>
             <Button
               variant={location.pathname === "/settings" ? "secondary" : "ghost"}
               size="icon"
@@ -148,6 +163,27 @@ export function Layout() {
                       </Button>
                     );
                   })}
+                  <div className="border-t my-4" />
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-start gap-3"
+                    onClick={() => {
+                      toggleTheme();
+                      setMobileMenuOpen(false);
+                    }}
+                  >
+                    {theme === 'light' ? (
+                      <>
+                        <Moon className="h-5 w-5" />
+                        Dark Mode
+                      </>
+                    ) : (
+                      <>
+                        <Sun className="h-5 w-5" />
+                        Light Mode
+                      </>
+                    )}
+                  </Button>
                   <div className="border-t my-4" />
                   <Button
                     variant={location.pathname === "/settings" ? "secondary" : "ghost"}

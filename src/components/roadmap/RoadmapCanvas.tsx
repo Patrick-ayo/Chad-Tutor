@@ -1,8 +1,9 @@
 /**
- * RoadmapCanvas Component - roadmap.sh exact styling
+ * RoadmapCanvas Component - roadmap.sh exact styling with theme support
  * 
  * Pure SVG-based canvas rendering with:
- * - Yellow nodes (#fef08a) with black borders
+ * - Yellow nodes (#fef08a) with black borders (light mode)
+ * - Brighter yellow nodes for dark mode
  * - Dark gray checkpoints (#1f2937)
  * - Blue connection lines (#3b82f6)
  * - Rounded corners and drop shadows
@@ -10,6 +11,7 @@
  */
 
 import { useState } from 'react';
+import { useTheme } from '@/contexts/ThemeContext';
 import RoadmapSidebar from '@/components/roadmap/RoadmapSidebar';
 import './RoadmapCanvas.css';
 
@@ -83,23 +85,63 @@ interface SelectedNodeData {
 }
 
 /**
- * Get exact roadmap.sh styling for nodes based on type
+ * Get exact roadmap.sh styling for nodes based on type and theme
  */
-const getNodeStyle = (node: RoadmapNode) => {
+const getThemeColors = (theme: 'light' | 'dark') => {
+  return {
+    light: {
+      background: '#ffffff',
+      nodeFill: '#fef08a',  // Yellow
+      checkpointFill: '#1f2937',  // Dark gray
+      nodeBorder: '#000000',
+      nodeText: '#000000',
+      checkpointText: '#ffffff',
+      connectionLine: '#3b82f6',  // Blue
+      spine: '#3b82f6',
+      infoBlocks: {
+        tip: { bg: '#dbeafe', text: '#1e40af', border: '#3b82f6' },
+        warning: { bg: '#fef3c7', text: '#92400e', border: '#f59e0b' },
+        info: { bg: '#e0f2fe', text: '#075985', border: '#0ea5e9' },
+        recommendation: { bg: '#f3e8ff', text: '#6b21a8', border: '#a855f7' }
+      }
+    },
+    dark: {
+      background: '#0f172a',  // Dark blue-gray
+      nodeFill: '#fbbf24',  // Brighter yellow for dark mode
+      checkpointFill: '#1e293b',  // Slightly lighter dark gray
+      nodeBorder: '#94a3b8',  // Lighter border for visibility
+      nodeText: '#0f172a',  // Dark text on yellow
+      checkpointText: '#f1f5f9',  // Light text on dark
+      connectionLine: '#60a5fa',  // Lighter blue for dark mode
+      spine: '#60a5fa',
+      infoBlocks: {
+        tip: { bg: '#1e3a8a', text: '#bfdbfe', border: '#3b82f6' },
+        warning: { bg: '#78350f', text: '#fef3c7', border: '#f59e0b' },
+        info: { bg: '#0c4a6e', text: '#bae6fd', border: '#0ea5e9' },
+        recommendation: { bg: '#581c87', text: '#f3e8ff', border: '#a855f7' }
+      }
+    }
+  }[theme];
+};
+
+const getNodeStyle = (node: RoadmapNode, theme: 'light' | 'dark') => {
+  const colors = getThemeColors(theme);
   const isCheckpoint = node.type === 'checkpoint' || /checkpoint|project|milestone|capstone/i.test(node.title);
   
   return {
-    fill: isCheckpoint ? '#1f2937' : '#fef08a',  // Dark gray or yellow
-    stroke: '#000000',  // Black border
+    fill: isCheckpoint ? colors.checkpointFill : colors.nodeFill,
+    stroke: colors.nodeBorder,
     strokeWidth: 2.5,  // Thick border like roadmap.sh
-    textColor: isCheckpoint ? '#ffffff' : '#000000',
+    textColor: isCheckpoint ? colors.checkpointText : colors.nodeText,
     rx: 6  // Rounded corners
   };
 };
 
 const RoadmapCanvas = ({ roadmap, roadmapId, onNodeClick }: RoadmapCanvasProps) => {
+  const { theme } = useTheme();
   const infoBlocks = roadmap?.infoBlocks || [];
   const nodes = roadmap?.nodes || [];
+  const colors = getThemeColors(theme);
 
   const estimateTextLines = (text: string, width: number) => {
     const safeText = (text || '').trim();
@@ -197,7 +239,7 @@ const RoadmapCanvas = ({ roadmap, roadmapId, onNodeClick }: RoadmapCanvasProps) 
 
     const edgeType = typeof edgeRef === 'string' ? 'smoothstep' : (edgeRef.type ?? 'smoothstep');
     const edgeDash = typeof edgeRef === 'string' ? '6,4' : (edgeRef.style?.strokeDasharray ?? '6,4');
-    const edgeStroke = typeof edgeRef === 'string' ? '#5B9BD5' : (edgeRef.style?.stroke ?? '#5B9BD5');
+    const edgeStroke = typeof edgeRef === 'string' ? colors.connectionLine : (edgeRef.style?.stroke ?? colors.connectionLine);
     const borderRadius = typeof edgeRef === 'string' ? 20 : (edgeRef.style?.borderRadius ?? 20);
     const isNearSpine = (x: number) => Math.abs(x - SPINE_X) <= 42;
     const nodeOnSpine = isNearSpine(nodeCenterX);
@@ -318,8 +360,28 @@ const RoadmapCanvas = ({ roadmap, roadmapId, onNodeClick }: RoadmapCanvasProps) 
     );
   };
 
+  /**
+   * Determine if a node is a parent/main node for visual hierarchy
+   * Parent nodes display in bold, child nodes in normal weight
+   */
+  const isParentNode = (node: RoadmapNode): boolean => {
+    // Parent nodes are:
+    // 1. Section/topic nodes (type === 'topic' or 'section')
+    // 2. Nodes with children (has items in connectedTo array)
+    // 3. Checkpoint nodes (type === 'checkpoint')
+    // 4. Nodes with "main" or "section" in their ID
+    return (
+      node.type === 'topic' ||
+      node.type === 'section' ||
+      node.type === 'checkpoint' ||
+      (node.connectedTo && node.connectedTo.length > 0) ||
+      node.id.includes('main') ||
+      node.id.includes('section')
+    );
+  };
+
   return (
-    <div className="w-full bg-[#d5d7dc] roadmap-canvas-container">
+    <div className="w-full" style={{ backgroundColor: colors.background }}>
       <svg
         width="100%"
         height="700"
@@ -345,7 +407,7 @@ const RoadmapCanvas = ({ roadmap, roadmapId, onNodeClick }: RoadmapCanvasProps) 
           >
             <path
               d="M 0 0 L 12 6 L 0 12 z"
-              fill="#3b82f6"
+              fill={colors.connectionLine}
             />
           </marker>
           
@@ -360,7 +422,7 @@ const RoadmapCanvas = ({ roadmap, roadmapId, onNodeClick }: RoadmapCanvasProps) 
           >
             <path
               d="M 0 0 L 12 6 L 0 12 z"
-              fill="#94a3b8"
+              fill={colors.connectionLine}
             />
           </marker>
           
@@ -373,9 +435,9 @@ const RoadmapCanvas = ({ roadmap, roadmapId, onNodeClick }: RoadmapCanvasProps) 
             y2="100%"
             gradientUnits="userSpaceOnUse"
           >
-            <stop offset="0%" style={{ stopColor: '#3b82f6', stopOpacity: 0.3 }} />
-            <stop offset="50%" style={{ stopColor: '#3b82f6', stopOpacity: 0.6 }} />
-            <stop offset="100%" style={{ stopColor: '#3b82f6', stopOpacity: 0.3 }} />
+            <stop offset="0%" style={{ stopColor: colors.spine, stopOpacity: 0.3 }} />
+            <stop offset="50%" style={{ stopColor: colors.spine, stopOpacity: 0.6 }} />
+            <stop offset="100%" style={{ stopColor: colors.spine, stopOpacity: 0.3 }} />
           </linearGradient>
         </defs>
 
@@ -401,7 +463,7 @@ const RoadmapCanvas = ({ roadmap, roadmapId, onNodeClick }: RoadmapCanvasProps) 
 
         {/* Nodes - roadmap.sh exact style */}
         {nodes.map(node => {
-          const style = getNodeStyle(node);
+          const style = getNodeStyle(node, theme);
           const nodeDims = getNodeDimensions(node);
           const nodeWidth = nodeDims.width;
           const nodeHeight = nodeDims.height;
@@ -434,35 +496,40 @@ const RoadmapCanvas = ({ roadmap, roadmapId, onNodeClick }: RoadmapCanvasProps) 
                 height={nodeHeight}
                 rx={style.rx}
                 fill="none"
-                stroke="#3b82f6"
+                stroke={colors.connectionLine}
                 strokeWidth="0"
                 className="hover-border transition-all duration-200"
                 style={{ pointerEvents: 'none' }}
               />
               
-              {/* Node text - roadmap.sh typography */}
+              {/* Node text - roadmap.sh typography with hierarchy styling */}
               <foreignObject
                 x="0"
                 y="0"
                 width={nodeWidth}
                 height={nodeHeight}
               >
-                <div
-                  className="flex items-center justify-center h-full px-3 text-center"
-                  style={{
-                    fontSize: '13px',
-                    fontWeight: 500,
-                    color: style.textColor,
-                    lineHeight: '1.25',
-                    letterSpacing: '-0.015em',
-                    wordSpacing: '0.05em',
-                    overflow: 'hidden',
-                    wordBreak: 'break-word',
-                    hyphens: 'auto',
-                  }}
-                >
-                  {node.title || node.name}
-                </div>
+                {(() => {
+                  const isParent = isParentNode(node);
+                  return (
+                    <div
+                      className="flex items-center justify-center h-full px-3 text-center"
+                      style={{
+                        fontSize: isParent ? '14px' : '13px',  // Parent slightly larger
+                        fontWeight: isParent ? 600 : 400,  // Parent bold (600), child normal (400)
+                        color: style.textColor,
+                        lineHeight: '1.25',
+                        letterSpacing: '-0.015em',
+                        wordSpacing: '0.05em',
+                        overflow: 'hidden',
+                        wordBreak: 'break-word',
+                        hyphens: 'auto',
+                      }}
+                    >
+                      {node.title || node.name}
+                    </div>
+                  );
+                })()}
               </foreignObject>
               
               {/* Completion checkmark - roadmap.sh style */}
@@ -491,12 +558,12 @@ const RoadmapCanvas = ({ roadmap, roadmapId, onNodeClick }: RoadmapCanvasProps) 
                   <circle
                     r="10"
                     fill="none"
-                    stroke="#3b82f6"
+                    stroke={colors.connectionLine}
                     strokeWidth="2"
                   />
                   <circle
                     r="4"
-                    fill="#3b82f6"
+                    fill={colors.connectionLine}
                   />
                 </g>
               )}
@@ -506,14 +573,7 @@ const RoadmapCanvas = ({ roadmap, roadmapId, onNodeClick }: RoadmapCanvasProps) 
 
         {/* Info blocks - roadmap.sh style */}
         {infoBlocks.map((block, index) => {
-          const colors = {
-            tip: { bg: '#dbeafe', text: '#1e40af', border: '#3b82f6' },
-            warning: { bg: '#fef3c7', text: '#92400e', border: '#f59e0b' },
-            info: { bg: '#e0f2fe', text: '#075985', border: '#0ea5e9' },
-            recommendation: { bg: '#f3e8ff', text: '#6b21a8', border: '#a855f7' }
-          };
-          
-          const style = colors[block.type] || colors.info;
+          const blockStyle = colors.infoBlocks[block.type] || colors.infoBlocks.info;
           
           return (
             <foreignObject
@@ -526,14 +586,14 @@ const RoadmapCanvas = ({ roadmap, roadmapId, onNodeClick }: RoadmapCanvasProps) 
               <div
                 className="rounded-md p-3 info-block"
                 style={{
-                  backgroundColor: style.bg,
-                  color: style.text,
+                  backgroundColor: blockStyle.bg,
+                  color: blockStyle.text,
                   fontSize: '13px',
                   lineHeight: '1.5',
                   fontWeight: 400,
                   letterSpacing: '-0.01em',
                   fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-                  border: `1.5px solid ${style.border}20`,
+                  border: `1.5px solid ${blockStyle.border}20`,
                 }}
               >
                 {block.text}

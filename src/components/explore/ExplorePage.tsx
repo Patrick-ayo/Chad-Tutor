@@ -10,6 +10,7 @@ import { Card, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Database, BookOpen, Layers } from 'lucide-react';
 import RoadmapCanvas from '@/components/roadmap/RoadmapCanvas';
+import { useTheme } from '@/contexts/ThemeContext';
 import { useNavigate } from 'react-router-dom';
 
 // Types for roadmap data
@@ -467,6 +468,7 @@ interface CanvasClickNode {
 
 export function ExplorePage() {
   const navigate = useNavigate();
+  const { theme } = useTheme();
   const [roadmaps, setRoadmaps] = useState<Roadmap[]>([]);
   const [loadingRoadmaps, setLoadingRoadmaps] = useState(true);
   const [expandedRoadmap, setExpandedRoadmap] = useState<Roadmap | null>(null);
@@ -757,10 +759,11 @@ export function ExplorePage() {
     const roadmapTitle = expandedRoadmap.name;
     const relatedTopicLabel = (activeTopicTitle || roadmapTitle).toLowerCase();
     const progressPercent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+    const isDark = theme === 'dark';
 
     return (
-      <div className="min-h-screen bg-white text-gray-900 overflow-x-hidden">
-        <header className="bg-gray-900 text-white py-4 px-6 sticky top-0 z-40">
+      <div className="min-h-screen bg-white text-gray-900 dark:bg-gray-950 dark:text-gray-100 overflow-x-hidden">
+        <header className="bg-gray-900 text-white py-4 px-6 sticky top-0 z-40 dark:bg-gray-900">
           <div className="max-w-[1400px] mx-auto flex items-center justify-between">
             <button
               onClick={handleExpandedBack}
@@ -777,40 +780,40 @@ export function ExplorePage() {
         <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-4 sm:py-8">
           {loading ? (
             <div className="flex items-center justify-center py-12">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-700" />
-              <span className="ml-3 text-gray-600">Loading roadmap...</span>
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-700 dark:border-gray-300" />
+              <span className="ml-3 text-gray-600 dark:text-gray-300">Loading roadmap...</span>
             </div>
           ) : graphData ? (
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-6">
               <aside className="lg:col-span-3 space-y-4 lg:space-y-6">
-                <div className="bg-white border-2 border-gray-200 rounded-lg p-5">
+                <div className="bg-white border-2 border-gray-200 rounded-lg p-5 dark:bg-gray-900 dark:border-gray-700">
                   <div className="flex items-start gap-3">
                     <div className="w-1 h-20 bg-blue-500 rounded-full flex-shrink-0" />
-                    <h2 className="text-3xl font-bold text-gray-900 leading-tight">{roadmapTitle}</h2>
+                    <h2 className="text-3xl font-bold text-gray-900 dark:text-gray-100 leading-tight">{roadmapTitle}</h2>
                   </div>
                 </div>
 
-                <div className="bg-gray-50 border border-gray-200 rounded-lg p-5 space-y-4">
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-5 space-y-4 dark:bg-gray-800 dark:border-gray-700">
                   {isLoadingInfo ? (
                     <div className="animate-pulse">
-                      <div className="h-4 bg-gray-200 rounded w-full mb-2" />
-                      <div className="h-4 bg-gray-200 rounded w-5/6 mb-2" />
-                      <div className="h-4 bg-gray-200 rounded w-3/4" />
+                      <div className="h-4 bg-gray-200 rounded w-full mb-2 dark:bg-gray-700" />
+                      <div className="h-4 bg-gray-200 rounded w-5/6 mb-2 dark:bg-gray-700" />
+                      <div className="h-4 bg-gray-200 rounded w-3/4 dark:bg-gray-700" />
                     </div>
                   ) : (
-                    <p className="text-sm text-gray-700 leading-relaxed">
+                    <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
                       {roadmapDescription}
                     </p>
                   )}
 
                   <div>
-                    <p className="text-sm text-gray-600 mb-3">
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
                       If you are already familiar with {relatedTopicLabel}, you should visit the following related tracks:
                     </p>
                     {isLoadingInfo ? (
                       <div className="animate-pulse space-y-2">
-                        <div className="h-7 bg-gray-200 rounded w-28" />
-                        <div className="h-7 bg-gray-200 rounded w-36" />
+                        <div className="h-7 bg-gray-200 dark:bg-gray-700 rounded w-28" />
+                        <div className="h-7 bg-gray-200 dark:bg-gray-700 rounded w-36" />
                       </div>
                     ) : (
                       <div className="flex flex-wrap gap-2">
@@ -818,7 +821,7 @@ export function ExplorePage() {
                           <button
                             key={track}
                             onClick={() => void handleRelatedTrackClick(track)}
-                            className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 rounded text-sm text-gray-800 transition"
+                            className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 rounded text-sm text-gray-800 dark:text-gray-100 transition"
                           >
                             {track}
                           </button>
@@ -827,16 +830,16 @@ export function ExplorePage() {
                     )}
                   </div>
 
-                  <div className="text-sm text-gray-700">
-                    <strong className="text-gray-900">Target audience:</strong> {targetAudience}
+                  <div className="text-sm text-gray-700 dark:text-gray-300">
+                    <strong className="text-gray-900 dark:text-gray-100">Target audience:</strong> {targetAudience}
                   </div>
 
-                  <div className="text-sm text-gray-700">
-                    <strong className="text-gray-900">Estimated time:</strong> {estimatedTime}
+                  <div className="text-sm text-gray-700 dark:text-gray-300">
+                    <strong className="text-gray-900 dark:text-gray-100">Estimated time:</strong> {estimatedTime}
                   </div>
 
-                  <div className="text-sm text-gray-700">
-                    <strong className="text-gray-900">Prerequisites:</strong>{' '}
+                  <div className="text-sm text-gray-700 dark:text-gray-300">
+                    <strong className="text-gray-900 dark:text-gray-100">Prerequisites:</strong>{' '}
                     {Array.isArray(prerequisites)
                       ? prerequisites.length > 0
                         ? prerequisites.join(', ')
@@ -845,15 +848,15 @@ export function ExplorePage() {
                   </div>
                 </div>
 
-                <div className="bg-white border border-gray-200 rounded-lg p-5">
+                <div className="bg-white border border-gray-200 rounded-lg p-5 dark:bg-gray-900 dark:border-gray-700">
                   <div className="space-y-3">
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 bg-yellow-400 border-2 border-black rounded flex-shrink-0" />
-                      <span className="text-sm text-gray-700">Key topics to learn</span>
+                      <span className="text-sm text-gray-700 dark:text-gray-300">Key topics to learn</span>
                     </div>
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 bg-gray-800 border-2 border-black rounded flex-shrink-0" />
-                      <span className="text-sm text-gray-700">Project ideas and suggestions</span>
+                      <div className={`w-8 h-8 border-2 rounded flex-shrink-0 ${isDark ? 'bg-gray-600 border-gray-300' : 'bg-gray-800 border-black'}`} />
+                      <span className="text-sm text-gray-700 dark:text-gray-300">Project ideas and suggestions</span>
                     </div>
                   </div>
                 </div>
@@ -861,14 +864,14 @@ export function ExplorePage() {
 
               <div className="lg:col-span-9 min-w-0 space-y-4 lg:space-y-6 order-first lg:order-none">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 lg:gap-6">
-                  <div className="bg-white border border-gray-200 rounded-lg p-5">
-                    <h3 className="font-bold text-gray-900 mb-3">Your Progress</h3>
+                  <div className="bg-white border border-gray-200 rounded-lg p-5 dark:bg-gray-900 dark:border-gray-700">
+                    <h3 className="font-bold text-gray-900 dark:text-gray-100 mb-3">Your Progress</h3>
                     <div className="space-y-2">
-                      <div className="flex justify-between text-sm text-gray-600">
+                      <div className="flex justify-between text-sm text-gray-600 dark:text-gray-300">
                         <span>{completedCount} / {totalCount} completed</span>
                         <span>{progressPercent}%</span>
                       </div>
-                      <div className="w-full bg-gray-200 rounded-full h-3">
+                      <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3">
                         <div
                           className="bg-green-500 h-3 rounded-full transition-all duration-500"
                           style={{ width: `${progressPercent}%` }}
@@ -878,9 +881,9 @@ export function ExplorePage() {
                   </div>
                 </div>
 
-                <div className="bg-white border border-gray-200 rounded-lg p-4 sm:p-6">
+                <div className="bg-white border border-gray-200 rounded-lg p-4 sm:p-6 dark:bg-gray-900 dark:border-gray-700">
                   {isLoadingInfoBlocks && (
-                    <div className="mb-3 text-xs text-gray-500">Generating AI info blocks...</div>
+                    <div className="mb-3 text-xs text-gray-500 dark:text-gray-400">Generating AI info blocks...</div>
                   )}
                   <RoadmapCanvas
                     roadmap={buildCanvasRoadmap(graphData, infoBlocks) as any}
@@ -889,12 +892,12 @@ export function ExplorePage() {
                   />
                 </div>
 
-                <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-5">
+                <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-5 dark:bg-blue-950/40 dark:border-blue-800">
                   <div className="flex items-center gap-2 mb-3">
                     <span className="text-3xl" role="img" aria-label="AI assistant">🤖</span>
-                    <h3 className="font-bold text-gray-900">AI Study Assistant</h3>
+                    <h3 className="font-bold text-gray-900 dark:text-gray-100">AI Study Assistant</h3>
                   </div>
-                  <p className="text-sm text-gray-700 mb-4 leading-relaxed">
+                  <p className="text-sm text-gray-700 dark:text-gray-300 mb-4 leading-relaxed">
                     Get personalized study plans, quizzes, and resource recommendations powered by AI.
                   </p>
                   <button className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 px-6 rounded-lg transition">
@@ -904,7 +907,7 @@ export function ExplorePage() {
               </div>
             </div>
           ) : (
-            <div className="text-center py-8 text-gray-500">
+            <div className="text-center py-8 text-gray-500 dark:text-gray-400">
               <Database className="h-10 w-10 mx-auto mb-3 opacity-50" />
               <p>No graph data available for this roadmap yet.</p>
             </div>
