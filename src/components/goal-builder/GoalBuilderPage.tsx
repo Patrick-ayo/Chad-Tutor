@@ -37,7 +37,7 @@ const WIZARD_STEPS_OTHER = [
 ];
 
 interface GoalBuilderPageProps {
-  onSaveGoalSchedule?: (roadmap: Roadmap) => void | Promise<void>;
+  onSaveGoalSchedule?: (roadmap: Roadmap, startDate?: string) => void | Promise<void>;
 }
 
 export function GoalBuilderPage({ onSaveGoalSchedule }: GoalBuilderPageProps) {

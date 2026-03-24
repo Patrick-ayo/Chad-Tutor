@@ -20,19 +20,42 @@ import { applyGoalRoadmapToSessionPlanner } from "@/utils/sessionGoalPlanner";
 import type { UserSettings } from "@/types/settings";
 import type { PlannerData } from "@/types/planner";
 import type { Roadmap } from "@/types/goal";
+import type { SessionScheduleSource } from "@/utils/sessionGoalPlanner";
 import LoginPage from "@/components/login/LoginPage";
+
+interface SessionScheduleRecord {
+  source: SessionScheduleSource;
+  roadmap: Roadmap;
+  startDate?: string;
+}
 
 function App() {
   const [settings, setSettings] = useState<UserSettings>(mockSettings);
   const [plannerData, setPlannerData] = useState<PlannerData>(mockPlannerData);
+  const [sessionSchedules, setSessionSchedules] = useState<SessionScheduleRecord[]>([]);
+
+  const applySessionSchedules = (basePlanner: PlannerData, schedules: SessionScheduleRecord[]) => {
+    return schedules.reduce((acc, item) => {
+      return applyGoalRoadmapToSessionPlanner(
+        acc,
+        item.roadmap,
+        {
+          activeDays: settings.availability.activeDays,
+          minutesPerDay: settings.availability.minutesPerDay,
+        },
+        item.startDate,
+        item.source,
+      );
+    }, basePlanner);
+  };
 
   const refreshPlanner = async () => {
     try {
       const planner = await fetchPlannerSnapshot();
-      setPlannerData(planner);
+      setPlannerData(applySessionSchedules(planner, sessionSchedules));
     } catch (error) {
       console.error("Planner API fallback to mock data:", error);
-      setPlannerData(mockPlannerData);
+      setPlannerData(applySessionSchedules(mockPlannerData, sessionSchedules));
     }
   };
 
@@ -46,13 +69,32 @@ function App() {
     // In real app, this would persist to backend
   };
 
-  const handleGoalSessionSave = (roadmap: Roadmap) => {
+  const upsertSessionSchedule = (
+    source: SessionScheduleSource,
+    roadmap: Roadmap,
+    startDate?: string,
+  ) => {
+    setSessionSchedules((prev) => {
+      const filtered = prev.filter((record) => {
+        return !(record.source === source && record.roadmap.id === roadmap.id);
+      });
+      return [...filtered, { source, roadmap, startDate }];
+    });
+
     setPlannerData((current) =>
       applyGoalRoadmapToSessionPlanner(current, roadmap, {
         activeDays: settings.availability.activeDays,
         minutesPerDay: settings.availability.minutesPerDay,
-      }),
+      }, startDate, source),
     );
+  };
+
+  const handleGoalSessionSave = (roadmap: Roadmap, startDate?: string) => {
+    upsertSessionSchedule("goal-builder", roadmap, startDate);
+  };
+
+  const handleMrChadSessionSave = (roadmap: Roadmap, startDate?: string) => {
+    upsertSessionSchedule("mr-chad", roadmap, startDate);
   };
 
   return (
@@ -77,7 +119,7 @@ function App() {
             <Route path="/settings" element={<SettingsPage initialSettings={settings} onSave={handleSettingsSave} />} />
             <Route path="/explore" element={<ExplorePage />} />
             <Route path="/projects/*" element={<Navigate to="/explore" replace />} />
-            <Route path="/mr-chad" element={<MrChadPage />} />
+            <Route path="/mr-chad" element={<MrChadPage onApplyRoadmapSchedule={handleMrChadSessionSave} />} />
             <Route path="/bookmarks" element={<BookmarksPage />} />
             <Route path="/my-notes" element={<MyNotesPage />} />
           </Route>

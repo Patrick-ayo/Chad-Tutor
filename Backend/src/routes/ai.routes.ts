@@ -10,7 +10,7 @@ const router = express.Router();
 router.post('/chat-flow', (req: Request, res: Response) => {
   try {
     const { state, input, selectedOptions, context } = req.body as {
-      state: 'context_collection' | 'confirmation' | 'execution_choice' | 'active_plan';
+      state: 'context_collection' | 'confirmation' | 'execution_choice' | 'timeline_collection' | 'active_plan';
       input?: string;
       selectedOptions?: string[];
       context?: unknown;

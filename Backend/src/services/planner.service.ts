@@ -233,6 +233,8 @@ export async function getPlannerSnapshot(userId: string) {
         actualMinutes: task.completedDurationMinutes ?? undefined,
         keyPoints: toStringArray(task.keyPoints),
         learningOutcomes: toStringArray(task.learningOutcomes),
+        videoId: task.playlistItem?.externalId ?? undefined,
+        videoUrl: task.playlistItem?.externalUrl ?? undefined,
         status: toTaskStatusForUi(task.status),
         priority: toPriorityForUi(task.priority),
         dependencies: [],

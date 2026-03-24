@@ -35,6 +35,8 @@ export interface ScheduledTask {
   title: string;
   type: "learn" | "practice" | "revision";
   scheduledDate: string;
+  videoId?: string;
+  videoUrl?: string;
   estimatedMinutes: number;
   actualMinutes?: number;
   keyPoints?: string[];

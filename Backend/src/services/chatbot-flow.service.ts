@@ -2,6 +2,7 @@ export type ChatFlowState =
   | 'context_collection'
   | 'confirmation'
   | 'execution_choice'
+  | 'timeline_collection'
   | 'active_plan';
 
 export interface ChatProfileContext {
@@ -17,6 +18,8 @@ export interface ChatFlowContext {
   executionChoices: string[];
   awaitingTier: boolean;
   tier?: 'free' | 'paid';
+  deadlineTarget?: string;
+  deadlineDays?: number;
   skipValidationWarningShown?: boolean;
 }
 
@@ -149,13 +152,49 @@ function buildPlanBrief(context: ChatFlowContext): string {
   const tier = context.tier === 'paid' ? 'Paid Tier' : 'Free Tier';
   const choices = context.executionChoices.length > 0 ? context.executionChoices.join(', ') : 'Generate Plan';
   const focus = context.profile.jobCourses[0] || context.profile.skills[0] || context.profile.languages[0] || 'Core learning goal';
+  const timeline = context.deadlineTarget || 'No strict deadline provided';
 
   const resourceLine =
     context.tier === 'paid'
       ? 'Resources: Premium course track + mentor-grade assignments + certification prep'
       : 'Resources: Free docs + free videos + open practice sets';
 
-  return `Execution mode: ${choices}\nTier: ${tier}\nFocus: ${focus}\n\nHow to do it:\n1. Daily 60-90 min focused block\n2. End each day with 15 min recap\n3. Weekly checkpoint on Day 7\n\nSuggested schedule:\n• Day 1-2: Foundations\n• Day 3-4: Guided practice\n• Day 5-6: Build + revise\n• Day 7: Review + skill validation\n\n${resourceLine}`;
+  return `Execution mode: ${choices}\nTier: ${tier}\nFocus: ${focus}\nTimeline: ${timeline}\n\nHow to do it:\n1. Daily 60-90 min focused block\n2. End each day with 15 min recap\n3. Weekly checkpoint on Day 7\n\nSuggested schedule:\n• Day 1-2: Foundations\n• Day 3-4: Guided practice\n• Day 5-6: Build + revise\n• Day 7: Review + skill validation\n\n${resourceLine}`;
+}
+
+function parseTimelineInput(input: string): { deadlineTarget: string; deadlineDays?: number } | null {
+  const lower = input.toLowerCase();
+
+  const exactDate = input.match(/\b(\d{4}-\d{2}-\d{2})\b/);
+  if (exactDate?.[1]) {
+    return {
+      deadlineTarget: exactDate[1],
+    };
+  }
+
+  const weekMatch = lower.match(/(\d+)\s*(week|weeks)/);
+  if (weekMatch?.[1]) {
+    const weeks = Number(weekMatch[1]);
+    if (!Number.isNaN(weeks) && weeks > 0) {
+      return {
+        deadlineTarget: `${weeks} week${weeks > 1 ? 's' : ''}`,
+        deadlineDays: weeks * 7,
+      };
+    }
+  }
+
+  const monthMatch = lower.match(/(\d+)\s*(month|months)/);
+  if (monthMatch?.[1]) {
+    const months = Number(monthMatch[1]);
+    if (!Number.isNaN(months) && months > 0) {
+      return {
+        deadlineTarget: `${months} month${months > 1 ? 's' : ''}`,
+        deadlineDays: months * 30,
+      };
+    }
+  }
+
+  return null;
 }
 
 export function getChatFlowResponse(payload: ChatFlowRequest): ChatFlowResponse {
@@ -291,12 +330,43 @@ export function getChatFlowResponse(payload: ChatFlowRequest): ChatFlowResponse 
     }
 
     return {
-      state: 'active_plan',
-      message: 'Choose your plan tier.',
-      options: ['Free Tier', 'Paid Tier'],
+      state: 'timeline_collection',
+      message: 'Before execution, define your timeline so I can optimize pacing. What is your target deadline?',
+      options: ['2 Weeks', '4 Weeks', '8 Weeks', '12 Weeks', 'Custom Date (YYYY-MM-DD)'],
       context: {
         ...context,
         executionChoices: selectedOptions,
+        awaitingTier: false,
+      },
+    };
+  }
+
+  if (currentState === 'timeline_collection') {
+    const option = selectedOptions[0];
+    const timelineFromOption = option
+      ? parseTimelineInput(option === 'Custom Date (YYYY-MM-DD)' ? '' : option)
+      : null;
+    const timelineFromInput = input ? parseTimelineInput(input) : null;
+    const timeline = timelineFromInput || timelineFromOption;
+
+    if (!timeline) {
+      return {
+        state: 'timeline_collection',
+        message:
+          'Please provide a valid timeline (e.g., 4 weeks, 2 months, or YYYY-MM-DD).',
+        options: ['2 Weeks', '4 Weeks', '8 Weeks', '12 Weeks', 'Custom Date (YYYY-MM-DD)'],
+        context,
+      };
+    }
+
+    return {
+      state: 'active_plan',
+      message: `Timeline captured: ${timeline.deadlineTarget}. Choose your plan tier.`,
+      options: ['Free Tier', 'Paid Tier'],
+      context: {
+        ...context,
+        deadlineTarget: timeline.deadlineTarget,
+        deadlineDays: timeline.deadlineDays,
         awaitingTier: true,
       },
     };

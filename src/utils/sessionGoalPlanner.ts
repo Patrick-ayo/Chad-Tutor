@@ -17,6 +17,8 @@ interface AvailabilityConfig {
   minutesPerDay: DailyMinutes;
 }
 
+export type SessionScheduleSource = "goal-builder" | "mr-chad";
+
 interface GoalTaskInput {
   id: string;
   title: string;
@@ -149,10 +151,13 @@ export function applyGoalRoadmapToSessionPlanner(
   plannerData: PlannerData,
   roadmap: Roadmap,
   availability: AvailabilityConfig,
+  startDate?: string,
+  source: SessionScheduleSource = "goal-builder",
 ): PlannerData {
-  const goalId = roadmap.goalId || `goal-${Date.now()}`;
+  const roadmapKey = roadmap.id || roadmap.goalId || `goal-${Date.now()}`;
+  const goalId = `${source}:${roadmapKey}`;
   const tasks = flattenRoadmapTasks(roadmap);
-  const scheduled = scheduleTasksLikeBackend(tasks, goalId, availability);
+  const scheduled = scheduleTasksLikeBackend(tasks, goalId, availability, startDate);
 
   const dayMap = new Map<string, ScheduleDay>();
 
