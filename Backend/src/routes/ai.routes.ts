@@ -72,6 +72,62 @@ function buildFallbackResources(nodeTitle: string, nodeDescription?: string) {
   };
 }
 
+function buildFallbackQuiz(nodeTitle: string, questionCount: number): QuizResponse {
+  const safeCount = Math.max(1, Math.min(10, Number(questionCount) || 3));
+  const base = [
+    {
+      question: `What is the primary goal of learning ${nodeTitle}?`,
+      options: [
+        `To apply ${nodeTitle} concepts in practical scenarios`,
+        'To memorize terminology without context',
+        'To avoid using tools and frameworks',
+        'To skip fundamentals and jump to advanced topics',
+      ],
+      correctAnswer: 0,
+      explanation: `The main goal is to build practical understanding so you can apply ${nodeTitle} in real work.`,
+      difficulty: 'beginner' as const,
+    },
+    {
+      question: `Which study approach is most effective for mastering ${nodeTitle}?`,
+      options: [
+        'Only watching videos without practice',
+        'Hands-on practice with incremental projects',
+        'Reading one source once and stopping',
+        'Skipping revision and assessments',
+      ],
+      correctAnswer: 1,
+      explanation: 'Hands-on, iterative practice creates retention and real problem-solving ability.',
+      difficulty: 'intermediate' as const,
+    },
+    {
+      question: `How should you validate progress while learning ${nodeTitle}?`,
+      options: [
+        'By avoiding feedback and tests',
+        'By building features without checking outcomes',
+        'By using quizzes, checkpoints, and real outputs',
+        'By comparing only with others',
+      ],
+      correctAnswer: 2,
+      explanation: 'Frequent validation with concrete outputs and checks confirms actual understanding.',
+      difficulty: 'advanced' as const,
+    },
+  ];
+
+  const questions = Array.from({ length: safeCount }, (_, index) => {
+    const template = base[index % base.length];
+    return {
+      id: `q${index + 1}`,
+      question: template.question,
+      options: template.options,
+      correctAnswer: template.correctAnswer,
+      explanation: template.explanation,
+      difficulty: template.difficulty,
+    };
+  });
+
+  return { questions };
+}
+
 async function runModelPrompt(prompt: string): Promise<{ error: unknown; output: string }> {
   // Prefer Gemini if configured, otherwise fall back to Bytez SDK
   try {
@@ -79,7 +135,13 @@ async function runModelPrompt(prompt: string): Promise<{ error: unknown; output:
       const res = await runGeminiPrompt(prompt);
       if (!res.error) return { error: null, output: res.output };
       // fallback to Bytez if Gemini returned an error
-      console.warn('[AI] Gemini returned error, falling back to Bytez:', res.error);
+      const geminiErrorMessage =
+        res.error instanceof Error
+          ? res.error.message
+          : typeof res.error === 'string'
+            ? res.error
+            : JSON.stringify(res.error);
+      console.warn(`[AI] Gemini returned error, falling back to Bytez: ${geminiErrorMessage}`);
     }
 
     const model = sdk.model(MODEL_NAME);
@@ -217,6 +279,7 @@ router.post('/generate-quiz', async (req: Request, res: Response) => {
       nodeDescription?: string;
       questionCount?: number;
     };
+    const safeQuestionCount = Math.max(1, Math.min(10, Number(questionCount) || 3));
 
     if (!nodeTitle) {
       return res.status(400).json({
@@ -225,7 +288,7 @@ router.post('/generate-quiz', async (req: Request, res: Response) => {
       });
     }
 
-    const prompt = `Generate ${questionCount} multiple-choice quiz questions about "${nodeTitle}".
+    const prompt = `Generate ${safeQuestionCount} multiple-choice quiz questions about "${nodeTitle}".
 
 Topic Description: ${nodeDescription || 'No description provided'}
 
@@ -256,17 +319,39 @@ Requirements:
 
     if (error) {
       console.error('Claude API error:', error);
-      return res.status(500).json({
-        success: false,
-        message: 'Failed to generate quiz',
-        error,
+      const fallbackQuiz = buildFallbackQuiz(nodeTitle, safeQuestionCount);
+      return res.json({
+        success: true,
+        ...fallbackQuiz,
+        fallback: true,
       });
     }
 
     let text = output.trim();
     text = cleanClaudeJsonResponse(text);
 
-    const quizData = JSON.parse(text) as QuizResponse;
+    let quizData: QuizResponse;
+    try {
+      quizData = JSON.parse(text) as QuizResponse;
+    } catch {
+      quizData = buildFallbackQuiz(nodeTitle, safeQuestionCount);
+      return res.json({
+        success: true,
+        ...quizData,
+        fallback: true,
+      });
+    }
+
+    if (!Array.isArray(quizData.questions) || quizData.questions.length === 0) {
+      const fallbackQuiz = buildFallbackQuiz(nodeTitle, safeQuestionCount);
+      return res.json({
+        success: true,
+        ...fallbackQuiz,
+        fallback: true,
+      });
+    }
+
+    quizData.questions = quizData.questions.slice(0, safeQuestionCount);
 
     return res.json({
       success: true,

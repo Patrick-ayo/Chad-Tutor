@@ -762,12 +762,12 @@ export function ExplorePage() {
     const isDark = theme === 'dark';
 
     return (
-      <div className="min-h-screen bg-white text-gray-900 dark:bg-gray-950 dark:text-gray-100 overflow-x-hidden">
-        <header className="bg-gray-900 text-white py-4 px-6 sticky top-0 z-40 dark:bg-gray-900">
+      <div className="min-h-screen bg-white text-gray-900 dark:bg-black dark:text-gray-100 overflow-x-hidden">
+        <header className="bg-white text-gray-900 py-4 px-6 sticky top-0 z-40 dark:bg-black dark:text-white border-b border-gray-200 dark:border-gray-800">
           <div className="max-w-[1400px] mx-auto flex items-center justify-between">
             <button
               onClick={handleExpandedBack}
-              className="flex items-center gap-2 text-gray-300 hover:text-white transition"
+              className="flex items-center gap-2 text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white transition"
             >
               <span>←</span>
               <span>Back</span>
@@ -786,19 +786,19 @@ export function ExplorePage() {
           ) : graphData ? (
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-6">
               <aside className="lg:col-span-3 space-y-4 lg:space-y-6">
-                <div className="bg-white border-2 border-gray-200 rounded-lg p-5 dark:bg-gray-900 dark:border-gray-700">
+                <div className="bg-white border-2 border-gray-200 rounded-lg p-5 dark:bg-black dark:border-gray-800">
                   <div className="flex items-start gap-3">
                     <div className="w-1 h-20 bg-blue-500 rounded-full flex-shrink-0" />
                     <h2 className="text-3xl font-bold text-gray-900 dark:text-gray-100 leading-tight">{roadmapTitle}</h2>
                   </div>
                 </div>
 
-                <div className="bg-gray-50 border border-gray-200 rounded-lg p-5 space-y-4 dark:bg-gray-800 dark:border-gray-700">
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-5 space-y-4 dark:bg-black dark:border-gray-800">
                   {isLoadingInfo ? (
-                    <div className="animate-pulse">
-                      <div className="h-4 bg-gray-200 rounded w-full mb-2 dark:bg-gray-700" />
-                      <div className="h-4 bg-gray-200 rounded w-5/6 mb-2 dark:bg-gray-700" />
-                      <div className="h-4 bg-gray-200 rounded w-3/4 dark:bg-gray-700" />
+                      <div className="animate-pulse">
+                      <div className="h-4 bg-gray-200 rounded w-full mb-2 dark:bg-gray-800" />
+                      <div className="h-4 bg-gray-200 rounded w-5/6 mb-2 dark:bg-gray-800" />
+                      <div className="h-4 bg-gray-200 rounded w-3/4 dark:bg-gray-800" />
                     </div>
                   ) : (
                     <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
@@ -811,9 +811,9 @@ export function ExplorePage() {
                       If you are already familiar with {relatedTopicLabel}, you should visit the following related tracks:
                     </p>
                     {isLoadingInfo ? (
-                      <div className="animate-pulse space-y-2">
-                        <div className="h-7 bg-gray-200 dark:bg-gray-700 rounded w-28" />
-                        <div className="h-7 bg-gray-200 dark:bg-gray-700 rounded w-36" />
+                        <div className="animate-pulse space-y-2">
+                        <div className="h-7 bg-gray-200 dark:bg-gray-800 rounded w-28" />
+                        <div className="h-7 bg-gray-200 dark:bg-gray-800 rounded w-36" />
                       </div>
                     ) : (
                       <div className="flex flex-wrap gap-2">
@@ -821,7 +821,7 @@ export function ExplorePage() {
                           <button
                             key={track}
                             onClick={() => void handleRelatedTrackClick(track)}
-                            className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 rounded text-sm text-gray-800 dark:text-gray-100 transition"
+                            className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 dark:bg-black dark:hover:bg-black border border-transparent dark:border-gray-700 rounded text-sm text-gray-800 dark:text-gray-100 transition"
                           >
                             {track}
                           </button>
@@ -848,7 +848,7 @@ export function ExplorePage() {
                   </div>
                 </div>
 
-                <div className="bg-white border border-gray-200 rounded-lg p-5 dark:bg-gray-900 dark:border-gray-700">
+                <div className="bg-white border border-gray-200 rounded-lg p-5 dark:bg-black dark:border-gray-800">
                   <div className="space-y-3">
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 bg-yellow-400 border-2 border-black rounded flex-shrink-0" />
@@ -864,14 +864,14 @@ export function ExplorePage() {
 
               <div className="lg:col-span-9 min-w-0 space-y-4 lg:space-y-6 order-first lg:order-none">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 lg:gap-6">
-                  <div className="bg-white border border-gray-200 rounded-lg p-5 dark:bg-gray-900 dark:border-gray-700">
+                  <div className="bg-white border border-gray-200 rounded-lg p-5 dark:bg-black dark:border-gray-800">
                     <h3 className="font-bold text-gray-900 dark:text-gray-100 mb-3">Your Progress</h3>
                     <div className="space-y-2">
                       <div className="flex justify-between text-sm text-gray-600 dark:text-gray-300">
                         <span>{completedCount} / {totalCount} completed</span>
                         <span>{progressPercent}%</span>
                       </div>
-                      <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3">
+                      <div className="w-full bg-gray-200 dark:bg-black border border-transparent dark:border-gray-700 rounded-full h-3">
                         <div
                           className="bg-green-500 h-3 rounded-full transition-all duration-500"
                           style={{ width: `${progressPercent}%` }}
@@ -881,7 +881,7 @@ export function ExplorePage() {
                   </div>
                 </div>
 
-                <div className="bg-white border border-gray-200 rounded-lg p-4 sm:p-6 dark:bg-gray-900 dark:border-gray-700">
+                <div className="bg-white border border-gray-200 rounded-lg p-4 sm:p-6 dark:bg-black dark:border-gray-800">
                   {isLoadingInfoBlocks && (
                     <div className="mb-3 text-xs text-gray-500 dark:text-gray-400">Generating AI info blocks...</div>
                   )}

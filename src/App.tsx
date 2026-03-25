@@ -76,6 +76,7 @@ function App() {
             <Route path="/planner" element={<Navigate to="/schedule" replace />} />
             <Route path="/settings" element={<SettingsPage initialSettings={settings} onSave={handleSettingsSave} />} />
             <Route path="/explore" element={<ExplorePage />} />
+            <Route path="/projects/*" element={<Navigate to="/explore" replace />} />
             <Route path="/mr-chad" element={<MrChadPage />} />
             <Route path="/bookmarks" element={<BookmarksPage />} />
             <Route path="/my-notes" element={<MyNotesPage />} />

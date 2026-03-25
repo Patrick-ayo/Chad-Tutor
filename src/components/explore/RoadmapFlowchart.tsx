@@ -422,7 +422,7 @@ export function RoadmapFlowchart({ roadmap, roadmapId }: RoadmapFlowchartProps) 
   return (
     <div
       ref={containerRef}
-      className="roadmap-flowchart w-full bg-white relative overflow-x-hidden"
+      className="roadmap-flowchart w-full bg-white dark:bg-[#0f172a] relative overflow-x-hidden"
     >
       {/* Root Title */}
       <div className="flex justify-center mb-8">

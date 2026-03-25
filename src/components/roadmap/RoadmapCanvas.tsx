@@ -106,7 +106,7 @@ const getThemeColors = (theme: 'light' | 'dark') => {
       }
     },
     dark: {
-      background: '#0f172a',  // Dark blue-gray
+      background: '#000000',  // Pure black in dark mode
       nodeFill: '#fbbf24',  // Brighter yellow for dark mode
       checkpointFill: '#1e293b',  // Slightly lighter dark gray
       nodeBorder: '#94a3b8',  // Lighter border for visibility
@@ -139,9 +139,10 @@ const getNodeStyle = (node: RoadmapNode, theme: 'light' | 'dark') => {
 
 const RoadmapCanvas = ({ roadmap, roadmapId, onNodeClick }: RoadmapCanvasProps) => {
   const { theme } = useTheme();
+  const effectiveTheme: 'light' | 'dark' = theme === 'dark' ? 'dark' : 'light';
   const infoBlocks = roadmap?.infoBlocks || [];
   const nodes = roadmap?.nodes || [];
-  const colors = getThemeColors(theme);
+  const colors = getThemeColors(effectiveTheme);
 
   const estimateTextLines = (text: string, width: number) => {
     const safeText = (text || '').trim();
@@ -463,7 +464,7 @@ const RoadmapCanvas = ({ roadmap, roadmapId, onNodeClick }: RoadmapCanvasProps) 
 
         {/* Nodes - roadmap.sh exact style */}
         {nodes.map(node => {
-          const style = getNodeStyle(node, theme);
+          const style = getNodeStyle(node, effectiveTheme);
           const nodeDims = getNodeDimensions(node);
           const nodeWidth = nodeDims.width;
           const nodeHeight = nodeDims.height;
