@@ -23,6 +23,7 @@ import {
 } from './routes';
 import { errorHandler, notFoundHandler } from './middleware';
 import { HipolabsProvider } from './external/providers/HipolabsProvider';
+import { enrichVideosBatch } from './services/video-intelligence.service';
 
 const app = express();
 
@@ -740,6 +741,7 @@ app.post('/api/videos/search', async (req, res) => {
             id: { videoId?: string; playlistId?: string };
             snippet: {
               title: string;
+              description?: string;
               channelTitle: string;
               channelId: string;
               publishedAt?: string;
@@ -775,7 +777,7 @@ app.post('/api/videos/search', async (req, res) => {
             items?: Array<{
               id: string;
               contentDetails?: { duration: string };
-              statistics?: { viewCount?: string; likeCount?: string };
+              statistics?: { viewCount?: string; likeCount?: string; commentCount?: string };
             }>;
           };
 
@@ -785,7 +787,8 @@ app.post('/api/videos/search', async (req, res) => {
               detailsMap.set(detailItem.id, {
                 duration: detailItem.contentDetails?.duration,
                 viewCount: parseInt(detailItem.statistics?.viewCount || '0', 10),
-                likeCount: parseInt(detailItem.statistics?.likeCount || '0', 10)
+                likeCount: parseInt(detailItem.statistics?.likeCount || '0', 10),
+                commentCount: parseInt(detailItem.statistics?.commentCount || '0', 10),
               });
             });
           }
@@ -808,7 +811,9 @@ app.post('/api/videos/search', async (req, res) => {
               durationSeconds,
               viewCount: details.viewCount || 0,
               likeCount: details.likeCount || 0,
+              commentCount: details.commentCount || 0,
               publishedAt: videoItem.snippet.publishedAt,
+              description: videoItem.snippet.description,
               topicId: item.parentTopicId,
               topicName: item.parentTopicName,
               subtopicId: item.isSubtopic ? item.id : undefined,
@@ -835,6 +840,7 @@ app.post('/api/videos/search', async (req, res) => {
               items?: Array<{
                 snippet: {
                   title: string;
+                  description?: string;
                   channelTitle: string;
                   channelId: string;
                   publishedAt?: string;
@@ -861,7 +867,7 @@ app.post('/api/videos/search', async (req, res) => {
                 items?: Array<{
                   id: string;
                   contentDetails?: { duration: string };
-                  statistics?: { viewCount?: string; likeCount?: string };
+                  statistics?: { viewCount?: string; likeCount?: string; commentCount?: string };
                 }>;
               };
               
@@ -871,7 +877,8 @@ app.post('/api/videos/search', async (req, res) => {
                   detailsMap.set(d.id, {
                     duration: d.contentDetails?.duration,
                     viewCount: parseInt(d.statistics?.viewCount || '0', 10),
-                    likeCount: parseInt(d.statistics?.likeCount || '0', 10)
+                    likeCount: parseInt(d.statistics?.likeCount || '0', 10),
+                    commentCount: parseInt(d.statistics?.commentCount || '0', 10),
                   });
                 });
               }
@@ -893,7 +900,9 @@ app.post('/api/videos/search', async (req, res) => {
                   durationSeconds,
                   viewCount: details.viewCount || 0,
                   likeCount: details.likeCount || 0,
+                  commentCount: details.commentCount || 0,
                   publishedAt: pi.snippet.publishedAt,
+                  description: pi.snippet.description,
                   topicId: item.parentTopicId,
                   topicName: item.parentTopicName,
                   subtopicId: item.isSubtopic ? item.id : undefined,
@@ -921,15 +930,23 @@ app.post('/api/videos/search', async (req, res) => {
       index === self.findIndex((v) => v.id === video.id)
     );
 
-    // Sort final results based on preference
+    // Enrich with quality signal + summary/test context.
+    // Flow: direct metadata -> Gemini (Google) -> Bytez fallback.
+    const enrichedVideos = await enrichVideosBatch(uniqueVideos, {
+      maxItems: preferences?.includeOneShot ? 8 : 12,
+    });
+
+    // Sort final results based on preference after enrichment.
     if (preferences?.sortBy === 'views') {
-      uniqueVideos.sort((a, b) => b.viewCount - a.viewCount);
+      enrichedVideos.sort((a, b) => (b.viewCount || 0) - (a.viewCount || 0));
     } else if (preferences?.sortBy === 'date') {
-      uniqueVideos.sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
+      enrichedVideos.sort((a, b) => new Date(b.publishedAt || 0).getTime() - new Date(a.publishedAt || 0).getTime());
+    } else if (preferences?.sortBy === 'relevance') {
+      enrichedVideos.sort((a, b) => (b.qualitySignal?.score || 0) - (a.qualitySignal?.score || 0));
     }
 
     // Calculate total study time
-    const totalDurationSeconds = uniqueVideos.reduce((sum, v) => sum + v.durationSeconds, 0);
+    const totalDurationSeconds = enrichedVideos.reduce((sum, v) => sum + v.durationSeconds, 0);
     const totalHours = Math.round(totalDurationSeconds / 3600 * 10) / 10;
 
     // If single-playlist mode, group by playlists
@@ -937,7 +954,7 @@ app.post('/api/videos/search', async (req, res) => {
     if (preferences?.sourceType === 'single-playlist') {
       const playlistMap = new Map<string, any>();
       
-      for (const video of uniqueVideos) {
+      for (const video of enrichedVideos) {
         if (!video.playlistId) continue;
         
         if (!playlistMap.has(video.playlistId)) {
@@ -971,16 +988,23 @@ app.post('/api/videos/search', async (req, res) => {
     }
 
     const result = {
-      videos: uniqueVideos,
+      videos: enrichedVideos,
       playlists, // Only populated in single-playlist mode
       meta: {
         cacheHit: false,
-        totalVideos: uniqueVideos.length,
+        totalVideos: enrichedVideos.length,
         totalPlaylists: playlists?.length || 0,
         totalDurationSeconds,
         totalHours,
         topicsSearched: topics.length,
         subtopicsSearched: searchItems.filter(s => s.isSubtopic).length,
+        enrichedVideos: enrichedVideos.filter((v) => v.contentSummary).length,
+        enrichmentSources: {
+          metadata: enrichedVideos.filter((v) => v.enrichmentSource === 'youtube-metadata').length,
+          gemini: enrichedVideos.filter((v) => v.enrichmentSource === 'gemini').length,
+          bytezFallback: enrichedVideos.filter((v) => v.enrichmentSource === 'bytez-fallback').length,
+          fallback: enrichedVideos.filter((v) => v.enrichmentSource === 'fallback').length,
+        },
         errors: errors.length > 0 ? errors : undefined,
         preferences
       }

@@ -41,6 +41,19 @@ const config = {
     // Optional Gemini model name (e.g., "models/text-bison-001" or "models/gemini-1.0")
     geminiModel: process.env.MR_CHAD_CHATBOT_GEMINI_MODEL || process.env.GEMINI_MODEL || '',
   },
+
+  // Video/content intelligence pipeline for Mr Chad and related discovery endpoints
+  contentIntelligence: {
+    enabled: process.env.MR_CHAD_CONTENT_ENRICHMENT !== 'false',
+    bytezApiKey:
+      process.env.MR_CHAD_CONTENT_BYTEZ_API_KEY ||
+      process.env.MR_CHAD_CHATBOT_BYTEZ_API_KEY ||
+      process.env.BYTEZ_API_KEY ||
+      '',
+    model:
+      process.env.MR_CHAD_CONTENT_MODEL ||
+      'mistralai/Mistral-7B-Instruct-v0.3',
+  },
   
   isDevelopment: process.env.NODE_ENV === 'development',
   isProduction: process.env.NODE_ENV === 'production',

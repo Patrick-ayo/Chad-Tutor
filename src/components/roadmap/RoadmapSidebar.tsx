@@ -33,19 +33,6 @@ type YoutubeVideo = {
   channelName?: string;
 };
 
-type StudySession = {
-  day: number;
-  title: string;
-  duration: number;
-  topics?: string[];
-};
-
-type StudyPlan = {
-  totalDays: number;
-  totalHours: number;
-  sessions?: StudySession[];
-};
-
 type QuizQuestion = {
   id: string;
   question: string;
@@ -101,7 +88,6 @@ function buildLocalFallbackQuizQuestions(topic: string, count: number = 3): Quiz
     ...templates[index % templates.length],
   }));
 }
-
 export function RoadmapSidebar({ node, roadmapId, isOpen, onClose }: RoadmapSidebarProps) {
   console.log("RoadmapSidebar node prop:", node);
   const [isDark, setIsDark] = useState<boolean>(() =>
@@ -112,8 +98,6 @@ export function RoadmapSidebar({ node, roadmapId, isOpen, onClose }: RoadmapSide
   const [resourcesData, setResourcesData] = useState<any>(null);
   const [youtubeVideos, setYoutubeVideos] = useState<any[]>([]);
   const [isLoadingVideos, setIsLoadingVideos] = useState(false);
-  const [studyPlan, setStudyPlan] = useState<StudyPlan | null>(null);
-  const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
   const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[]>([]);
   const [isGeneratingQuiz, setIsGeneratingQuiz] = useState(false);
   const [quizError, setQuizError] = useState<string | null>(null);
@@ -186,34 +170,6 @@ export function RoadmapSidebar({ node, roadmapId, isOpen, onClose }: RoadmapSide
       alert("Failed to search YouTube. Please try again.");
     } finally {
       setIsLoadingVideos(false);
-    }
-  };
-
-  const handleGenerateStudyPlan = async () => {
-    if (!node) return;
-
-    const daysInput = document.getElementById("study-days-input") as HTMLInputElement;
-    const days = parseInt(daysInput?.value || "7", 10);
-
-    setIsGeneratingPlan(true);
-    try {
-      const response = await fetch("/api/ai/generate-study-plan", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          nodeTitle: node.title,
-          nodeDescription: node.description,
-          availableDays: days,
-        }),
-      });
-
-      const data = await response.json();
-      setStudyPlan(data);
-    } catch (fetchError) {
-      console.error("Study plan generation failed:", fetchError);
-      alert("Failed to generate study plan. Please try again.");
-    } finally {
-      setIsGeneratingPlan(false);
     }
   };
 

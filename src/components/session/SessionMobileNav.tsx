@@ -24,6 +24,8 @@ interface SessionMobileNavProps {
   activeMode: SessionMode;
   onModeChange: (mode: SessionMode) => void;
   noteCount: number;
+  disabledModes?: Set<SessionMode>;
+  disabled?: boolean;
 }
 
 const quickAccessModes = [
@@ -46,11 +48,16 @@ const allModes = [
 export function SessionMobileNav({ 
   activeMode, 
   onModeChange, 
-  noteCount 
+  noteCount,
+  disabledModes,
+  disabled = false,
 }: SessionMobileNavProps) {
   const [isOpen, setIsOpen] = useState(false);
 
   const handleModeChange = (mode: SessionMode) => {
+    if (disabled) {
+      return;
+    }
     onModeChange(mode);
     setIsOpen(false);
   };
@@ -62,11 +69,13 @@ export function SessionMobileNav({
         const Icon = item.icon;
         const isActive = activeMode === item.mode;
         const showBadge = item.mode === "my-notes" && noteCount > 0;
+        const isModeDisabled = disabled || Boolean(disabledModes?.has(item.mode));
 
         return (
           <Button
             key={item.mode}
             variant="ghost"
+            disabled={isModeDisabled}
             size="sm"
             onClick={() => handleModeChange(item.mode)}
             className={cn(
@@ -95,6 +104,7 @@ export function SessionMobileNav({
         <SheetTrigger asChild>
           <Button
             variant="ghost"
+            disabled={disabled}
             size="sm"
             className="flex-1 flex-col h-11 gap-0.5 rounded-lg"
           >
@@ -109,11 +119,13 @@ export function SessionMobileNav({
               const Icon = item.icon;
               const isActive = activeMode === item.mode;
               const showBadge = item.mode === "my-notes" && noteCount > 0;
+              const isModeDisabled = disabled || Boolean(disabledModes?.has(item.mode));
 
               return (
                 <Button
                   key={item.mode}
                   variant="ghost"
+                  disabled={isModeDisabled}
                   onClick={() => handleModeChange(item.mode)}
                   className={cn(
                     "flex-col h-20 gap-2 rounded-xl border",

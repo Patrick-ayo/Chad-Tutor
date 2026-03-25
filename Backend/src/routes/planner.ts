@@ -79,6 +79,19 @@ router.post("/generate", requireAuth, async (req: Request, res: Response) => {
 
     const user = await userService.getUserByClerkId(clerkId);
     if (!user) {
+      if (config.isDevelopment) {
+        return res.json({
+          result: {
+            quizAttemptsDeleted: 0,
+            testResultCacheDeleted: 0,
+            tasksDeleted: 0,
+            skillLinksDeleted: 0,
+            playlistsDeleted: 0,
+            mode: "local-only",
+          },
+        });
+      }
+
       return res
         .status(404)
         .json({ error: "Not Found", message: "User not found" });
@@ -95,6 +108,35 @@ router.post("/generate", requireAuth, async (req: Request, res: Response) => {
     return res
       .status(500)
       .json({ error: "Create Failed", message: "Failed to generate schedule" });
+  }
+});
+
+router.post("/clear", requireAuth, async (req: Request, res: Response) => {
+  try {
+    const clerkId = req.auth!.userId;
+    const { confirmationText } = req.body as { confirmationText?: string };
+
+    if ((confirmationText ?? "").trim().toLowerCase() !== "clear all") {
+      return res.status(400).json({
+        error: "Bad Request",
+        message: 'Confirmation text must be "clear all"',
+      });
+    }
+
+    const user = await userService.getUserByClerkId(clerkId);
+    if (!user) {
+      return res
+        .status(404)
+        .json({ error: "Not Found", message: "User not found" });
+    }
+
+    const result = await plannerService.clearPlannerData(user.id);
+    return res.json({ result });
+  } catch (error) {
+    console.error("Planner clear error:", error);
+    return res
+      .status(500)
+      .json({ error: "Delete Failed", message: "Failed to clear planner data" });
   }
 });
 

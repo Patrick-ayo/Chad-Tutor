@@ -35,6 +35,8 @@ interface ChatFlowContext {
   executionChoices: string[];
   awaitingTier: boolean;
   tier?: 'free' | 'paid';
+  deadlineTarget?: string;
+  deadlineDays?: number;
   skipValidationWarningShown?: boolean;
 }
 

@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 const navItems = [
   { path: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { path: "/goals", label: "Goals", icon: Target },
-  { path: "/session/task-1", label: "Session", icon: Play },
+  { path: "/session", label: "Session", icon: Play },
   { path: "/schedule", label: "Schedule", icon: CalendarDays },
   { path: "/progress", label: "Progress", icon: BarChart3 },
   { path: "/explore", label: "Explore", icon: Compass },
@@ -21,6 +21,7 @@ export function Layout() {
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { theme, toggleTheme } = useTheme();
+  const isDarkMode = theme === "dark";
 
   return (
     <div className="min-h-screen bg-background">
@@ -69,6 +70,14 @@ export function Layout() {
           <div className="hidden md:flex items-center gap-4">
             <div className="flex items-center gap-1">
               <Button
+                variant="ghost"
+                size="icon"
+                onClick={toggleTheme}
+                title={isDarkMode ? "Switch to light mode" : "Switch to dark mode"}
+              >
+                {isDarkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+              </Button>
+              <Button
                 variant={location.pathname === "/bookmarks" ? "secondary" : "ghost"}
                 size="icon"
                 asChild
@@ -102,6 +111,14 @@ export function Layout() {
 
           {/* Mobile menu button */}
           <div className="flex md:hidden items-center gap-2">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={toggleTheme}
+              title={isDarkMode ? "Switch to light mode" : "Switch to dark mode"}
+            >
+              {isDarkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            </Button>
             <Button
               variant={location.pathname === "/bookmarks" ? "secondary" : "ghost"}
               size="icon"

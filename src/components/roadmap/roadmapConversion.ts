@@ -60,7 +60,7 @@ export function convertTreeToCanvas(
   const START_Y = 60;
 
   // Helper to calculate position for a node in the tree
-  const calculatePosition = (node: TreeNode, layer: number, indexInLayer: number, totalInLayer: number) => {
+  const calculatePosition = (_node: TreeNode, layer: number, indexInLayer: number, totalInLayer: number) => {
     const x = START_X + layer * LANE_WIDTH;
     const totalHeight = totalInLayer * LAYER_HEIGHT;
     const y = START_Y + (indexInLayer * LAYER_HEIGHT) + (1100 - totalHeight) / 2;
@@ -69,7 +69,7 @@ export function convertTreeToCanvas(
   };
 
   // Create position map for all nodes
-  const visitNode = (node: TreeNode, layer: number, indexInLayer: number, totalInLayer: number, parent?: TreeNode) => {
+  const visitNode = (node: TreeNode, layer: number, indexInLayer: number, totalInLayer: number, _parent?: TreeNode) => {
     const position = calculatePosition(node, layer, indexInLayer, totalInLayer);
     nodePositions.set(node.id, position);
 

@@ -394,6 +394,35 @@ export async function generateScheduleFromPlaylists(
 
   for (const playlist of validPlaylists) {
     for (const item of playlist.items) {
+      const isFirstTask = tasksToCreate.length === 0;
+      const duration = item.estimatedMinutes ?? 25;
+
+      if (isFirstTask) {
+        const sequencePriority: TaskPriority =
+          item.sequence <= 2 ? "HIGH" : "MEDIUM";
+
+        tasksToCreate.push({
+          userId,
+          playlistId: playlist.id,
+          playlistItemId: item.id,
+          title: item.title,
+          description: item.description ?? undefined,
+          scheduledDate: new Date(start),
+          estimatedMinutes: duration,
+          priority: sequencePriority,
+          keyPoints: (item.keyPoints ?? undefined) as
+            | Prisma.InputJsonValue
+            | undefined,
+          learningOutcomes: (item.learningOutcomes ?? undefined) as
+            | Prisma.InputJsonValue
+            | undefined,
+        });
+
+        cursor = new Date(start);
+        consumedToday = duration;
+        continue;
+      }
+
       let weekday = dayName(cursor);
       while (!activeDays.includes(weekday)) {
         cursor = addDays(cursor, 1);
@@ -402,7 +431,6 @@ export async function generateScheduleFromPlaylists(
       }
 
       const budget = getDailyBudget(dailyMinutes, weekday);
-      const duration = item.estimatedMinutes ?? 25;
 
       if (consumedToday + duration > budget) {
         cursor = addDays(cursor, 1);
@@ -493,6 +521,27 @@ export async function resolveMissedTask(
     taskId,
     result,
   };
+}
+
+export async function clearPlannerData(userId: string) {
+  return withTransaction(async (tx) => {
+    const [quizAttemptsDeleted, testResultCacheDeleted, tasksDeleted, skillLinksDeleted, playlistsDeleted] =
+      await Promise.all([
+        tx.quizAttempt.deleteMany({ where: { userId } }),
+        tx.testResultCache.deleteMany({ where: { userId } }),
+        tx.studyTask.deleteMany({ where: { userId } }),
+        tx.skillPlaylistLink.deleteMany({ where: { userId } }),
+        tx.learningPlaylist.deleteMany({ where: { userId } }),
+      ]);
+
+    return {
+      quizAttemptsDeleted: quizAttemptsDeleted.count,
+      testResultCacheDeleted: testResultCacheDeleted.count,
+      tasksDeleted: tasksDeleted.count,
+      skillLinksDeleted: skillLinksDeleted.count,
+      playlistsDeleted: playlistsDeleted.count,
+    };
+  });
 }
 
 async function rebalanceSchedule(userId: string) {

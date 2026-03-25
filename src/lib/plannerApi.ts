@@ -12,6 +12,15 @@ interface PlaylistItemInput {
   learningOutcomes?: string[];
 }
 
+export interface SessionQuizQuestion {
+  id: string;
+  question: string;
+  options: string[];
+  correctAnswer: number;
+  explanation: string;
+  difficulty?: 'beginner' | 'intermediate' | 'advanced';
+}
+
 async function parseJson<T>(response: Response): Promise<T> {
   if (!response.ok) {
     const text = await response.text();
@@ -114,4 +123,43 @@ export async function completeTask(
   });
 
   await parseJson<{ task: unknown }>(response);
+}
+
+export async function clearPlannerData(confirmationText: string): Promise<void> {
+  const response = await fetch('/api/planner/clear', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    credentials: 'include',
+    body: JSON.stringify({ confirmationText }),
+  });
+
+  await parseJson<{ result: unknown }>(response);
+}
+
+export async function generateSessionQuiz(input: {
+  topic: string;
+  questionCount?: number;
+  videoId?: string;
+  videoTitle?: string;
+  videoSummary?: string;
+  keyConcepts?: string[];
+}): Promise<SessionQuizQuestion[]> {
+  const response = await fetch('/api/ai/generate-session-quiz', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    credentials: 'include',
+    body: JSON.stringify({
+      ...input,
+      questionCount: Math.max(1, Math.min(10, input.questionCount ?? 10)),
+    }),
+  });
+
+  const payload = await parseJson<{ questions?: SessionQuizQuestion[] }>(response);
+  const questions = Array.isArray(payload.questions) ? payload.questions : [];
+
+  return questions.slice(0, 10);
 }

@@ -20,7 +20,9 @@ interface SessionSidebarProps {
   onModeChange: (mode: SessionMode) => void;
   completedModes: Set<SessionMode>;
   noteCount: number;
+  disabledModes?: Set<SessionMode>;
   isCollapsed?: boolean;
+  disabled?: boolean;
   onToggleCollapse?: () => void;
 }
 
@@ -60,7 +62,9 @@ export function SessionSidebar({
   onModeChange, 
   completedModes, 
   noteCount,
-  isCollapsed = false
+  disabledModes,
+  isCollapsed = false,
+  disabled = false,
 }: SessionSidebarProps) {
   const [hoveredMode, setHoveredMode] = useState<SessionMode | null>(null);
 
@@ -94,20 +98,21 @@ export function SessionSidebar({
                   const completed = isCompleted(item.mode);
                   const active = isActive(item.mode);
                   const hovered = hoveredMode === item.mode;
+                  const isModeDisabled = item.disabled || disabled || Boolean(disabledModes?.has(item.mode));
 
                   return (
                     <Button
                       key={item.mode}
                       variant="ghost"
-                      disabled={item.disabled}
-                      onClick={() => !item.disabled && onModeChange(item.mode)}
+                      disabled={isModeDisabled}
+                      onClick={() => !isModeDisabled && onModeChange(item.mode)}
                       onMouseEnter={() => setHoveredMode(item.mode)}
                       onMouseLeave={() => setHoveredMode(null)}
                       className={cn(
                         "w-full justify-start h-10 px-3 relative group text-foreground hover:bg-accent",
                         active && "bg-primary/10 text-primary hover:bg-primary/10",
                         completed && !active && "bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300 hover:bg-green-50 dark:hover:bg-green-900/30",
-                        item.disabled && "opacity-50 cursor-not-allowed",
+                        isModeDisabled && "opacity-50 cursor-not-allowed",
                         isCollapsed && "justify-center px-0"
                       )}
                     >

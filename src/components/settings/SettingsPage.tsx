@@ -21,6 +21,7 @@ import type {
 interface SettingsPageProps {
   initialSettings: UserSettings;
   onSave: (settings: UserSettings) => void;
+  onClearAllData: () => Promise<void>;
 }
 
 // Define which settings have impact on what
@@ -50,7 +51,7 @@ function getImpactsForSetting(section: string, field: string): SettingImpact[] {
   return settingImpacts[key] || settingImpacts[wildcardKey] || ["none"];
 }
 
-export function SettingsPage({ initialSettings, onSave }: SettingsPageProps) {
+export function SettingsPage({ initialSettings, onSave, onClearAllData }: SettingsPageProps) {
   const [settings, setSettings] = useState<UserSettings>(initialSettings);
   const [pendingChange, setPendingChange] = useState<{
     section: string;
@@ -201,6 +202,7 @@ export function SettingsPage({ initialSettings, onSave }: SettingsPageProps) {
           onExportData={handleExportData}
           onResetProgress={handleResetProgress}
           onDeleteAccount={handleDeleteAccount}
+          onClearAllData={onClearAllData}
         />
       </div>
 

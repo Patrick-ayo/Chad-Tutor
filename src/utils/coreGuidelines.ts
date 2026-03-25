@@ -102,8 +102,8 @@ ${data.reasoning ? `\n**Why:** ${data.reasoning}` : ''}`;
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function validateConstraintAwareness(response: string, constraints: ConstraintData): boolean {
-  // Ensure constraints type is valid (used for validation logic)
-  const _timeLimit = constraints.dailyAvailableTime; // Type check - could be used to validate against daily limits
+  // Touch constraints so strict checks keep this parameter intentional.
+  void constraints.dailyAvailableTime;
   
   // Response should reference at least one constraint
   const constraintMentioned = 

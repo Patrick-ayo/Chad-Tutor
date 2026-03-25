@@ -7,7 +7,7 @@
  *   npx ts-node prisma/seed/session-planner.seed.ts
  */
 
-import { PrismaClient, TaskPriority, TaskStatus } from '@prisma/client';
+import { Prisma, PrismaClient, TaskPriority, TaskStatus } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
@@ -197,8 +197,11 @@ async function main() {
           estimatedMinutes: item.estimatedMinutes ?? 25,
           priority: itemIndex === 0 ? TaskPriority.HIGH : TaskPriority.MEDIUM,
           status: TaskStatus.SCHEDULED,
-          keyPoints: item.keyPoints,
-          learningOutcomes: item.learningOutcomes,
+          keyPoints: item.keyPoints === null ? undefined : (item.keyPoints as Prisma.InputJsonValue),
+          learningOutcomes:
+            item.learningOutcomes === null
+              ? undefined
+              : (item.learningOutcomes as Prisma.InputJsonValue),
         },
       });
     }
@@ -231,33 +234,40 @@ async function main() {
     },
   });
 
-  await prisma.testResultCache.upsert({
+  const existingGeneralCache = await prisma.testResultCache.findFirst({
     where: {
-      userId_skillId: {
-        userId: user.id,
-        skillId: null,
-      },
-    },
-    update: {
-      latestScore: attempt.score,
-      latestAttemptAt: attempt.completedAt,
-      totalAttempts: 1,
-      averageScore: attempt.score,
-      bestScore: attempt.score,
-      expiresAt: addDays(today, 1),
-      lastCachedAt: new Date(),
-    },
-    create: {
       userId: user.id,
       skillId: null,
-      latestScore: attempt.score,
-      latestAttemptAt: attempt.completedAt,
-      totalAttempts: 1,
-      averageScore: attempt.score,
-      bestScore: attempt.score,
-      expiresAt: addDays(today, 1),
     },
   });
+
+  if (existingGeneralCache) {
+    await prisma.testResultCache.update({
+      where: { id: existingGeneralCache.id },
+      data: {
+        latestScore: attempt.score,
+        latestAttemptAt: attempt.completedAt,
+        totalAttempts: 1,
+        averageScore: attempt.score,
+        bestScore: attempt.score,
+        expiresAt: addDays(today, 1),
+        lastCachedAt: new Date(),
+      },
+    });
+  } else {
+    await prisma.testResultCache.create({
+      data: {
+        userId: user.id,
+        skillId: null,
+        latestScore: attempt.score,
+        latestAttemptAt: attempt.completedAt,
+        totalAttempts: 1,
+        averageScore: attempt.score,
+        bestScore: attempt.score,
+        expiresAt: addDays(today, 1),
+      },
+    });
+  }
 
   console.log('Session planner seed completed');
   console.log(`User: ${user.email}`);

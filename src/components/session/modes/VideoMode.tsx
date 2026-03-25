@@ -12,6 +12,7 @@ interface VideoModeProps {
 export function VideoMode({ videoData, onVideoWatched }: VideoModeProps) {
   const [videoLoaded, setVideoLoaded] = useState(false);
   const [hasCalledOnWatch, setHasCalledOnWatch] = useState(false);
+  const hasVideoId = Boolean(videoData.videoId);
 
   const formatDuration = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -25,11 +26,16 @@ export function VideoMode({ videoData, onVideoWatched }: VideoModeProps) {
 
   // Only call onVideoWatched once when component mounts
   useEffect(() => {
+    if (!hasVideoId) {
+      setVideoLoaded(true);
+      return;
+    }
+
     if (videoLoaded && !hasCalledOnWatch) {
       setHasCalledOnWatch(true);
       onVideoWatched?.();
     }
-  }, [videoLoaded, hasCalledOnWatch, onVideoWatched]);
+  }, [videoLoaded, hasCalledOnWatch, hasVideoId, onVideoWatched]);
 
   return (
     <div className="space-y-6">
@@ -37,20 +43,26 @@ export function VideoMode({ videoData, onVideoWatched }: VideoModeProps) {
       <Card>
         <CardContent className="p-0">
           <div className="aspect-video bg-muted rounded-lg overflow-hidden relative">
-            {!videoLoaded && (
+            {!videoLoaded && hasVideoId && (
               <div className="absolute inset-0 flex items-center justify-center bg-black">
                 <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
               </div>
             )}
-            <iframe
-              key={videoData.videoId}
-              src={`https://www.youtube.com/embed/${videoData.videoId}?rel=0`}
-              className="w-full h-full border-0"
-              title={videoData.title}
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              allowFullScreen
-              onLoad={handleVideoLoad}
-            />
+            {hasVideoId ? (
+              <iframe
+                key={videoData.videoId}
+                src={`https://www.youtube.com/embed/${videoData.videoId}?rel=0`}
+                className="w-full h-full border-0"
+                title={videoData.title}
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+                onLoad={handleVideoLoad}
+              />
+            ) : (
+              <div className="h-full w-full flex items-center justify-center bg-black text-sm text-muted-foreground px-6 text-center">
+                No designated video is attached to this scheduled task.
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -70,8 +82,9 @@ export function VideoMode({ videoData, onVideoWatched }: VideoModeProps) {
                   variant="outline"
                   size="sm"
                   asChild
+                  disabled={!hasVideoId}
                 >
-                  <a href={`https://youtube.com/watch?v=${videoData.videoId}`} target="_blank" rel="noopener noreferrer">
+                  <a href={hasVideoId ? `https://youtube.com/watch?v=${videoData.videoId}` : "#"} target="_blank" rel="noopener noreferrer">
                     <ExternalLink className="h-4 w-4 mr-1" />
                     Watch on YouTube
                   </a>

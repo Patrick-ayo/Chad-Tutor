@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Shield, Download, RotateCcw, Trash2, AlertTriangle } from "lucide-react";
+import { Shield, Download, RotateCcw, Trash2, AlertTriangle, Eraser } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +21,7 @@ interface PrivacySectionProps {
   onExportData: () => void;
   onResetProgress: () => void;
   onDeleteAccount: () => void;
+  onClearAllData: () => Promise<void>;
 }
 
 export function PrivacySection({
@@ -28,10 +29,14 @@ export function PrivacySection({
   onExportData,
   onResetProgress,
   onDeleteAccount,
+  onClearAllData,
 }: PrivacySectionProps) {
   const [showResetDialog, setShowResetDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showClearDialog, setShowClearDialog] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
+  const [clearConfirmation, setClearConfirmation] = useState("");
+  const [isClearing, setIsClearing] = useState(false);
 
   const handleResetProgress = () => {
     onResetProgress();
@@ -42,6 +47,24 @@ export function PrivacySection({
     if (deleteConfirmation === "DELETE") {
       onDeleteAccount();
       setShowDeleteDialog(false);
+    }
+  };
+
+  const handleClearAllData = async () => {
+    if (clearConfirmation.trim().toLowerCase() !== "clear all") {
+      return;
+    }
+
+    setIsClearing(true);
+    try {
+      await onClearAllData();
+      setShowClearDialog(false);
+      setClearConfirmation("");
+    } catch (error) {
+      console.error("Failed to clear schedule and session data:", error);
+      window.alert("Failed to clear data. Please try again.");
+    } finally {
+      setIsClearing(false);
     }
   };
 
@@ -131,6 +154,27 @@ export function PrivacySection({
               Delete
             </Button>
           </div>
+
+          {/* Clear Schedule & Session Data */}
+          <div className="flex items-center justify-between py-3 border-t">
+            <div className="space-y-0.5">
+              <p className="text-sm font-medium flex items-center gap-2 text-red-700">
+                <Eraser className="h-4 w-4" />
+                Clear Schedule & Session Data
+              </p>
+              <p className="text-xs text-gray-500">
+                Remove all planned sessions and related cached learning data
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-red-600 border-red-300 hover:bg-red-50"
+              onClick={() => setShowClearDialog(true)}
+            >
+              Clear
+            </Button>
+          </div>
         </CardContent>
       </Card>
 
@@ -203,6 +247,50 @@ export function PrivacySection({
               onClick={handleDeleteAccount}
             >
               Delete My Account
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Clear Data Dialog */}
+      <Dialog open={showClearDialog} onOpenChange={setShowClearDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-700">
+              <AlertTriangle className="h-5 w-5" />
+              Clear Schedule And Session Data?
+            </DialogTitle>
+            <DialogDescription>
+              This will remove your generated schedules, session plans, and cached session state.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 my-4">
+            <Label className="text-sm">
+              Type <span className="font-mono font-bold">clear all</span> to confirm
+            </Label>
+            <Input
+              value={clearConfirmation}
+              onChange={(e) => setClearConfirmation(e.target.value)}
+              placeholder="Type clear all"
+              className="font-mono"
+            />
+          </div>
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowClearDialog(false);
+                setClearConfirmation("");
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={isClearing || clearConfirmation.trim().toLowerCase() !== "clear all"}
+              onClick={handleClearAllData}
+            >
+              {isClearing ? "Clearing..." : "Clear Data"}
             </Button>
           </DialogFooter>
         </DialogContent>

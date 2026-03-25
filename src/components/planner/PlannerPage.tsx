@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { CalendarDays, Settings2, RefreshCw, ListVideo, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -26,6 +27,7 @@ interface PlannerPageProps {
 }
 
 export function PlannerPage({ data, onSync }: PlannerPageProps) {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("previous");
   const [isSyncing, setIsSyncing] = useState(false);
   const [playlistName, setPlaylistName] = useState("");
@@ -208,6 +210,10 @@ export function PlannerPage({ data, onSync }: PlannerPageProps) {
     setSelectedRescheduleTask(task);
     setSelectedRescheduleDate(dayDate);
     setIsRescheduleDialogOpen(true);
+  };
+
+  const handleStartSession = (taskId: string) => {
+    navigate(`/session/${taskId}`);
   };
 
   const handleConfirmReschedule = async () => {
@@ -522,6 +528,13 @@ export function PlannerPage({ data, onSync }: PlannerPageProps) {
                     <div className="text-right space-y-1">
                       <p className="text-xs text-muted-foreground whitespace-nowrap">{task.estimatedMinutes} min</p>
                       <div className="flex justify-end gap-1">
+                        <Button
+                          size="sm"
+                          className="h-6 px-2 text-xs"
+                          onClick={() => handleStartSession(task.id)}
+                        >
+                          Start Session
+                        </Button>
                         <Button
                           variant="outline"
                           size="sm"

@@ -4,10 +4,11 @@ import { runGeminiPrompt } from '../services/gemini.service';
 import type { QuizResponse, StudyPlan } from '../types';
 import config from '../config';
 import { getChatFlowResponse } from '../services/chatbot-flow.service';
+import { enrichVideosBatch } from '../services/video-intelligence.service';
 
 const router = express.Router();
 
-router.post('/chat-flow', (req: Request, res: Response) => {
+router.post('/chat-flow', async (req: Request, res: Response) => {
   try {
     const { state, input, selectedOptions, context } = req.body as {
       state: 'context_collection' | 'confirmation' | 'execution_choice' | 'timeline_collection' | 'active_plan';
@@ -23,9 +24,22 @@ router.post('/chat-flow', (req: Request, res: Response) => {
       context: context as any,
     });
 
+    let enrichedMessage = response.message;
+    if (response.state === 'active_plan') {
+      try {
+        const suggestionsText = await fetchMrChadVideoSuggestions(response.context);
+        if (suggestionsText) {
+          enrichedMessage = `${response.message}\n${suggestionsText}`;
+        }
+      } catch (suggestionError) {
+        console.warn('Failed to append Mr Chad video suggestions:', suggestionError);
+      }
+    }
+
     return res.json({
       success: true,
       ...response,
+      message: enrichedMessage,
     });
   } catch (error) {
     return res.status(500).json({
@@ -39,6 +53,8 @@ router.post('/chat-flow', (req: Request, res: Response) => {
 const BYTEZ_API_KEY = config.chatbot.bytezApiKey || 'your-free-key';
 const sdk = new Bytez(BYTEZ_API_KEY);
 const MODEL_NAME = config.chatbot.model;
+const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY || '';
+const YOUTUBE_API_BASE = 'https://www.googleapis.com/youtube/v3';
 
 function cleanClaudeJsonResponse(text: string): string {
   return text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
@@ -71,7 +87,6 @@ function buildFallbackResources(nodeTitle: string, nodeDescription?: string) {
     ],
   };
 }
-
 function buildFallbackQuiz(nodeTitle: string, questionCount: number): QuizResponse {
   const safeCount = Math.max(1, Math.min(10, Number(questionCount) || 3));
   const base = [
@@ -126,6 +141,166 @@ function buildFallbackQuiz(nodeTitle: string, questionCount: number): QuizRespon
   });
 
   return { questions };
+}
+
+function parseDuration(duration: string): number {
+  const match = duration.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+  if (!match) return 0;
+  const hours = parseInt(match[1] || '0', 10);
+  const minutes = parseInt(match[2] || '0', 10);
+  const seconds = parseInt(match[3] || '0', 10);
+  return hours * 3600 + minutes * 60 + seconds;
+}
+
+function formatLargeNumber(value: number): string {
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
+  if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
+  return `${value}`;
+}
+
+function extractFocusTerms(context: any): string[] {
+  const profile = context?.profile || {};
+  const raw = [
+    ...(Array.isArray(profile.jobCourses) ? profile.jobCourses : []),
+    ...(Array.isArray(profile.skills) ? profile.skills : []),
+    ...(Array.isArray(profile.languages) ? profile.languages : []),
+    ...(Array.isArray(profile.goals) ? profile.goals : []),
+  ] as string[];
+
+  const seen = new Set<string>();
+  return raw
+    .map((value) => value.trim())
+    .filter((value) => {
+      if (!value) return false;
+      const key = value.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, 3);
+}
+
+async function fetchMrChadVideoSuggestions(context: any): Promise<string | null> {
+  if (!YOUTUBE_API_KEY) {
+    return null;
+  }
+
+  const focusTerms = extractFocusTerms(context);
+  if (focusTerms.length === 0) {
+    return null;
+  }
+
+  const searchQuery = `${focusTerms.join(' ')} tutorial complete course`;
+  const searchUrl = new URL(`${YOUTUBE_API_BASE}/search`);
+  searchUrl.searchParams.set('part', 'snippet');
+  searchUrl.searchParams.set('q', searchQuery);
+  searchUrl.searchParams.set('type', 'video');
+  searchUrl.searchParams.set('maxResults', '6');
+  searchUrl.searchParams.set('order', 'viewCount');
+  searchUrl.searchParams.set('relevanceLanguage', 'en');
+  searchUrl.searchParams.set('key', YOUTUBE_API_KEY);
+
+  const searchResponse = await fetch(searchUrl.toString());
+  const searchData = await searchResponse.json() as {
+    items?: Array<{
+      id: { videoId?: string };
+      snippet: {
+        title: string;
+        description?: string;
+        channelTitle: string;
+        publishedAt?: string;
+        thumbnails?: { medium?: { url: string }; default?: { url: string } };
+      };
+    }>;
+  };
+
+  const videoIds = (searchData.items || [])
+    .map((item) => item.id.videoId)
+    .filter((id): id is string => Boolean(id));
+
+  if (videoIds.length === 0) {
+    return null;
+  }
+
+  const detailsUrl = new URL(`${YOUTUBE_API_BASE}/videos`);
+  detailsUrl.searchParams.set('part', 'contentDetails,statistics');
+  detailsUrl.searchParams.set('id', videoIds.join(','));
+  detailsUrl.searchParams.set('key', YOUTUBE_API_KEY);
+
+  const detailsResponse = await fetch(detailsUrl.toString());
+  const detailsData = await detailsResponse.json() as {
+    items?: Array<{
+      id: string;
+      contentDetails?: { duration: string };
+      statistics?: { viewCount?: string; likeCount?: string; commentCount?: string };
+    }>;
+  };
+
+  const detailsMap = new Map<string, { durationSeconds: number; viewCount: number; likeCount: number; commentCount: number }>();
+  for (const item of detailsData.items || []) {
+    detailsMap.set(item.id, {
+      durationSeconds: parseDuration(item.contentDetails?.duration || 'PT0S'),
+      viewCount: parseInt(item.statistics?.viewCount || '0', 10),
+      likeCount: parseInt(item.statistics?.likeCount || '0', 10),
+      commentCount: parseInt(item.statistics?.commentCount || '0', 10),
+    });
+  }
+
+  const rawVideos = (searchData.items || []).flatMap((item) => {
+    const id = item.id.videoId;
+    if (!id) return [];
+    const details = detailsMap.get(id);
+    if (!details) return [];
+
+    return [{
+      id,
+      title: item.snippet.title,
+      channelName: item.snippet.channelTitle,
+      thumbnail: item.snippet.thumbnails?.medium?.url || item.snippet.thumbnails?.default?.url,
+      description: item.snippet.description,
+      topicName: focusTerms[0],
+      subtopicName: focusTerms[1],
+      viewCount: details.viewCount,
+      likeCount: details.likeCount,
+      commentCount: details.commentCount,
+      publishedAt: item.snippet.publishedAt,
+      durationSeconds: details.durationSeconds,
+      url: `https://www.youtube.com/watch?v=${id}`,
+    }];
+  });
+
+  if (rawVideos.length === 0) {
+    return null;
+  }
+
+  const enriched = await enrichVideosBatch(rawVideos, { maxItems: 3 });
+
+  const lines = [
+    '',
+    'Top recommended videos for your plan (ranked by views + review signal):',
+  ];
+
+  enriched.slice(0, 3).forEach((video, index) => {
+    const reason = video.qualitySignal?.reasons?.[0] || 'Balanced quality signal';
+    const sourceTag =
+      video.enrichmentSource === 'youtube-metadata'
+        ? 'Direct metadata'
+        : video.enrichmentSource === 'gemini'
+          ? 'Google summary'
+          : video.enrichmentSource === 'bytez-fallback'
+            ? 'Bytez fallback'
+            : 'Fallback';
+
+    lines.push(
+      `${index + 1}. ${video.title} (${formatLargeNumber(video.viewCount || 0)} views)`,
+      `   Link: ${video.url}`,
+      `   Why picked: ${reason}`,
+      `   Summary source: ${sourceTag}`,
+      `   Test focus: ${(video.testPrepPoints || []).slice(0, 2).join(' | ') || 'Revise key concepts from this lesson.'}`,
+    );
+  });
+
+  return lines.join('\n');
 }
 
 async function runModelPrompt(prompt: string): Promise<{ error: unknown; output: string }> {
@@ -363,6 +538,194 @@ Requirements:
       success: false,
       message: 'Failed to generate quiz',
       error: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+router.post('/generate-session-quiz', async (req: Request, res: Response) => {
+  try {
+    const {
+      topic,
+      questionCount = 10,
+      videoId,
+      videoTitle,
+      videoSummary,
+      keyConcepts,
+    } = req.body as {
+      topic?: string;
+      questionCount?: number;
+      videoId?: string;
+      videoTitle?: string;
+      videoSummary?: string;
+      keyConcepts?: string[];
+    };
+
+    const normalizedTopic = (topic || '').trim() || (videoTitle || '').trim();
+    if (!normalizedTopic) {
+      return res.status(400).json({
+        success: false,
+        message: 'Topic or video title is required',
+      });
+    }
+
+    const safeCount = Math.max(1, Math.min(10, Number.isFinite(questionCount) ? Math.floor(questionCount) : 10));
+    const concepts = Array.isArray(keyConcepts)
+      ? keyConcepts.map((item) => String(item).trim()).filter(Boolean).slice(0, 8)
+      : [];
+
+    const buildFallbackQuestions = () => {
+      const seeds = concepts.length > 0 ? concepts : [normalizedTopic, 'core concept', 'applied usage'];
+
+      return Array.from({ length: safeCount }).map((_, index) => {
+        const seed = seeds[index % seeds.length];
+        return {
+          id: `session-q-${index + 1}`,
+          question: `In the current session on ${normalizedTopic}, what best reflects ${seed}?`,
+          options: [
+            `Apply ${seed} to solve a practical task from the video context`,
+            `Ignore ${seed} and memorize unrelated facts`,
+            `Skip ${seed} because only final answers matter`,
+            `Delay ${seed} until after the assessment`,
+          ],
+          correctAnswer: 0,
+          explanation: `The session emphasizes applying ${seed} directly from the lesson context.`,
+          difficulty: index < Math.ceil(safeCount * 0.6) ? 'beginner' : index < Math.ceil(safeCount * 0.9) ? 'intermediate' : 'advanced',
+        };
+      });
+    };
+
+    const prompt = `Generate exactly ${safeCount} high-quality MCQ questions for a learning session.
+
+Session topic: ${normalizedTopic}
+Video ID: ${videoId || 'N/A'}
+Video title: ${videoTitle || normalizedTopic}
+Video summary/context: ${videoSummary || 'No summary provided'}
+Key concepts: ${concepts.join(', ') || 'No explicit concepts provided'}
+
+Return strict JSON only with this exact structure:
+{
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Question text",
+      "options": ["A", "B", "C", "D"],
+      "correctAnswer": 0,
+      "explanation": "Why this is correct",
+      "difficulty": "beginner"
+    }
+  ]
+}
+
+Rules:
+- Exactly ${safeCount} questions.
+- Exactly 4 options per question.
+- correctAnswer must be index 0-3.
+- Questions must be grounded in session context and video topic.
+- Mix difficulty: beginner/intermediate/advanced.
+- No markdown, no extra text.`;
+
+    const { error, output } = await runModelPrompt(prompt);
+    if (error || !output) {
+      return res.json({
+        success: true,
+        fallbackUsed: true,
+        questions: buildFallbackQuestions(),
+      });
+    }
+
+    let parsed: unknown;
+    try {
+      const text = cleanClaudeJsonResponse(output.trim());
+      parsed = JSON.parse(text);
+    } catch {
+      parsed = null;
+    }
+
+    const rawQuestions =
+      parsed && typeof parsed === 'object' && Array.isArray((parsed as any).questions)
+        ? (parsed as any).questions
+        : [];
+
+    const normalizedQuestions = rawQuestions
+      .map((item: any, index: number) => {
+        const options = Array.isArray(item?.options)
+          ? item.options.map((opt: unknown) => String(opt).trim()).filter(Boolean).slice(0, 4)
+          : [];
+
+        if (options.length !== 4) {
+          return null;
+        }
+
+        const correct = Number(item?.correctAnswer);
+        const correctAnswer = Number.isInteger(correct) && correct >= 0 && correct <= 3 ? correct : 0;
+        const difficulty =
+          item?.difficulty === 'intermediate' || item?.difficulty === 'advanced'
+            ? item.difficulty
+            : 'beginner';
+
+        return {
+          id: typeof item?.id === 'string' && item.id.trim() ? item.id.trim() : `session-q-${index + 1}`,
+          question:
+            typeof item?.question === 'string' && item.question.trim()
+              ? item.question.trim()
+              : `What is a correct statement about ${normalizedTopic}?`,
+          options,
+          correctAnswer,
+          explanation:
+            typeof item?.explanation === 'string' && item.explanation.trim()
+              ? item.explanation.trim()
+              : `Use the session context around ${normalizedTopic} to justify the correct option.`,
+          difficulty,
+        };
+      })
+      .filter((item: any): item is QuizResponse['questions'][number] => Boolean(item))
+      .slice(0, safeCount);
+
+    if (normalizedQuestions.length === 0) {
+      return res.json({
+        success: true,
+        fallbackUsed: true,
+        questions: buildFallbackQuestions(),
+      });
+    }
+
+    const completed =
+      normalizedQuestions.length < safeCount
+        ? [...normalizedQuestions, ...buildFallbackQuestions().slice(0, safeCount - normalizedQuestions.length)]
+        : normalizedQuestions;
+
+    return res.json({
+      success: true,
+      fallbackUsed: false,
+      questions: completed.slice(0, safeCount),
+    });
+  } catch (error) {
+    const {
+      topic,
+      questionCount = 10,
+    } = req.body as { topic?: string; questionCount?: number };
+    const safeCount = Math.max(1, Math.min(10, Number.isFinite(questionCount) ? Math.floor(questionCount) : 10));
+    const normalizedTopic = (topic || 'current session').trim() || 'current session';
+
+    const fallbackQuestions = Array.from({ length: safeCount }).map((_, index) => ({
+      id: `session-q-${index + 1}`,
+      question: `For ${normalizedTopic}, what is the best learning action?`,
+      options: [
+        'Connect the concept to one real example from the session',
+        'Skip examples and memorize keywords only',
+        'Avoid checking understanding with questions',
+        'Ignore the video context while answering',
+      ],
+      correctAnswer: 0,
+      explanation: 'Linking concept to session examples gives the strongest understanding signal.',
+      difficulty: index < Math.ceil(safeCount * 0.6) ? 'beginner' : index < Math.ceil(safeCount * 0.9) ? 'intermediate' : 'advanced',
+    }));
+
+    return res.json({
+      success: true,
+      fallbackUsed: true,
+      questions: fallbackQuestions,
+      message: error instanceof Error ? error.message : 'Generated with fallback',
     });
   }
 });

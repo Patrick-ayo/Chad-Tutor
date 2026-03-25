@@ -7,9 +7,10 @@ import type { SessionTask, SessionState } from "@/types/session";
 interface TaskContextBarProps {
   task: SessionTask;
   sessionState: SessionState;
+  nextSessionTitle?: string;
 }
 
-export function TaskContextBar({ task, sessionState }: TaskContextBarProps) {
+export function TaskContextBar({ task, sessionState, nextSessionTitle }: TaskContextBarProps) {
   const [isImportant, setIsImportant] = useState(false);
 
   useEffect(() => {
@@ -91,6 +92,9 @@ export function TaskContextBar({ task, sessionState }: TaskContextBarProps) {
             </div>
             {task.scheduleReason && (
               <span className="text-muted-foreground/70">| {task.scheduleReason}</span>
+            )}
+            {nextSessionTitle && (
+              <span className="text-muted-foreground/70 truncate max-w-[320px]">| Next: {nextSessionTitle}</span>
             )}
           </div>
         </div>

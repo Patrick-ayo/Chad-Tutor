@@ -18,9 +18,10 @@ import type { ExampleProblem } from "@/types/session";
 
 interface ExamplesModeProps {
   examples: ExampleProblem[];
+  themeLabel?: string;
 }
 
-export function ExamplesMode({ examples }: ExamplesModeProps) {
+export function ExamplesMode({ examples, themeLabel }: ExamplesModeProps) {
   const [expandedProblems, setExpandedProblems] = useState<Set<string>>(new Set());
   const [playingNarration, setPlayingNarration] = useState<string | null>(null);
   const [completedProblems, setCompletedProblems] = useState<Set<string>>(new Set());
@@ -95,8 +96,23 @@ export function ExamplesMode({ examples }: ExamplesModeProps) {
           <p className="text-sm text-muted-foreground">
             Problems of increasing difficulty to test your understanding
           </p>
+          {themeLabel && examples.length > 0 && (
+            <p className="text-xs text-muted-foreground mt-1">
+              Theme: <span className="font-medium text-foreground">{themeLabel}</span>
+            </p>
+          )}
         </CardHeader>
       </Card>
+
+      {examples.length === 0 && (
+        <Card>
+          <CardContent className="pt-6">
+            <p className="text-sm text-muted-foreground">
+              No themed examples are available for this session yet.
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Problems */}
       <div className="space-y-4">
