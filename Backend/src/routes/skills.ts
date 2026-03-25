@@ -26,6 +26,7 @@ const searchSchema = z.object({
   tags: z.string().optional(), // Comma-separated
   limit: z.coerce.number().min(1).max(100).optional(),
   offset: z.coerce.number().min(0).optional(),
+  includeUnpublished: z.coerce.boolean().optional(),
 });
 
 const getSkillSchema = z.object({
@@ -74,6 +75,7 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
       tags: params.tags?.split(',').map((t) => t.trim()).filter(Boolean),
       limit: params.limit,
       offset: params.offset,
+      includeUnpublished: params.includeUnpublished,
     });
     
     res.json({

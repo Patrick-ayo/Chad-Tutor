@@ -31,6 +31,7 @@ export interface SearchParams {
   tags?: string[];
   limit?: number;
   offset?: number;
+  includeUnpublished?: boolean;
 }
 
 export interface UserProgressSummary {
@@ -54,10 +55,10 @@ export async function searchSkills(params: SearchParams): Promise<{
   total: number;
   meta: { limit: number; offset: number };
 }> {
-  const { query, category, difficulty, tags, limit = 20, offset = 0 } = params;
+  const { query, category, difficulty, tags, limit = 20, offset = 0, includeUnpublished = false } = params;
   
   const where: Prisma.SkillWhereInput = {
-    isPublished: true,
+    ...(includeUnpublished ? {} : { isPublished: true }),
     isCanonical: true,
     ...(query && {
       OR: [

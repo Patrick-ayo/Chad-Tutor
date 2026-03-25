@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import { clerkMiddleware } from '@clerk/express';
+import userGoalsRoutes from './routes/goals.routes';
 import config from './config';
 import { connectDatabase, disconnectDatabase } from './db';
 import { cacheService } from './services';
@@ -1175,6 +1176,7 @@ app.use('/api/user', userRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/exam', examRoutes);
 app.use('/api/goals', goalsRoutes);
+app.use('/api/goals', userGoalsRoutes);
 app.use('/api/universities', universityRoutes);
 app.use('/api/skills', skillsRoutes);
 app.use('/api/planner', plannerRoutes);

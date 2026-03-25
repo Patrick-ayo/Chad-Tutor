@@ -206,7 +206,7 @@ export function GoalBuilderPage({ onSaveGoalSchedule }: GoalBuilderPageProps) {
         return (
           <DeadlineStep
             data={constraints}
-            estimatedHours={selectedGoal?.estimatedHours ?? 0}
+            estimatedHours={selectedGoal?.estimatedHours ?? (definition.type === "role" ? 120 : 0)}
             onUpdate={setConstraints}
             onNext={handleNext}
             onBack={handleBack}
@@ -217,7 +217,7 @@ export function GoalBuilderPage({ onSaveGoalSchedule }: GoalBuilderPageProps) {
         return (
           <AssessmentStep
             data={assessment}
-            goalName={selectedGoal?.name ?? "this topic"}
+            goalName={selectedGoal?.name ?? definition.customName ?? "this topic"}
             onUpdate={setAssessment}
             onNext={handleNext}
             onBack={handleBack}
@@ -368,7 +368,7 @@ export function GoalBuilderPage({ onSaveGoalSchedule }: GoalBuilderPageProps) {
             {/* Header */}
             <div>
               <h1 className="text-3xl font-bold tracking-tight">
-                {selectedGoal?.name ?? "Goal"} Roadmap
+                {selectedGoal?.name ?? definition.customName ?? "Goal"} Roadmap
               </h1>
               <p className="text-muted-foreground mt-1">
                 Your personalized, dependency-aware learning path.

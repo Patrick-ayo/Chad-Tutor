@@ -226,6 +226,17 @@ model Goal {
   @@index([status])
 }
 
+model UserGoals {
+  id             String   @id @default(uuid())
+  userId         String   @unique
+  selectedSkills String[]
+  selectedRoles  String[]
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([userId])
+}
+
 model SettingsChangeLog {
   id        String   @id @default(uuid())
   userId    String

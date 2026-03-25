@@ -113,6 +113,7 @@ export interface GoalDefinition {
   goalId?: string; // From predefined options (for skill/role)
   customName?: string; // Only if absolutely necessary
   selectedSkills?: SkillSelection[]; // For skill type goals
+  selectedRoles?: string[]; // For role type goals
   // Exam specific fields
   university?: University;
   course?: Course;
