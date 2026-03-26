@@ -7,7 +7,7 @@
 
 import { Router, Request, Response } from 'express';
 import { userService } from '../services';
-import { requireAuth } from '../middleware';
+import { requireUser } from '../middleware';
 
 const router = Router();
 
@@ -15,19 +15,9 @@ const router = Router();
  * GET /api/settings
  * Get current user's settings
  */
-router.get('/', requireAuth, async (req: Request, res: Response) => {
+router.get('/', requireUser, async (req: Request, res: Response) => {
   try {
-    const clerkId = req.auth!.userId;
-
-    const user = await userService.getUserByClerkId(clerkId);
-    if (!user) {
-      return res.status(404).json({
-        error: 'Not Found',
-        message: 'User not found',
-      });
-    }
-
-    const settings = await userService.getUserSettings(user.id);
+    const settings = await userService.getUserSettings(req.user!.id);
 
     res.json(settings);
   } catch (error) {
@@ -43,18 +33,9 @@ router.get('/', requireAuth, async (req: Request, res: Response) => {
  * PATCH /api/settings
  * Update user settings with change logging
  */
-router.patch('/', requireAuth, async (req: Request, res: Response) => {
+router.patch('/', requireUser, async (req: Request, res: Response) => {
   try {
-    const clerkId = req.auth!.userId;
     const updates = req.body;
-
-    const user = await userService.getUserByClerkId(clerkId);
-    if (!user) {
-      return res.status(404).json({
-        error: 'Not Found',
-        message: 'User not found',
-      });
-    }
 
     // Extract valid settings fields matching the Prisma schema
     const validUpdates: Partial<{
@@ -122,9 +103,9 @@ router.patch('/', requireAuth, async (req: Request, res: Response) => {
     }
 
     const settings = await userService.updateUserSettings(
-      user.id,
+      req.user!.id,
       validUpdates,
-      clerkId,
+      req.user!.clerkId,
       updates.reason
     );
 
@@ -145,20 +126,11 @@ router.patch('/', requireAuth, async (req: Request, res: Response) => {
  * GET /api/settings/history
  * Get settings change history
  */
-router.get('/history', requireAuth, async (req: Request, res: Response) => {
+router.get('/history', requireUser, async (req: Request, res: Response) => {
   try {
-    const clerkId = req.auth!.userId;
     const limit = parseInt(req.query.limit as string) || 20;
 
-    const user = await userService.getUserByClerkId(clerkId);
-    if (!user) {
-      return res.status(404).json({
-        error: 'Not Found',
-        message: 'User not found',
-      });
-    }
-
-    const history = await userService.getSettingsChangeHistory(user.id, limit);
+    const history = await userService.getSettingsChangeHistory(req.user!.id, limit);
 
     res.json(history);
   } catch (error) {

@@ -7,7 +7,10 @@ const config = {
   nodeEnv: process.env.NODE_ENV || 'development',
   
   clerk: {
-    publishableKey: process.env.CLERK_PUBLISHABLE_KEY || '',
+    publishableKey:
+      process.env.CLERK_PUBLISHABLE_KEY ||
+      process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ||
+      '',
     secretKey: process.env.CLERK_SECRET_KEY || '',
   },
   

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
-import { useNavigate } from "react-router-dom";
-import { SignIn, useAuth } from "@clerk/clerk-react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { SignIn, SignUp, useAuth } from "@clerk/clerk-react";
 import "./LoginPage.css";
 
 type Theme = {
@@ -183,18 +183,18 @@ const LIGHT: Theme = {
   toggleBtnHoverBg: "rgba(0,0,0,0.13)",
 };
 
-const IconArrow = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" /></svg>;
 const BrandLogo = ({ c }: { c?: string }) => <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke={c || "currentColor"} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 6.5C10.1 5.35 7.4 4.8 4.2 4.8c-.55 0-1 .45-1 1v11.4c0 .55.45 1 1 1 3.15 0 5.9.58 7.8 1.75" /><path d="M12 6.5c1.9-1.15 4.65-1.7 7.8-1.7.55 0 1 .45 1 1v11.4c0 .55-.45 1-1 1-3.15 0-5.9.58-7.8 1.75" /><line x1="12" y1="6.5" x2="12" y2="19.95" /></svg>;
 
 export default function LoginPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { isLoaded, isSignedIn } = useAuth();
+  const isSignUpRoute = location.pathname === "/sign-up";
   const [isDark, setIsDark] = useState(() => {
     if (typeof window === "undefined" || !window.matchMedia) return true;
     return window.matchMedia("(prefers-color-scheme: dark)").matches;
   });
   const [mounted, setMounted] = useState(false);
-  const [ripple, setRipple] = useState(false);
   const [activeLine, setActiveLine] = useState(0);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -349,17 +349,10 @@ export default function LoginPage() {
     return () => window.clearInterval(intervalId);
   }, []);
 
-  const handleBypass = () => {
-    setRipple(true);
-    window.setTimeout(() => {
-      navigate("/dashboard");
-    }, 120);
-  };
-
   return (
     <div
       ref={containerRef}
-      className={`login-page ${mounted ? "is-mounted" : ""} ${ripple ? "is-ripple" : ""}`}
+      className={`login-page ${mounted ? "is-mounted" : ""}`}
       style={rootVars}
     >
       <svg className="login-grain" width="100%" height="100%">
@@ -369,13 +362,6 @@ export default function LoginPage() {
         </filter>
         <rect width="100%" height="100%" filter="url(#login-grain-filter)" opacity="0.02" />
       </svg>
-
-      <div className="login-theme-toggle-wrap">
-        <button className="login-theme-toggle" onClick={handleBypass} type="button">
-          <IconArrow />
-          <span>Bypass</span>
-        </button>
-      </div>
 
       <div className="login-bg-layer" aria-hidden>
         {SHAPES.map((shape, index) => (
@@ -436,36 +422,98 @@ export default function LoginPage() {
       <section className="login-right">
         <div className="login-card">
           <div className="login-card-header">
-            <h2 className="login-card-title">Welcome back</h2>
-            <p className="login-card-sub">Sign in to your account</p>
+            <h2 className="login-card-title">{isSignUpRoute ? "Create account" : "Welcome back"}</h2>
+            <p className="login-card-sub">
+              {isSignUpRoute ? "Sign up to start your learning" : "Sign in to your account"}
+            </p>
+            <div style={{ marginTop: 10, display: "flex", gap: 8 }}>
+              <button
+                type="button"
+                onClick={() => navigate("/", { replace: true })}
+                style={{
+                  border: "1px solid rgba(255,255,255,0.2)",
+                  background: isSignUpRoute ? "transparent" : "rgba(255,255,255,0.12)",
+                  color: "inherit",
+                  padding: "6px 10px",
+                  borderRadius: 8,
+                  fontSize: 12,
+                  cursor: "pointer",
+                }}
+              >
+                Sign in
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate("/sign-up", { replace: true })}
+                style={{
+                  border: "1px solid rgba(255,255,255,0.2)",
+                  background: isSignUpRoute ? "rgba(255,255,255,0.12)" : "transparent",
+                  color: "inherit",
+                  padding: "6px 10px",
+                  borderRadius: 8,
+                  fontSize: 12,
+                  cursor: "pointer",
+                }}
+              >
+                Sign up
+              </button>
+            </div>
           </div>
 
           <div className="login-clerk-wrap">
-            <SignIn
-              path="/"
-              routing="path"
-              forceRedirectUrl="/dashboard"
-              signUpUrl="/"
-              appearance={{
-                elements: {
-                  rootBox: "login-clerk-root",
-                  card: "login-clerk-card",
-                  header: "login-clerk-header",
-                  socialButtonsBlockButton: "login-clerk-social-button",
-                  dividerLine: "login-clerk-divider-line",
-                  dividerText: "login-clerk-divider-text",
-                  formFieldInput: "login-clerk-input",
-                  formButtonPrimary: "login-clerk-primary-btn",
-                  footerActionLink: "login-clerk-link",
-                  formFieldLabel: "login-clerk-label",
-                  identityPreviewText: "login-clerk-text",
-                  formFieldSuccessText: "login-clerk-text",
-                  formFieldWarningText: "login-clerk-text",
-                  formFieldErrorText: "login-clerk-text",
-                  footer: "login-clerk-footer",
-                },
-              }}
-            />
+            {isSignUpRoute ? (
+              <SignUp
+                path="/sign-up"
+                routing="path"
+                forceRedirectUrl="/dashboard"
+                signInUrl="/"
+                appearance={{
+                  elements: {
+                    rootBox: "login-clerk-root",
+                    card: "login-clerk-card",
+                    header: "login-clerk-header",
+                    socialButtonsBlockButton: "login-clerk-social-button",
+                    dividerLine: "login-clerk-divider-line",
+                    dividerText: "login-clerk-divider-text",
+                    formFieldInput: "login-clerk-input",
+                    formButtonPrimary: "login-clerk-primary-btn",
+                    footerActionLink: "login-clerk-link",
+                    formFieldLabel: "login-clerk-label",
+                    identityPreviewText: "login-clerk-text",
+                    formFieldSuccessText: "login-clerk-text",
+                    formFieldWarningText: "login-clerk-text",
+                    formFieldErrorText: "login-clerk-text",
+                    footer: "login-clerk-footer",
+                  },
+                }}
+              />
+            ) : (
+              <SignIn
+                path="/"
+                routing="path"
+                forceRedirectUrl="/dashboard"
+                signUpUrl="/sign-up"
+                appearance={{
+                  elements: {
+                    rootBox: "login-clerk-root",
+                    card: "login-clerk-card",
+                    header: "login-clerk-header",
+                    socialButtonsBlockButton: "login-clerk-social-button",
+                    dividerLine: "login-clerk-divider-line",
+                    dividerText: "login-clerk-divider-text",
+                    formFieldInput: "login-clerk-input",
+                    formButtonPrimary: "login-clerk-primary-btn",
+                    footerActionLink: "login-clerk-link",
+                    formFieldLabel: "login-clerk-label",
+                    identityPreviewText: "login-clerk-text",
+                    formFieldSuccessText: "login-clerk-text",
+                    formFieldWarningText: "login-clerk-text",
+                    formFieldErrorText: "login-clerk-text",
+                    footer: "login-clerk-footer",
+                  },
+                }}
+              />
+            )}
           </div>
         </div>
       </section>

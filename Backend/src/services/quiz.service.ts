@@ -3,6 +3,7 @@
  */
 
 import { quizRepo, testCacheRepo } from '../repositories';
+import { taskRepo } from '../repositories';
 import type { Prisma } from '@prisma/client';
 
 const inMemorySkillCache = new Map<string, { expiresAt: number; data: unknown }>();
@@ -23,6 +24,13 @@ export async function submitQuizAttempt(
     metadata?: unknown;
   }
 ) {
+  if (input.taskId) {
+    const task = await taskRepo.findById(input.taskId, userId);
+    if (!task) {
+      return null;
+    }
+  }
+
   const safeQuestions = Math.max(1, input.questionsCount);
   const safeCorrect = Math.max(0, Math.min(input.correctCount, safeQuestions));
   const score = Number(((safeCorrect / safeQuestions) * 100).toFixed(2));

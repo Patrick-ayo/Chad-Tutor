@@ -49,8 +49,8 @@ export async function getUserPlaylists(userId: string) {
   return playlistRepo.findByUser(userId);
 }
 
-export async function getPlaylistById(playlistId: string) {
-  return playlistRepo.findById(playlistId);
+export async function getPlaylistById(userId: string, playlistId: string) {
+  return playlistRepo.findById(playlistId, userId);
 }
 
 export async function linkPlaylistToSkill(

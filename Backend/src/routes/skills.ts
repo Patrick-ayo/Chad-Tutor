@@ -11,7 +11,7 @@ import { Difficulty, SelectionSource } from '@prisma/client';
 
 import * as skillService from '../services/skill.service';
 import * as skillGraph from '../services/skill-graph.service';
-import { requireAuth } from '../middleware/auth';
+import { requireUser } from '../middleware';
 
 const router = Router();
 
@@ -227,9 +227,9 @@ router.get('/:id/related', async (req: Request, res: Response, next: NextFunctio
  * When includeSubskills is true, all subskills (via SUBSKILL_OF edges)
  * are automatically added with sourceType: GOAL_DERIVED.
  */
-router.post('/select', requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+router.post('/select', requireUser, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const userId = (req as any).auth?.userId;
+    const userId = req.user?.id;
     if (!userId) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
@@ -263,9 +263,9 @@ router.post('/select', requireAuth, async (req: Request, res: Response, next: Ne
 /**
  * GET /api/skills/user/selected - Get user's selected skills
  */
-router.get('/user/selected', requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+router.get('/user/selected', requireUser, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const userId = (req as any).auth?.userId;
+    const userId = req.user?.id;
     if (!userId) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
@@ -283,9 +283,9 @@ router.get('/user/selected', requireAuth, async (req: Request, res: Response, ne
  * Query params:
  *   - skillIds: Comma-separated skill IDs (optional, returns all if omitted)
  */
-router.get('/user/progress', requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+router.get('/user/progress', requireUser, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const userId = (req as any).auth?.userId;
+    const userId = req.user?.id;
     if (!userId) {
       return res.status(401).json({ error: 'Unauthorized' });
     }

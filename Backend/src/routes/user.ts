@@ -6,9 +6,8 @@
  */
 
 import { Router, Request, Response } from 'express';
-import { getAuth } from '@clerk/express';
 import { userService, goalService } from '../services';
-import { requireAuth } from '../middleware';
+import { requireUser } from '../middleware';
 import type { BootstrapResponse } from '../types/user';
 
 const router = Router();
@@ -20,17 +19,9 @@ const MAX_RESETS_PER_DAY = 3;
  * First contact with system after Clerk login
  * Returns user state, active goal, enforcement flags
  */
-router.get('/bootstrap', requireAuth, async (req: Request, res: Response) => {
+router.get('/bootstrap', requireUser, async (req: Request, res: Response) => {
   try {
-    const clerkId = req.auth!.userId;
-
-    // Get or create user
-    const auth = getAuth(req);
-    const user = await userService.getOrCreateUser(
-      clerkId,
-      'pending@setup.com', // Will be updated via webhook
-      'New User'
-    );
+    const user = req.user!;
 
     const isNewUser = user.createdAt.getTime() > Date.now() - 60000; // Created within last minute
 
@@ -87,18 +78,9 @@ router.get('/bootstrap', requireAuth, async (req: Request, res: Response) => {
  * GET /api/user/profile
  * Get current user's profile
  */
-router.get('/profile', requireAuth, async (req: Request, res: Response) => {
+router.get('/profile', requireUser, async (req: Request, res: Response) => {
   try {
-    const clerkId = req.auth!.userId;
-
-    const user = await userService.getUserByClerkId(clerkId);
-
-    if (!user) {
-      return res.status(404).json({
-        error: 'Not Found',
-        message: 'User not found',
-      });
-    }
+    const user = req.user!;
 
     res.json({
       id: user.id,
@@ -120,21 +102,12 @@ router.get('/profile', requireAuth, async (req: Request, res: Response) => {
  * PATCH /api/user/profile
  * Update user profile (limited fields)
  */
-router.patch('/profile', requireAuth, async (req: Request, res: Response) => {
+router.patch('/profile', requireUser, async (req: Request, res: Response) => {
   try {
-    const clerkId = req.auth!.userId;
+    const userId = req.user!.id;
     const { name, timezone } = req.body;
 
-    const user = await userService.getUserByClerkId(clerkId);
-
-    if (!user) {
-      return res.status(404).json({
-        error: 'Not Found',
-        message: 'User not found',
-      });
-    }
-
-    const updated = await userService.updateUserProfile(clerkId, { name, timezone });
+    const updated = await userService.updateUserProfile(userId, { name, timezone });
 
     res.json({
       id: updated.id,

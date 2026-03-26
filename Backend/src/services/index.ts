@@ -22,6 +22,7 @@ export * as analyticsService from './analytics.service';
 
 // Session planner services
 export * as plannerService from './planner.service';
+export * as schedulingService from './scheduling.service';
 export * as taskService from './task.service';
 export * as playlistService from './playlist.service';
 export * as quizService from './quiz.service';

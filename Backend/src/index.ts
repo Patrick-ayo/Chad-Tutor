@@ -1165,10 +1165,35 @@ app.use('/api/gemini', geminiRoutes);
 
 // Clerk authentication middleware
 // This makes req.auth available on all routes
-if (config.clerk.publishableKey && config.clerk.secretKey) {
-  app.use(clerkMiddleware());
+if (config.isDevelopment) {
+  console.log(
+    `[auth] clerk keys loaded: publishable=${Boolean(config.clerk.publishableKey)} secret=${Boolean(config.clerk.secretKey)}`,
+  );
+}
+
+if (config.clerk.secretKey && config.clerk.publishableKey) {
+  const clerkAuthMiddleware = clerkMiddleware({
+    secretKey: config.clerk.secretKey,
+    publishableKey: config.clerk.publishableKey,
+  });
+
+  app.use((req, res, next) => {
+    clerkAuthMiddleware(req, res, (err?: unknown) => {
+      if (!err) {
+        return next();
+      }
+
+      const message = err instanceof Error ? err.message : String(err ?? '');
+      if (config.isDevelopment && message.includes('Publishable key is missing')) {
+        console.warn('[auth] Clerk middleware publishable key fallback in development mode.');
+        return next();
+      }
+
+      return next(err as Error);
+    });
+  });
 } else {
-  console.warn('Clerk keys missing. Running without Clerk middleware in development mode.');
+  console.warn('Clerk keys missing/incomplete. Running without Clerk middleware in development mode.');
 }
 
 // API Routes

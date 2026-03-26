@@ -28,14 +28,17 @@ export async function findByUserId(
  */
 export async function update(
   id: string,
+  userId: string,
   data: Prisma.EnforcementUpdateInput,
   tx?: TransactionClient
-): Promise<Enforcement> {
+): Promise<number> {
   const client = tx || prisma;
-  return client.enforcement.update({
-    where: { id },
+  const result = await client.enforcement.updateMany({
+    where: { id, userId },
     data,
   });
+
+  return result.count;
 }
 
 /**
@@ -62,12 +65,14 @@ export async function updateByUserId(
   userId: string,
   data: Prisma.EnforcementUpdateInput,
   tx?: TransactionClient
-): Promise<Enforcement> {
+): Promise<number> {
   const client = tx || prisma;
-  return client.enforcement.update({
+  const result = await client.enforcement.updateMany({
     where: { userId },
     data,
   });
+
+  return result.count;
 }
 
 /**
@@ -77,7 +82,7 @@ export async function incrementViolation(
   userId: string,
   violationData: { type: string; timestamp: Date; details?: string },
   tx?: TransactionClient
-): Promise<Enforcement> {
+): Promise<number> {
   const client = tx || prisma;
   
   const current = await client.enforcement.findUnique({
@@ -90,7 +95,7 @@ export async function incrementViolation(
 
   const history = current.violationHistory as object[];
   
-  return client.enforcement.update({
+  const result = await client.enforcement.updateMany({
     where: { userId },
     data: {
       violationCount: { increment: 1 },
@@ -98,6 +103,8 @@ export async function incrementViolation(
       violationHistory: [...history, violationData],
     },
   });
+
+  return result.count;
 }
 
 /**
@@ -107,9 +114,9 @@ export async function setProbation(
   userId: string,
   isOnProbation: boolean,
   tx?: TransactionClient
-): Promise<Enforcement> {
+): Promise<number> {
   const client = tx || prisma;
-  return client.enforcement.update({
+  const result = await client.enforcement.updateMany({
     where: { userId },
     data: {
       isOnProbation,
@@ -117,4 +124,6 @@ export async function setProbation(
       probationCount: isOnProbation ? { increment: 1 } : undefined,
     },
   });
+
+  return result.count;
 }

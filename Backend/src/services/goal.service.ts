@@ -7,6 +7,7 @@
 
 import { goalRepo } from '../repositories';
 import type { GoalStatus } from '@prisma/client';
+import { assertRowsAffected, ServiceNotFoundError } from './serviceErrors';
 
 // ============================================================================
 // TYPES
@@ -86,9 +87,9 @@ export async function getGoalById(
   goalId: string,
   userId: string
 ): Promise<GoalData | null> {
-  const goal = await goalRepo.findById(goalId);
-  
-  if (!goal || goal.userId !== userId) {
+  const goal = await goalRepo.findById(goalId, userId);
+
+  if (!goal) {
     return null;
   }
 
@@ -103,13 +104,14 @@ export async function updateGoal(
   userId: string,
   updates: UpdateGoalInput
 ): Promise<GoalData | null> {
-  const existing = await goalRepo.findById(goalId);
-  
-  if (!existing || existing.userId !== userId) {
-    return null;
+  const updatedCount = await goalRepo.update(goalId, userId, updates);
+  assertRowsAffected(updatedCount, 'Goal not found');
+
+  const updated = await goalRepo.findById(goalId, userId);
+  if (!updated) {
+    throw new ServiceNotFoundError('Goal not found');
   }
 
-  const updated = await goalRepo.update(goalId, updates);
   return formatGoal(updated);
 }
 
@@ -120,13 +122,8 @@ export async function deleteGoal(
   goalId: string,
   userId: string
 ): Promise<boolean> {
-  const existing = await goalRepo.findById(goalId);
-  
-  if (!existing || existing.userId !== userId) {
-    return false;
-  }
-
-  await goalRepo.remove(goalId);
+  const deletedCount = await goalRepo.remove(goalId, userId);
+  assertRowsAffected(deletedCount, 'Goal not found');
   return true;
 }
 
@@ -148,9 +145,9 @@ export async function completeGoal(
   goalId: string,
   userId: string
 ): Promise<GoalData | null> {
-  const existing = await goalRepo.findById(goalId);
-  if (!existing || existing.userId !== userId) {
-    return null;
+  const existing = await goalRepo.findById(goalId, userId);
+  if (!existing) {
+    throw new ServiceNotFoundError('Goal not found');
   }
 
   return updateGoal(goalId, userId, { 

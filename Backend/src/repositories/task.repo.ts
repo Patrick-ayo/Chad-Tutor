@@ -96,11 +96,15 @@ export async function createMany(
 
 export async function findById(
   id: string,
+  userId: string,
   tx?: TransactionClient,
 ): Promise<StudyTask | null> {
   const client = tx || prisma;
   return client.studyTask.findUnique({
-    where: { id },
+    where: {
+      id,
+      userId,
+    },
     include: {
       skill: true,
       goal: true,
@@ -162,6 +166,7 @@ export async function findMissedBeforeDate(
 
 export async function updateStatus(
   id: string,
+  userId: string,
   status: TaskStatus,
   extras?: {
     completedAt?: Date;
@@ -172,10 +177,10 @@ export async function updateStatus(
     rescheduleCountIncrement?: number;
   },
   tx?: TransactionClient,
-): Promise<StudyTask> {
+): Promise<number> {
   const client = tx || prisma;
-  return client.studyTask.update({
-    where: { id },
+  const result = await client.studyTask.updateMany({
+    where: { id, userId },
     data: {
       status,
       ...(extras?.completedAt && { completedAt: extras.completedAt }),
@@ -193,12 +198,9 @@ export async function updateStatus(
         rescheduleCount: { increment: extras.rescheduleCountIncrement },
       }),
     },
-    include: {
-      skill: true,
-      goal: true,
-      playlistItem: true,
-    },
   });
+
+  return result.count;
 }
 
 export async function getDailyScheduledMinutes(
@@ -235,19 +237,17 @@ export async function getDailyScheduledMinutes(
 
 export async function updatePriority(
   id: string,
+  userId: string,
   priority: TaskPriority,
   tx?: TransactionClient,
-): Promise<StudyTask> {
+): Promise<number> {
   const client = tx || prisma;
-  return client.studyTask.update({
-    where: { id },
+  const result = await client.studyTask.updateMany({
+    where: { id, userId },
     data: { priority },
-    include: {
-      skill: true,
-      goal: true,
-      playlistItem: true,
-    },
   });
+
+  return result.count;
 }
 
 export async function findByPlaylistOrdered(

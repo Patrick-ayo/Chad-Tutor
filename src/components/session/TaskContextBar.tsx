@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useAuth } from "@clerk/clerk-react";
 import { Clock, Target, Gauge, Star } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,21 +12,23 @@ interface TaskContextBarProps {
 }
 
 export function TaskContextBar({ task, sessionState, nextSessionTitle }: TaskContextBarProps) {
+  const { userId } = useAuth();
+  const importantSessionStorageKey = `user:${userId || "anonymous"}:planner-important-session-ids`;
   const [isImportant, setIsImportant] = useState(false);
 
   useEffect(() => {
     try {
-      const raw = window.localStorage.getItem("planner-important-session-ids");
+      const raw = window.localStorage.getItem(importantSessionStorageKey);
       const parsed = raw ? JSON.parse(raw) : [];
       setIsImportant(Array.isArray(parsed) && parsed.includes(task.id));
     } catch {
       setIsImportant(false);
     }
-  }, [task.id]);
+  }, [task.id, importantSessionStorageKey]);
 
   const toggleImportant = () => {
     try {
-      const raw = window.localStorage.getItem("planner-important-session-ids");
+      const raw = window.localStorage.getItem(importantSessionStorageKey);
       const parsed = raw ? JSON.parse(raw) : [];
       const ids = Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === "string") : [];
 
@@ -33,7 +36,7 @@ export function TaskContextBar({ task, sessionState, nextSessionTitle }: TaskCon
         ? ids.filter((id) => id !== task.id)
         : [...ids, task.id];
 
-      window.localStorage.setItem("planner-important-session-ids", JSON.stringify(updated));
+      window.localStorage.setItem(importantSessionStorageKey, JSON.stringify(updated));
       setIsImportant(updated.includes(task.id));
     } catch {
       // Keep the UI stable even if localStorage is unavailable.

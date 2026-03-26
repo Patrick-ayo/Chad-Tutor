@@ -4,6 +4,7 @@
 
 import { taskRepo } from '../repositories';
 import { submitQuizAttempt } from './quiz.service';
+import { assertRowsAffected, ServiceNotFoundError } from './serviceErrors';
 
 function startOfDay(date: Date): Date {
   const d = new Date(date);
@@ -38,15 +39,16 @@ export async function completeTask(
     };
   }
 ) {
-  const task = await taskRepo.findById(taskId);
-  if (!task || task.userId !== userId) {
-    return null;
-  }
-
-  const updatedTask = await taskRepo.updateStatus(taskId, 'COMPLETED', {
+  const updatedCount = await taskRepo.updateStatus(taskId, userId, 'COMPLETED', {
     completedAt: new Date(),
     completedDurationMinutes: input?.completedDurationMinutes,
   });
+  assertRowsAffected(updatedCount, 'Task not found');
+
+  const updatedTask = await taskRepo.findById(taskId, userId);
+  if (!updatedTask) {
+    throw new ServiceNotFoundError('Task not found');
+  }
 
   let quizAttempt = null;
   if (input?.quiz) {
@@ -64,12 +66,15 @@ export async function completeTask(
 }
 
 export async function markTaskMissed(userId: string, taskId: string, reason?: string) {
-  const task = await taskRepo.findById(taskId);
-  if (!task || task.userId !== userId) {
-    return null;
-  }
-
-  return taskRepo.updateStatus(taskId, 'MISSED', {
+  const updatedCount = await taskRepo.updateStatus(taskId, userId, 'MISSED', {
     rescheduledReason: reason ?? 'Marked missed by user',
   });
+  assertRowsAffected(updatedCount, 'Task not found');
+
+  const updatedTask = await taskRepo.findById(taskId, userId);
+  if (!updatedTask) {
+    throw new ServiceNotFoundError('Task not found');
+  }
+
+  return updatedTask;
 }

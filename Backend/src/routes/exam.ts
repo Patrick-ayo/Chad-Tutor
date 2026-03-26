@@ -7,7 +7,7 @@
 
 import { Router, Request, Response } from 'express';
 import { examService } from '../services';
-import { optionalAuth } from '../middleware';
+import { optionalUser } from '../middleware';
 
 const router = Router();
 
@@ -15,7 +15,7 @@ const router = Router();
  * GET /api/exam/universities?search=NAME
  * Search universities by name
  */
-router.get('/universities', optionalAuth, async (req: Request, res: Response) => {
+router.get('/universities', optionalUser, async (req: Request, res: Response) => {
   const { search } = req.query;
 
   if (!search || typeof search !== 'string') {
@@ -26,7 +26,7 @@ router.get('/universities', optionalAuth, async (req: Request, res: Response) =>
   }
 
   try {
-    const userId = req.auth?.userId;
+    const userId = req.user?.id;
     const result = await examService.searchUniversities(search, userId);
 
     return res.json({
@@ -49,7 +49,7 @@ router.get('/universities', optionalAuth, async (req: Request, res: Response) =>
  * GET /api/exam/courses?university=ID
  * Get courses for a university
  */
-router.get('/courses', optionalAuth, async (req: Request, res: Response) => {
+router.get('/courses', optionalUser, async (req: Request, res: Response) => {
   const { university } = req.query;
 
   if (!university || typeof university !== 'string') {
@@ -60,7 +60,7 @@ router.get('/courses', optionalAuth, async (req: Request, res: Response) => {
   }
 
   try {
-    const userId = req.auth?.userId;
+    const userId = req.user?.id;
     const result = await examService.getCourses(university, userId);
 
     return res.json({
@@ -83,7 +83,7 @@ router.get('/courses', optionalAuth, async (req: Request, res: Response) => {
  * GET /api/exam/semesters?university=ID&course=ID
  * Get semesters for a course
  */
-router.get('/semesters', optionalAuth, async (req: Request, res: Response) => {
+router.get('/semesters', optionalUser, async (req: Request, res: Response) => {
   const { university, course } = req.query;
 
   if (!university || typeof university !== 'string') {
@@ -101,7 +101,7 @@ router.get('/semesters', optionalAuth, async (req: Request, res: Response) => {
   }
 
   try {
-    const userId = req.auth?.userId;
+    const userId = req.user?.id;
     const result = await examService.getSemesters(university, course, userId);
 
     return res.json({
@@ -124,7 +124,7 @@ router.get('/semesters', optionalAuth, async (req: Request, res: Response) => {
  * GET /api/exam/subjects?university=ID&course=ID&semester=ID
  * Get subjects for a semester
  */
-router.get('/subjects', optionalAuth, async (req: Request, res: Response) => {
+router.get('/subjects', optionalUser, async (req: Request, res: Response) => {
   const { university, course, semester } = req.query;
 
   if (!university || typeof university !== 'string') {
@@ -149,7 +149,7 @@ router.get('/subjects', optionalAuth, async (req: Request, res: Response) => {
   }
 
   try {
-    const userId = req.auth?.userId;
+    const userId = req.user?.id;
     const result = await examService.getSubjects(university, course, semester, userId);
 
     return res.json({

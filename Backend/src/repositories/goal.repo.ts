@@ -33,11 +33,15 @@ export interface UpdateGoalData {
  */
 export async function findById(
   id: string,
+  userId: string,
   tx?: TransactionClient
 ): Promise<Goal | null> {
   const client = tx || prisma;
   return client.goal.findUnique({
-    where: { id },
+    where: {
+      id,
+      userId,
+    },
   });
 }
 
@@ -130,14 +134,17 @@ export async function create(
  */
 export async function update(
   id: string,
+  userId: string,
   data: UpdateGoalData,
   tx?: TransactionClient
-): Promise<Goal> {
+): Promise<number> {
   const client = tx || prisma;
-  return client.goal.update({
-    where: { id },
+  const result = await client.goal.updateMany({
+    where: { id, userId },
     data,
   });
+
+  return result.count;
 }
 
 /**
@@ -145,12 +152,15 @@ export async function update(
  */
 export async function remove(
   id: string,
+  userId: string,
   tx?: TransactionClient
-): Promise<Goal> {
+): Promise<number> {
   const client = tx || prisma;
-  return client.goal.delete({
-    where: { id },
+  const result = await client.goal.deleteMany({
+    where: { id, userId },
   });
+
+  return result.count;
 }
 
 /**
@@ -158,14 +168,17 @@ export async function remove(
  */
 export async function addCompletedHours(
   id: string,
+  userId: string,
   hours: number,
   tx?: TransactionClient
-): Promise<Goal> {
+): Promise<number> {
   const client = tx || prisma;
-  return client.goal.update({
-    where: { id },
+  const result = await client.goal.updateMany({
+    where: { id, userId },
     data: {
       completedHours: { increment: hours },
     },
   });
+
+  return result.count;
 }

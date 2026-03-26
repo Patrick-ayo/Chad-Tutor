@@ -6,8 +6,8 @@
  */
 
 import { Router, Request, Response } from 'express';
-import { userService, goalService } from '../services';
-import { requireAuth } from '../middleware';
+import { goalService } from '../services';
+import { asyncHandler, requireUser } from '../middleware';
 
 const router = Router();
 
@@ -15,19 +15,9 @@ const router = Router();
  * GET /api/goals
  * Get all goals for the current user
  */
-router.get('/', requireAuth, async (req: Request, res: Response) => {
+router.get('/', requireUser, async (req: Request, res: Response) => {
   try {
-    const clerkId = req.auth!.userId;
-
-    const user = await userService.getUserByClerkId(clerkId);
-    if (!user) {
-      return res.status(404).json({
-        error: 'Not Found',
-        message: 'User not found',
-      });
-    }
-
-    const goals = await goalService.getUserGoals(user.id);
+    const goals = await goalService.getUserGoals(req.user!.id);
 
     res.json({ goals });
   } catch (error) {
@@ -43,19 +33,9 @@ router.get('/', requireAuth, async (req: Request, res: Response) => {
  * GET /api/goals/active
  * Get active goals for the current user
  */
-router.get('/active', requireAuth, async (req: Request, res: Response) => {
+router.get('/active', requireUser, async (req: Request, res: Response) => {
   try {
-    const clerkId = req.auth!.userId;
-
-    const user = await userService.getUserByClerkId(clerkId);
-    if (!user) {
-      return res.status(404).json({
-        error: 'Not Found',
-        message: 'User not found',
-      });
-    }
-
-    const goals = await goalService.getActiveGoals(user.id);
+    const goals = await goalService.getActiveGoals(req.user!.id);
 
     res.json({ goals });
   } catch (error) {
@@ -71,19 +51,9 @@ router.get('/active', requireAuth, async (req: Request, res: Response) => {
  * GET /api/goals/stats
  * Get goal statistics for the current user
  */
-router.get('/stats', requireAuth, async (req: Request, res: Response) => {
+router.get('/stats', requireUser, async (req: Request, res: Response) => {
   try {
-    const clerkId = req.auth!.userId;
-
-    const user = await userService.getUserByClerkId(clerkId);
-    if (!user) {
-      return res.status(404).json({
-        error: 'Not Found',
-        message: 'User not found',
-      });
-    }
-
-    const stats = await goalService.getGoalStats(user.id);
+    const stats = await goalService.getGoalStats(req.user!.id);
 
     res.json({ stats });
   } catch (error) {
@@ -99,20 +69,11 @@ router.get('/stats', requireAuth, async (req: Request, res: Response) => {
  * GET /api/goals/:id
  * Get a specific goal by ID
  */
-router.get('/:id', requireAuth, async (req: Request, res: Response) => {
+router.get('/:id', requireUser, async (req: Request, res: Response) => {
   try {
-    const clerkId = req.auth!.userId;
     const goalId = req.params.id as string;
 
-    const user = await userService.getUserByClerkId(clerkId);
-    if (!user) {
-      return res.status(404).json({
-        error: 'Not Found',
-        message: 'User not found',
-      });
-    }
-
-    const goal = await goalService.getGoalById(goalId, user.id);
+    const goal = await goalService.getGoalById(goalId, req.user!.id);
 
     if (!goal) {
       return res.status(404).json({
@@ -135,9 +96,8 @@ router.get('/:id', requireAuth, async (req: Request, res: Response) => {
  * POST /api/goals
  * Create a new goal
  */
-router.post('/', requireAuth, async (req: Request, res: Response) => {
+router.post('/', requireUser, async (req: Request, res: Response) => {
   try {
-    const clerkId = req.auth!.userId;
     const { name, description, deadline, totalHours } = req.body;
 
     if (!name || !deadline) {
@@ -147,15 +107,7 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
       });
     }
 
-    const user = await userService.getUserByClerkId(clerkId);
-    if (!user) {
-      return res.status(404).json({
-        error: 'Not Found',
-        message: 'User not found',
-      });
-    }
-
-    const goal = await goalService.createGoal(user.id, clerkId, {
+    const goal = await goalService.createGoal(req.user!.id, req.user!.clerkId, {
       name,
       description,
       deadline: new Date(deadline),
@@ -176,19 +128,9 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
  * PATCH /api/goals/:id
  * Update a goal
  */
-router.patch('/:id', requireAuth, async (req: Request, res: Response) => {
-  try {
-    const clerkId = req.auth!.userId;
+router.patch('/:id', requireUser, asyncHandler(async (req: Request, res: Response) => {
     const goalId = req.params.id as string;
     const updates = req.body;
-
-    const user = await userService.getUserByClerkId(clerkId);
-    if (!user) {
-      return res.status(404).json({
-        error: 'Not Found',
-        message: 'User not found',
-      });
-    }
 
     // Validate and sanitize updates to match UpdateGoalInput
     const validUpdates: {
@@ -211,32 +153,16 @@ router.patch('/:id', requireAuth, async (req: Request, res: Response) => {
       }
     }
 
-    const goal = await goalService.updateGoal(goalId, user.id, validUpdates);
-
-    if (!goal) {
-      return res.status(404).json({
-        error: 'Not Found',
-        message: 'Goal not found',
-      });
-    }
+    const goal = await goalService.updateGoal(goalId, req.user!.id, validUpdates);
 
     res.json({ goal });
-  } catch (error) {
-    console.error('Goal update error:', error);
-    res.status(500).json({
-      error: 'Update Failed',
-      message: 'Failed to update goal',
-    });
-  }
-});
+}));
 
 /**
  * PATCH /api/goals/:id/progress
  * Update goal progress (completed hours)
  */
-router.patch('/:id/progress', requireAuth, async (req: Request, res: Response) => {
-  try {
-    const clerkId = req.auth!.userId;
+router.patch('/:id/progress', requireUser, asyncHandler(async (req: Request, res: Response) => {
     const goalId = req.params.id as string;
     const { completedHours } = req.body;
 
@@ -247,175 +173,57 @@ router.patch('/:id/progress', requireAuth, async (req: Request, res: Response) =
       });
     }
 
-    const user = await userService.getUserByClerkId(clerkId);
-    if (!user) {
-      return res.status(404).json({
-        error: 'Not Found',
-        message: 'User not found',
-      });
-    }
-
-    const goal = await goalService.updateGoalProgress(goalId, user.id, completedHours);
-
-    if (!goal) {
-      return res.status(404).json({
-        error: 'Not Found',
-        message: 'Goal not found',
-      });
-    }
+    const goal = await goalService.updateGoalProgress(goalId, req.user!.id, completedHours);
 
     res.json({ goal });
-  } catch (error) {
-    console.error('Goal progress update error:', error);
-    res.status(500).json({
-      error: 'Update Failed',
-      message: 'Failed to update goal progress',
-    });
-  }
-});
+}));
 
 /**
  * POST /api/goals/:id/complete
  * Mark a goal as complete
  */
-router.post('/:id/complete', requireAuth, async (req: Request, res: Response) => {
-  try {
-    const clerkId = req.auth!.userId;
+router.post('/:id/complete', requireUser, asyncHandler(async (req: Request, res: Response) => {
     const goalId = req.params.id as string;
 
-    const user = await userService.getUserByClerkId(clerkId);
-    if (!user) {
-      return res.status(404).json({
-        error: 'Not Found',
-        message: 'User not found',
-      });
-    }
-
-    const goal = await goalService.completeGoal(goalId, user.id);
-
-    if (!goal) {
-      return res.status(404).json({
-        error: 'Not Found',
-        message: 'Goal not found',
-      });
-    }
+    const goal = await goalService.completeGoal(goalId, req.user!.id);
 
     res.json({ goal, message: 'Goal completed' });
-  } catch (error) {
-    console.error('Goal complete error:', error);
-    res.status(500).json({
-      error: 'Update Failed',
-      message: 'Failed to complete goal',
-    });
-  }
-});
+}));
 
 /**
  * POST /api/goals/:id/archive
  * Archive a goal
  */
-router.post('/:id/archive', requireAuth, async (req: Request, res: Response) => {
-  try {
-    const clerkId = req.auth!.userId;
+router.post('/:id/archive', requireUser, asyncHandler(async (req: Request, res: Response) => {
     const goalId = req.params.id as string;
 
-    const user = await userService.getUserByClerkId(clerkId);
-    if (!user) {
-      return res.status(404).json({
-        error: 'Not Found',
-        message: 'User not found',
-      });
-    }
-
-    const goal = await goalService.archiveGoal(goalId, user.id);
-
-    if (!goal) {
-      return res.status(404).json({
-        error: 'Not Found',
-        message: 'Goal not found',
-      });
-    }
+    const goal = await goalService.archiveGoal(goalId, req.user!.id);
 
     res.json({ goal, message: 'Goal archived' });
-  } catch (error) {
-    console.error('Goal archive error:', error);
-    res.status(500).json({
-      error: 'Update Failed',
-      message: 'Failed to archive goal',
-    });
-  }
-});
+}));
 
 /**
  * POST /api/goals/:id/reactivate
  * Reactivate a goal
  */
-router.post('/:id/reactivate', requireAuth, async (req: Request, res: Response) => {
-  try {
-    const clerkId = req.auth!.userId;
+router.post('/:id/reactivate', requireUser, asyncHandler(async (req: Request, res: Response) => {
     const goalId = req.params.id as string;
 
-    const user = await userService.getUserByClerkId(clerkId);
-    if (!user) {
-      return res.status(404).json({
-        error: 'Not Found',
-        message: 'User not found',
-      });
-    }
-
-    const goal = await goalService.reactivateGoal(goalId, user.id);
-
-    if (!goal) {
-      return res.status(404).json({
-        error: 'Not Found',
-        message: 'Goal not found',
-      });
-    }
+    const goal = await goalService.reactivateGoal(goalId, req.user!.id);
 
     res.json({ goal, message: 'Goal reactivated' });
-  } catch (error) {
-    console.error('Goal reactivate error:', error);
-    res.status(500).json({
-      error: 'Update Failed',
-      message: 'Failed to reactivate goal',
-    });
-  }
-});
+}));
 
 /**
  * DELETE /api/goals/:id
  * Delete a goal
  */
-router.delete('/:id', requireAuth, async (req: Request, res: Response) => {
-  try {
-    const clerkId = req.auth!.userId;
+router.delete('/:id', requireUser, asyncHandler(async (req: Request, res: Response) => {
     const goalId = req.params.id as string;
 
-    const user = await userService.getUserByClerkId(clerkId);
-    if (!user) {
-      return res.status(404).json({
-        error: 'Not Found',
-        message: 'User not found',
-      });
-    }
-
-    const deleted = await goalService.deleteGoal(goalId, user.id);
-
-    if (!deleted) {
-      return res.status(404).json({
-        error: 'Not Found',
-        message: 'Goal not found',
-      });
-    }
+    await goalService.deleteGoal(goalId, req.user!.id);
 
     res.json({ message: 'Goal deleted' });
-  } catch (error) {
-    console.error('Goal delete error:', error);
-    res.status(500).json({
-      error: 'Delete Failed',
-      message: 'Failed to delete goal',
-    });
-  }
-});
+}));
 
 export default router;

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useAuth } from '@clerk/clerk-react';
 import { ChatInterface } from './ChatInterface';
 import { ChatSidebar } from './ChatSidebar';
 import { GoalSelection, type GoalOption } from './GoalSelection';
@@ -247,6 +248,10 @@ function roadmapSummaryForChat(context: UserContext, roadmap: Roadmap, selectedS
 }
 
 export function MrChadPage({ onApplyRoadmapSchedule }: MrChadPageProps) {
+  const { userId } = useAuth();
+  const userStoragePrefix = `user:${userId || 'anonymous'}`;
+  const conversationsStorageKey = `${userStoragePrefix}:mr-chad-conversations`;
+  const metadataStorageKey = `${userStoragePrefix}:mr-chad-metadata`;
   const [conversations, setConversations] = useState<ChatConversation[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -258,8 +263,8 @@ export function MrChadPage({ onApplyRoadmapSchedule }: MrChadPageProps) {
 
   // Load conversations from localStorage on mount
   useEffect(() => {
-    const saved = localStorage.getItem('mr-chad-conversations');
-    const savedMetadata = localStorage.getItem('mr-chad-metadata');
+    const saved = localStorage.getItem(conversationsStorageKey);
+    const savedMetadata = localStorage.getItem(metadataStorageKey);
     if (saved) {
       const parsed = JSON.parse(saved) as ChatConversation[];
       setConversations(parsed);
@@ -274,17 +279,17 @@ export function MrChadPage({ onApplyRoadmapSchedule }: MrChadPageProps) {
         setMetadata({});
       }
     }
-  }, []);
+  }, [conversationsStorageKey, metadataStorageKey]);
 
   // Save conversations to localStorage whenever they change
   useEffect(() => {
-    localStorage.setItem('mr-chad-conversations', JSON.stringify(conversations));
-  }, [conversations]);
+    localStorage.setItem(conversationsStorageKey, JSON.stringify(conversations));
+  }, [conversations, conversationsStorageKey]);
 
   // Save metadata to localStorage whenever it changes
   useEffect(() => {
-    localStorage.setItem('mr-chad-metadata', JSON.stringify(metadata));
-  }, [metadata]);
+    localStorage.setItem(metadataStorageKey, JSON.stringify(metadata));
+  }, [metadata, metadataStorageKey]);
 
   // Rotate catchphrases with vertical fade animation
   useEffect(() => {

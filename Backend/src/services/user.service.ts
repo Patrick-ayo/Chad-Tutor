@@ -25,7 +25,7 @@ export interface UserProfile {
 export async function getOrCreateUser(
   clerkId: string,
   email: string,
-  name: string,
+  name = 'Chad Tutor User',
   timezone?: string
 ): Promise<UserProfile> {
   let user = await userRepo.findByClerkId(clerkId);
@@ -89,17 +89,9 @@ export async function getUserById(userId: string): Promise<UserProfile | null> {
  * Get user by Clerk ID
  */
 export async function getUserByClerkId(clerkId: string): Promise<UserProfile | null> {
-  const user = await userRepo.findByClerkId(clerkId);
-  if (!user) return null;
-
-  return {
-    id: user.id,
-    clerkId: user.clerkId,
-    email: user.email,
-    name: user.name,
-    timezone: user.timezone,
-    createdAt: user.createdAt,
-  };
+  const safeLocal = clerkId.toLowerCase().replace(/[^a-z0-9._-]/g, '-');
+  const fallbackEmail = `${safeLocal}@clerk.local`;
+  return getOrCreateUser(clerkId, fallbackEmail);
 }
 
 // ============================================================================

@@ -5,6 +5,7 @@
  */
 
 import { settingsRepo, taskRepo } from "../repositories";
+import { assertRowsAffected } from "./serviceErrors";
 
 type PriorityLevel = "LOW" | "MEDIUM" | "HIGH" | "URGENT";
 
@@ -201,33 +202,36 @@ export async function rescheduleMissedTasks(
       );
 
       if (bufferSlot) {
-        await taskRepo.updateStatus(task.id, "RESCHEDULED", {
+        const updatedCount = await taskRepo.updateStatus(task.id, userId, "RESCHEDULED", {
           originalScheduledDate:
             task.originalScheduledDate ?? task.scheduledDate,
           scheduledDate: bufferSlot,
           rescheduledReason: "Moved to buffer slot",
           rescheduleCountIncrement: 1,
         });
+        assertRowsAffected(updatedCount, "Task not found");
 
         rescheduledCount++;
         continue;
       }
 
       // still no space → skip
-      await taskRepo.updateStatus(task.id, "SKIPPED", {
+      const updatedCount = await taskRepo.updateStatus(task.id, userId, "SKIPPED", {
         rescheduledReason: "No available slots including buffer",
       });
+      assertRowsAffected(updatedCount, "Task not found");
 
       skippedCount++;
       continue;
     }
 
-    await taskRepo.updateStatus(task.id, "RESCHEDULED", {
+    const updatedCount = await taskRepo.updateStatus(task.id, userId, "RESCHEDULED", {
       originalScheduledDate: task.originalScheduledDate ?? task.scheduledDate,
       scheduledDate: fallback,
       rescheduledReason: "Auto-rescheduled after missed day",
       rescheduleCountIncrement: 1,
     });
+    assertRowsAffected(updatedCount, "Task not found");
 
     rescheduledCount += 1;
   }

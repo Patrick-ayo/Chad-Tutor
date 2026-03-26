@@ -13,6 +13,7 @@ import {
 import { rescheduleMissedTasks } from "./reschedule.service";
 import type { Prisma } from "@prisma/client";
 import type { TaskPriority } from "@prisma/client";
+import { assertRowsAffected, ServiceNotFoundError } from "./serviceErrors";
 
 const PRIORITY_WEIGHT: Record<TaskPriority, number> = {
   URGENT: 4,
@@ -36,11 +37,12 @@ async function shiftLectureChain(
   for (let i = index; i < tasks.length - 1; i++) {
     const next = tasks[i + 1];
 
-    await taskRepo.updateStatus(tasks[i].id, "RESCHEDULED", {
+    const updatedCount = await taskRepo.updateStatus(tasks[i].id, userId, "RESCHEDULED", {
       scheduledDate: next.scheduledDate,
       rescheduledReason: "Lecture chain shift",
       rescheduleCountIncrement: 1,
     });
+    assertRowsAffected(updatedCount, "Task not found");
   }
 
   // last task → move forward
@@ -52,11 +54,12 @@ async function shiftLectureChain(
   );
 
   if (newSlot) {
-    await taskRepo.updateStatus(lastTask.id, "RESCHEDULED", {
+    const updatedCount = await taskRepo.updateStatus(lastTask.id, userId, "RESCHEDULED", {
       scheduledDate: newSlot,
       rescheduledReason: "Lecture chain tail shift",
       rescheduleCountIncrement: 1,
     });
+    assertRowsAffected(updatedCount, "Task not found");
   }
 }
 
@@ -359,8 +362,15 @@ export async function generateScheduleFromPlaylists(
   >;
 
   const playlists: Array<PlaylistWithItems | null> = await Promise.all(
-    input.playlistIds.map((id) => playlistRepo.findById(id)),
+    input.playlistIds.map((id) => playlistRepo.findById(id, userId)),
   );
+  const missingPlaylistIds = input.playlistIds.filter(
+    (_id, idx) => !playlists[idx],
+  );
+
+  if (missingPlaylistIds.length > 0) {
+    throw new ServiceNotFoundError("One or more playlists were not found");
+  }
   const validPlaylists = playlists.reduce<PlaylistWithItems[]>(
     (acc: PlaylistWithItems[], playlist: PlaylistWithItems | null) => {
       if (playlist) {
@@ -486,15 +496,21 @@ export async function resolveMissedTask(
   taskId: string,
   resolutionType: "push-forward" | "compress" | "convert-revision" | "drop",
 ) {
-  const task = await taskRepo.findById(taskId);
-  if (!task || task.userId !== userId) {
-    return null;
+  const task = await taskRepo.findById(taskId, userId);
+  if (!task) {
+    throw new ServiceNotFoundError("Task not found");
   }
 
   if (resolutionType === "drop") {
-    const updated = await taskRepo.updateStatus(taskId, "SKIPPED", {
+    const updatedCount = await taskRepo.updateStatus(taskId, userId, "SKIPPED", {
       rescheduledReason: "Dropped by user",
     });
+    assertRowsAffected(updatedCount, "Task not found");
+
+    const updated = await taskRepo.findById(taskId, userId);
+    if (!updated) {
+      throw new ServiceNotFoundError("Task not found");
+    }
 
     return {
       type: "task-removed",
@@ -502,9 +518,10 @@ export async function resolveMissedTask(
     };
   }
 
-  await taskRepo.updateStatus(taskId, "MISSED", {
+  const updatedCount = await taskRepo.updateStatus(taskId, userId, "MISSED", {
     rescheduledReason: `Resolution requested: ${resolutionType}`,
   });
+  assertRowsAffected(updatedCount, "Task not found");
 
   // 🔥 STAGE 4 LOGIC
   if (resolutionType === "push-forward" && task.playlistId) {
@@ -573,11 +590,12 @@ async function rebalanceSchedule(userId: string) {
 
     if (!nextSlot) continue;
 
-    await taskRepo.updateStatus(task.id, "RESCHEDULED", {
+    const updatedCount = await taskRepo.updateStatus(task.id, userId, "RESCHEDULED", {
       scheduledDate: nextSlot,
       rescheduledReason: "Rebalanced schedule",
       rescheduleCountIncrement: 1,
     });
+    assertRowsAffected(updatedCount, "Task not found");
 
     cursor = nextSlot;
   }

@@ -2,9 +2,8 @@ import { useState } from "react";
 import { Link, useLocation, Outlet } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
-import { LayoutDashboard, Target, BookOpen, Settings, Play, BarChart3, CalendarDays, Compass, Bookmark, StickyNote, Menu, Moon, Sun } from "lucide-react";
+import { LayoutDashboard, Target, BookOpen, Settings, Play, BarChart3, CalendarDays, Compass, Bookmark, StickyNote, Menu } from "lucide-react";
 import { MeditationIcon } from "@/components/icons/MeditationIcon";
-import { useTheme } from "@/contexts/ThemeContext";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -20,8 +19,6 @@ const navItems = [
 export function Layout() {
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const { theme, toggleTheme } = useTheme();
-  const isDarkMode = theme === "dark";
 
   return (
     <div className="min-h-screen bg-background">
@@ -70,14 +67,6 @@ export function Layout() {
           <div className="hidden md:flex items-center gap-4">
             <div className="flex items-center gap-1">
               <Button
-                variant="ghost"
-                size="icon"
-                onClick={toggleTheme}
-                title={isDarkMode ? "Switch to light mode" : "Switch to dark mode"}
-              >
-                {isDarkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-              </Button>
-              <Button
                 variant={location.pathname === "/bookmarks" ? "secondary" : "ghost"}
                 size="icon"
                 asChild
@@ -111,14 +100,6 @@ export function Layout() {
 
           {/* Mobile menu button */}
           <div className="flex md:hidden items-center gap-2">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={toggleTheme}
-              title={isDarkMode ? "Switch to light mode" : "Switch to dark mode"}
-            >
-              {isDarkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-            </Button>
             <Button
               variant={location.pathname === "/bookmarks" ? "secondary" : "ghost"}
               size="icon"
@@ -167,27 +148,6 @@ export function Layout() {
                       </Button>
                     );
                   })}
-                  <div className="border-t my-4" />
-                  <Button
-                    variant="ghost"
-                    className="w-full justify-start gap-3"
-                    onClick={() => {
-                      toggleTheme();
-                      setMobileMenuOpen(false);
-                    }}
-                  >
-                    {theme === 'light' ? (
-                      <>
-                        <Moon className="h-5 w-5" />
-                        Dark Mode
-                      </>
-                    ) : (
-                      <>
-                        <Sun className="h-5 w-5" />
-                        Light Mode
-                      </>
-                    )}
-                  </Button>
                   <div className="border-t my-4" />
                   <Button
                     variant={location.pathname === "/settings" ? "secondary" : "ghost"}

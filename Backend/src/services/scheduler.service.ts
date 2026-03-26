@@ -1,5 +1,6 @@
 import { taskRepo } from "../repositories";
 import type { StudyTask } from "@prisma/client";
+import { assertRowsAffected } from "./serviceErrors";
 
 async function findNextSlotForTask(
   userId: string,
@@ -34,11 +35,12 @@ export async function reassignSlots(userId: string, tasks: StudyTask[]) {
     );
 
     if (nextSlot) {
-      await taskRepo.updateStatus(task.id, "RESCHEDULED", {
+      const updatedCount = await taskRepo.updateStatus(task.id, userId, "RESCHEDULED", {
         scheduledDate: nextSlot,
         rescheduledReason: "Reassigned in scheduler",
         rescheduleCountIncrement: 1,
       });
+      assertRowsAffected(updatedCount, "Task not found");
 
       cursor = nextSlot;
     }

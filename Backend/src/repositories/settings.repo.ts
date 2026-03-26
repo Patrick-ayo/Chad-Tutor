@@ -49,12 +49,14 @@ export async function updateByUserId(
   userId: string,
   data: Prisma.UserSettingsUpdateInput,
   tx?: TransactionClient
-): Promise<UserSettings> {
+): Promise<number> {
   const client = tx || prisma;
-  return client.userSettings.update({
+  const result = await client.userSettings.updateMany({
     where: { userId },
     data,
   });
+
+  return result.count;
 }
 
 /**
@@ -62,14 +64,17 @@ export async function updateByUserId(
  */
 export async function update(
   id: string,
+  userId: string,
   data: Prisma.UserSettingsUpdateInput,
   tx?: TransactionClient
-): Promise<UserSettings> {
+): Promise<number> {
   const client = tx || prisma;
-  return client.userSettings.update({
-    where: { id },
+  const result = await client.userSettings.updateMany({
+    where: { id, userId },
     data,
   });
+
+  return result.count;
 }
 
 /**

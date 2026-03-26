@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { useAuth } from "@clerk/clerk-react";
 import { AlertCircle } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -570,6 +571,8 @@ interface LearningSessionPageProps {
 }
 
 export function LearningSessionPage({ plannerData }: LearningSessionPageProps) {
+  const { userId } = useAuth();
+  const userStoragePrefix = `user:${userId || "anonymous"}`;
   const { taskId } = useParams<{ taskId: string }>();
   const navigate = useNavigate();
 
@@ -754,7 +757,7 @@ export function LearningSessionPage({ plannerData }: LearningSessionPageProps) {
         },
       ]);
 
-      const designatedStorageKey = `session_designated_video_${effectiveTaskId}`;
+      const designatedStorageKey = `${userStoragePrefix}:session_designated_video_${effectiveTaskId}`;
       const savedDesignatedVideoId = localStorage.getItem(designatedStorageKey);
 
       const scheduledDesignated =
@@ -980,10 +983,11 @@ export function LearningSessionPage({ plannerData }: LearningSessionPageProps) {
     setElapsedSeconds(0); // Reset playback
 
     // Save to localStorage for persistence
-    const savedSessionData = localStorage.getItem(`session_${taskId}`);
+    const sessionStorageKey = `${userStoragePrefix}:session_${taskId}`;
+    const savedSessionData = localStorage.getItem(sessionStorageKey);
     const sessionData = savedSessionData ? JSON.parse(savedSessionData) : {};
     sessionData.primaryVideo = newVideoData;
-    localStorage.setItem(`session_${taskId}`, JSON.stringify(sessionData));
+    localStorage.setItem(sessionStorageKey, JSON.stringify(sessionData));
 
     // Log event
     logEvent("primary_video_updated", {
@@ -993,7 +997,7 @@ export function LearningSessionPage({ plannerData }: LearningSessionPageProps) {
     });
 
     console.log("Primary video updated to:", suggestedVideo.title);
-  }, [taskId, designatedVideoId, logEvent]);
+  }, [taskId, designatedVideoId, logEvent, userStoragePrefix]);
 
   const handleConfirmEnd = useCallback(
     async (data: EndSessionData) => {

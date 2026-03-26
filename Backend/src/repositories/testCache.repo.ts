@@ -66,10 +66,14 @@ export async function upsertSkillCache(
   });
 }
 
-export async function deleteExpired(tx?: TransactionClient): Promise<number> {
+export async function deleteExpired(
+  userId: string,
+  tx?: TransactionClient,
+): Promise<number> {
   const client = tx || prisma;
   const result = await client.testResultCache.deleteMany({
     where: {
+      userId,
       expiresAt: { lt: new Date() },
     },
   });

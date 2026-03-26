@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { useAuth } from "@clerk/clerk-react";
 import { Layout } from "@/components/layout";
 import { Dashboard } from "@/components/dashboard";
 import { GoalBuilderPage } from "@/components/goal-builder";
@@ -57,74 +58,91 @@ const EMPTY_PLANNER_DATA: PlannerData = {
   lastReschedule: new Date().toISOString(),
 };
 
-function loadInitialSettings(): UserSettings {
-  try {
-    const raw = window.localStorage.getItem(SETTINGS_STORAGE_KEY);
-    if (!raw) {
+function App() {
+  const { userId } = useAuth();
+  const userStoragePrefix = `user:${userId || "anonymous"}`;
+  const settingsStorageKey = `${userStoragePrefix}:${SETTINGS_STORAGE_KEY}`;
+  const plannerDataStorageKey = `${userStoragePrefix}:${PLANNER_DATA_STORAGE_KEY}`;
+  const sessionSchedulesStorageKey = `${userStoragePrefix}:${SESSION_SCHEDULES_STORAGE_KEY}`;
+  const importantSessionIdsStorageKey = `${userStoragePrefix}:${IMPORTANT_SESSION_IDS_STORAGE_KEY}`;
+
+  const [settings, setSettings] = useState<UserSettings>(() => {
+    try {
+      const raw = window.localStorage.getItem(settingsStorageKey);
+      if (!raw) {
+        return mockSettings;
+      }
+
+      const parsed = JSON.parse(raw) as UserSettings;
+      return parsed?.accessibility && parsed?.availability && parsed?.profile ? parsed : mockSettings;
+    } catch {
       return mockSettings;
     }
+  });
+  const [plannerData, setPlannerData] = useState<PlannerData>(() => {
+    try {
+      const raw = window.localStorage.getItem(plannerDataStorageKey);
+      if (!raw) {
+        return EMPTY_PLANNER_DATA;
+      }
 
-    const parsed = JSON.parse(raw) as UserSettings;
-    if (parsed?.accessibility && parsed?.availability && parsed?.profile) {
-      return parsed;
-    }
-
-    return mockSettings;
-  } catch {
-    return mockSettings;
-  }
-}
-
-function loadInitialPlannerData(): PlannerData {
-  try {
-    const raw = window.localStorage.getItem(PLANNER_DATA_STORAGE_KEY);
-    if (!raw) {
+      const parsed = JSON.parse(raw) as PlannerData;
+      return parsed && Array.isArray(parsed.scheduleDays) && Array.isArray(parsed.missedTasks)
+        ? parsed
+        : EMPTY_PLANNER_DATA;
+    } catch {
       return EMPTY_PLANNER_DATA;
     }
+  });
+  const [sessionSchedules, setSessionSchedules] = useState<SessionScheduleRecord[]>(() => {
+    try {
+      const raw = window.localStorage.getItem(sessionSchedulesStorageKey);
+      if (!raw) {
+        return [];
+      }
 
-    const parsed = JSON.parse(raw) as PlannerData;
-    if (parsed && Array.isArray(parsed.scheduleDays) && Array.isArray(parsed.missedTasks)) {
-      return parsed;
-    }
-
-    return EMPTY_PLANNER_DATA;
-  } catch {
-    return EMPTY_PLANNER_DATA;
-  }
-}
-
-function loadInitialSessionSchedules(): SessionScheduleRecord[] {
-  try {
-    const raw = window.localStorage.getItem(SESSION_SCHEDULES_STORAGE_KEY);
-    if (!raw) {
+      const parsed = JSON.parse(raw) as SessionScheduleRecord[];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
       return [];
     }
+  });
 
-    const parsed = JSON.parse(raw) as SessionScheduleRecord[];
-    if (!Array.isArray(parsed)) {
-      return [];
-    }
+  useEffect(() => {
+    const loadUserScoped = <T,>(key: string, fallback: T): T => {
+      try {
+        const raw = window.localStorage.getItem(key);
+        if (!raw) {
+          return fallback;
+        }
 
-    return parsed.filter(
-      (item) =>
-        Boolean(item) &&
-        (item.source === "goal-builder" || item.source === "mr-chad") &&
-        Boolean(item.roadmap?.id),
+        return JSON.parse(raw) as T;
+      } catch {
+        return fallback;
+      }
+    };
+
+    const loadedSettings = loadUserScoped<UserSettings>(settingsStorageKey, mockSettings);
+    const loadedPlanner = loadUserScoped<PlannerData>(plannerDataStorageKey, EMPTY_PLANNER_DATA);
+    const loadedSchedules = loadUserScoped<SessionScheduleRecord[]>(sessionSchedulesStorageKey, []);
+
+    setSettings(
+      loadedSettings?.accessibility && loadedSettings?.availability && loadedSettings?.profile
+        ? loadedSettings
+        : mockSettings,
     );
-  } catch {
-    return [];
-  }
-}
-
-function App() {
-  const [settings, setSettings] = useState<UserSettings>(() => loadInitialSettings());
-  const [plannerData, setPlannerData] = useState<PlannerData>(() => loadInitialPlannerData());
-  const [sessionSchedules, setSessionSchedules] = useState<SessionScheduleRecord[]>(() => loadInitialSessionSchedules());
+    setPlannerData(
+      loadedPlanner && Array.isArray(loadedPlanner.scheduleDays) && Array.isArray(loadedPlanner.missedTasks)
+        ? loadedPlanner
+        : EMPTY_PLANNER_DATA,
+    );
+    setSessionSchedules(Array.isArray(loadedSchedules) ? loadedSchedules : []);
+  }, [settingsStorageKey, plannerDataStorageKey, sessionSchedulesStorageKey]);
 
   const persistSettings = (nextSettings: UserSettings) => {
     setSettings(nextSettings);
     try {
-      window.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(nextSettings));
+      window.localStorage.setItem(settingsStorageKey, JSON.stringify(nextSettings));
     } catch {
       // Ignore storage failures and keep in-memory settings.
     }
@@ -162,23 +180,23 @@ function App() {
 
   useEffect(() => {
     void refreshPlanner();
-  }, []);
+  }, [userId]);
 
   useEffect(() => {
     try {
-      window.localStorage.setItem(PLANNER_DATA_STORAGE_KEY, JSON.stringify(plannerData));
+      window.localStorage.setItem(plannerDataStorageKey, JSON.stringify(plannerData));
     } catch {
       // Ignore storage failures and continue with in-memory planner state.
     }
-  }, [plannerData]);
+  }, [plannerData, plannerDataStorageKey]);
 
   useEffect(() => {
     try {
-      window.localStorage.setItem(SESSION_SCHEDULES_STORAGE_KEY, JSON.stringify(sessionSchedules));
+      window.localStorage.setItem(sessionSchedulesStorageKey, JSON.stringify(sessionSchedules));
     } catch {
       // Ignore storage failures and continue with in-memory schedule state.
     }
-  }, [sessionSchedules]);
+  }, [sessionSchedules, sessionSchedulesStorageKey]);
 
   const handleSettingsSave = (newSettings: UserSettings) => {
     console.log("Settings saved:", newSettings);
@@ -225,12 +243,12 @@ function App() {
     setSessionSchedules([]);
 
     const keysToRemove = [
-      PLANNER_DATA_STORAGE_KEY,
-      SESSION_SCHEDULES_STORAGE_KEY,
-      IMPORTANT_SESSION_IDS_STORAGE_KEY,
-      "roadmapProgress",
-      "mr-chad-conversations",
-      "mr-chad-metadata",
+      plannerDataStorageKey,
+      sessionSchedulesStorageKey,
+      importantSessionIdsStorageKey,
+      `${userStoragePrefix}:roadmapProgress`,
+      `${userStoragePrefix}:mr-chad-conversations`,
+      `${userStoragePrefix}:mr-chad-metadata`,
     ];
 
     keysToRemove.forEach((key) => {
@@ -238,7 +256,9 @@ function App() {
     });
 
     const dynamicKeys = Object.keys(window.localStorage).filter(
-      (key) => key.startsWith("session_") || key.endsWith("_designatedVideoId"),
+      (key) =>
+        key.startsWith(`${userStoragePrefix}:session_`) ||
+        key.startsWith(`${userStoragePrefix}:session_designated_video_`),
     );
 
     dynamicKeys.forEach((key) => {
@@ -259,6 +279,7 @@ function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<LoginPage />} />
+          <Route path="/sign-up" element={<LoginPage />} />
           {/* Main layout pages */}
           <Route element={<Layout />}>
             <Route path="/dashboard" element={<Dashboard data={mockDashboardData} />} />

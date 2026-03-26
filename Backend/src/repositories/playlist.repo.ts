@@ -76,11 +76,15 @@ export async function createPlaylist(
 
 export async function findById(
   id: string,
+  userId: string,
   tx?: TransactionClient
 ): Promise<LearningPlaylist | null> {
   const client = tx || prisma;
   return client.learningPlaylist.findUnique({
-    where: { id },
+    where: {
+      id,
+      userId,
+    },
     include: {
       items: {
         orderBy: { sequence: 'asc' },

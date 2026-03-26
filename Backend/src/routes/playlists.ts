@@ -3,21 +3,14 @@
  */
 
 import { Router, Request, Response } from 'express';
-import { requireAuth } from '../middleware';
-import { playlistService, userService } from '../services';
+import { requireUser } from '../middleware';
+import { playlistService } from '../services';
 
 const router = Router();
 
-router.get('/', requireAuth, async (req: Request, res: Response) => {
+router.get('/', requireUser, async (req: Request, res: Response) => {
   try {
-    const clerkId = req.auth!.userId;
-    const user = await userService.getUserByClerkId(clerkId);
-
-    if (!user) {
-      return res.status(404).json({ error: 'Not Found', message: 'User not found' });
-    }
-
-    const playlists = await playlistService.getUserPlaylists(user.id);
+    const playlists = await playlistService.getUserPlaylists(req.user!.id);
     return res.json({ playlists });
   } catch (error) {
     console.error('Playlist fetch error:', error);
@@ -25,15 +18,8 @@ router.get('/', requireAuth, async (req: Request, res: Response) => {
   }
 });
 
-router.post('/ingest', requireAuth, async (req: Request, res: Response) => {
+router.post('/ingest', requireUser, async (req: Request, res: Response) => {
   try {
-    const clerkId = req.auth!.userId;
-    const user = await userService.getUserByClerkId(clerkId);
-
-    if (!user) {
-      return res.status(404).json({ error: 'Not Found', message: 'User not found' });
-    }
-
     const { name, description, externalSource, externalId, externalUrl, estimatedHours, thumbnailUrl, items } = req.body as {
       name?: string;
       description?: string;
@@ -61,7 +47,7 @@ router.post('/ingest', requireAuth, async (req: Request, res: Response) => {
       });
     }
 
-    const playlist = await playlistService.ingestPlaylist(user.id, {
+    const playlist = await playlistService.ingestPlaylist(req.user!.id, {
       name,
       description,
       externalSource,
@@ -79,15 +65,8 @@ router.post('/ingest', requireAuth, async (req: Request, res: Response) => {
   }
 });
 
-router.post('/link', requireAuth, async (req: Request, res: Response) => {
+router.post('/link', requireUser, async (req: Request, res: Response) => {
   try {
-    const clerkId = req.auth!.userId;
-    const user = await userService.getUserByClerkId(clerkId);
-
-    if (!user) {
-      return res.status(404).json({ error: 'Not Found', message: 'User not found' });
-    }
-
     const { skillId, playlistId, resourceType, sequence } = req.body as {
       skillId?: string;
       playlistId?: string;
@@ -102,7 +81,7 @@ router.post('/link', requireAuth, async (req: Request, res: Response) => {
       });
     }
 
-    const link = await playlistService.linkPlaylistToSkill(user.id, {
+    const link = await playlistService.linkPlaylistToSkill(req.user!.id, {
       skillId,
       playlistId,
       resourceType,

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "@clerk/clerk-react";
 import { CalendarDays, Settings2, RefreshCw, ListVideo, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -27,6 +28,8 @@ interface PlannerPageProps {
 }
 
 export function PlannerPage({ data, onSync }: PlannerPageProps) {
+  const { userId } = useAuth();
+  const importantSessionStorageKey = `user:${userId || "anonymous"}:planner-important-session-ids`;
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("previous");
   const [isSyncing, setIsSyncing] = useState(false);
@@ -54,7 +57,7 @@ export function PlannerPage({ data, onSync }: PlannerPageProps) {
 
   useEffect(() => {
     try {
-      const raw = window.localStorage.getItem("planner-important-session-ids");
+      const raw = window.localStorage.getItem(importantSessionStorageKey);
       if (!raw) {
         return;
       }
@@ -66,11 +69,11 @@ export function PlannerPage({ data, onSync }: PlannerPageProps) {
     } catch {
       setImportantSessionIds([]);
     }
-  }, []);
+  }, [importantSessionStorageKey]);
 
   useEffect(() => {
-    window.localStorage.setItem("planner-important-session-ids", JSON.stringify(importantSessionIds));
-  }, [importantSessionIds]);
+    window.localStorage.setItem(importantSessionStorageKey, JSON.stringify(importantSessionIds));
+  }, [importantSessionIds, importantSessionStorageKey]);
 
   const handleSync = async () => {
     if (!onSync) {
