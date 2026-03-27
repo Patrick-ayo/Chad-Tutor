@@ -35,7 +35,7 @@ export function SkillSelector({
   onSelectionChange,
   maxHeight = '500px',
   placeholder = 'Search skills, languages, frameworks...',
-  apiBaseUrl = 'http://localhost:3001',
+  apiBaseUrl = '',
 }: SkillSelectorProps) {
   // Search state
   const [searchQuery, setSearchQuery] = useState('');

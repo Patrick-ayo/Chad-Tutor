@@ -34,7 +34,7 @@ export function TopicSelectionStep({ data, onUpdate, onNext, onBack }: TopicSele
       try {
         const subjectIds = data.subjects!.map(s => s.id).join(',');
         const response = await fetch(
-          `http://localhost:3001/api/exam/topics?subjects=${encodeURIComponent(subjectIds)}`
+          `/api/exam/topics?subjects=${encodeURIComponent(subjectIds)}`
         );
         const result = await response.json();
         setTopics(result.topics || []);

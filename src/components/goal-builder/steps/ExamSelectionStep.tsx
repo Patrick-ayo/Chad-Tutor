@@ -37,7 +37,7 @@ export function ExamSelectionStep({ data, onUpdate, onNext, onBack }: ExamSelect
     const fetchUniversities = async () => {
       try {
         const response = await fetch(
-          `http://localhost:3001/api/exam/universities?search=${encodeURIComponent(searchQuery.trim())}`
+          `/api/exam/universities?search=${encodeURIComponent(searchQuery.trim())}`
         );
         const data = await response.json();
         // Backend returns { universities: [...], meta: {...} }
@@ -65,7 +65,7 @@ export function ExamSelectionStep({ data, onUpdate, onNext, onBack }: ExamSelect
     const fetchCourses = async () => {
       try {
         const response = await fetch(
-          `http://localhost:3001/api/exam/courses?university=${encodeURIComponent(selectedUniversity.id)}`
+          `/api/exam/courses?university=${encodeURIComponent(selectedUniversity.id)}`
         );
         const data = await response.json();
         // Backend returns { courses: [...], meta: {...} }
@@ -88,7 +88,7 @@ export function ExamSelectionStep({ data, onUpdate, onNext, onBack }: ExamSelect
     const fetchSemesters = async () => {
       try {
         const response = await fetch(
-          `http://localhost:3001/api/exam/semesters?university=${encodeURIComponent(
+          `/api/exam/semesters?university=${encodeURIComponent(
             selectedUniversity.id
           )}&course=${encodeURIComponent(selectedCourse.id)}`
         );
@@ -113,7 +113,7 @@ export function ExamSelectionStep({ data, onUpdate, onNext, onBack }: ExamSelect
     const fetchSubjects = async () => {
       try {
         const response = await fetch(
-          `http://localhost:3001/api/exam/subjects?university=${encodeURIComponent(
+          `/api/exam/subjects?university=${encodeURIComponent(
             selectedUniversity.id
           )}&course=${encodeURIComponent(selectedCourse.id)}&semester=${encodeURIComponent(
             selectedSemester.id
