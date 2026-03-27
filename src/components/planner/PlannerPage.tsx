@@ -185,14 +185,30 @@ export function PlannerPage({ data, onSync }: PlannerPageProps) {
 
   const hasMissedTasks = data.missedTasks.length > 0;
   const hasBurnoutWarning = data.burnoutSignals.riskLevel !== "low";
-  const todayDate = new Date();
+  
+  // Normalize today to start of day (midnight) for accurate date comparisons
+  const todayDate = (() => {
+    const date = new Date();
+    date.setHours(0, 0, 0, 0);
+    return date;
+  })();
+  
   const today = todayDate.toDateString();
-  const startOfToday = new Date(todayDate.getFullYear(), todayDate.getMonth(), todayDate.getDate());
+  const startOfToday = new Date(todayDate); // Already normalized to start of day
+  
   const todaySchedule = data.scheduleDays.find(
-    (day) => new Date(day.date).toDateString() === today
+    (day) => {
+      const dayDate = new Date(day.date);
+      dayDate.setHours(0, 0, 0, 0);
+      return dayDate.toDateString() === today;
+    }
   );
   const futureScheduleDays = data.scheduleDays
-    .filter((day) => new Date(day.date) > new Date(today) && day.tasks.length > 0)
+    .filter((day) => {
+      const dayDate = new Date(day.date);
+      dayDate.setHours(0, 0, 0, 0);
+      return dayDate > startOfToday && day.tasks.length > 0;
+    })
     .slice(0, 7);
 
   const toggleTodayTaskExpand = (taskId: string) => {

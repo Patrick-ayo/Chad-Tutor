@@ -29,13 +29,23 @@ export function DeadlineStep({ data, estimatedHours, onUpdate, onNext, onBack }:
   const [minutesPerDay, setMinutesPerDay] = useState(data.minutesPerDay ?? 60);
   const [showTimeWarning, setShowTimeWarning] = useState(false);
 
-  const today = new Date();
+  // Normalize today to start of day (00:00:00) for accurate date calculations
+  const today = (() => {
+    const date = new Date();
+    date.setHours(0, 0, 0, 0);
+    return date;
+  })();
+  
   const minDate = addDays(today, 7); // At least a week from now
 
   const feasibilityAnalysis = useMemo(() => {
     if (!targetDate) return null;
 
-    const totalDays = differenceInDays(targetDate, today);
+    // Ensure targetDate is also normalized to start of day for accurate comparison
+    const normalizedTarget = new Date(targetDate);
+    normalizedTarget.setHours(0, 0, 0, 0);
+    
+    const totalDays = differenceInDays(normalizedTarget, today);
     const studyDays = Math.floor((totalDays / 7) * daysPerWeek);
     const totalAvailableMinutes = studyDays * minutesPerDay;
     const requiredMinutes = estimatedHours * 60;
@@ -69,11 +79,15 @@ export function DeadlineStep({ data, estimatedHours, onUpdate, onNext, onBack }:
 
   const handleNext = () => {
     if (targetDate) {
+      // Normalize target date to start of day for consistency
+      const normalizedTarget = new Date(targetDate);
+      normalizedTarget.setHours(0, 0, 0, 0);
+      
       onUpdate({
-        targetDate: targetDate.toISOString(),
+        targetDate: normalizedTarget.toISOString(),
         daysPerWeek,
         minutesPerDay,
-        startDate: today.toISOString(),
+        startDate: today.toISOString(), // today is already normalized to start of day
       });
       onNext();
     }

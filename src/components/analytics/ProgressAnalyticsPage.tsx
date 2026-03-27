@@ -23,9 +23,9 @@ export function ProgressAnalyticsPage() {
   const data = mockAnalyticsData;
 
   return (
-    <div className="container py-6 space-y-8 max-w-7xl">
+    <div className="container py-6 space-y-8 max-w-6xl mx-auto">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+      <div className="flex flex-col items-center gap-4 text-center">
         <div>
           <h1 className="text-2xl font-bold">Progress & Analytics</h1>
           <p className="text-gray-500 text-sm mt-1">
@@ -34,7 +34,7 @@ export function ProgressAnalyticsPage() {
         </div>
 
         {/* Filters */}
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center justify-center gap-3">
           <div className="flex items-center gap-2">
             <Calendar className="h-4 w-4 text-gray-500" />
             <Select value={timeRange} onValueChange={(v) => setTimeRange(v as AnalyticsData["timeRange"])}>
@@ -100,7 +100,6 @@ export function ProgressAnalyticsPage() {
       {/* D. Weakness */}
       <WeaknessSection
         weakConcepts={data.weakConcepts}
-        confidenceMatrix={data.confidenceMatrix}
       />
 
       {/* E. Revision */}

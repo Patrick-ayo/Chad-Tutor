@@ -1,20 +1,15 @@
 import {
-  AlertTriangle,
-  Skull,
   Target,
   ChevronRight,
-  AlertCircle,
   CheckCircle2,
-  HelpCircle,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import type { WeakConcept, ConfidenceMatrixItem } from "@/types/analytics";
+import type { WeakConcept } from "@/types/analytics";
 
 interface WeaknessSectionProps {
   weakConcepts: WeakConcept[];
-  confidenceMatrix: ConfidenceMatrixItem[];
 }
 
 function WeakConceptList({ concepts }: { concepts: WeakConcept[] }) {
@@ -111,137 +106,8 @@ function WeakConceptList({ concepts }: { concepts: WeakConcept[] }) {
   );
 }
 
-function ConfidenceMatrix({ items }: { items: ConfidenceMatrixItem[] }) {
-  // Group by quadrant
-  const quadrants = {
-    "confident-correct": items.filter((i) => i.quadrant === "confident-correct"),
-    "confident-wrong": items.filter((i) => i.quadrant === "confident-wrong"),
-    "unsure-correct": items.filter((i) => i.quadrant === "unsure-correct"),
-    "unsure-wrong": items.filter((i) => i.quadrant === "unsure-wrong"),
-  };
-
-  const QuadrantBox = ({
-    title,
-    items,
-    bgColor,
-    icon: Icon,
-    description,
-    isDangerous = false,
-  }: {
-    title: string;
-    items: ConfidenceMatrixItem[];
-    bgColor: string;
-    icon: typeof CheckCircle2;
-    description: string;
-    isDangerous?: boolean;
-  }) => (
-    <div
-      className={`p-3 rounded-lg border ${bgColor} ${
-        isDangerous && items.length > 0 ? "ring-2 ring-red-500" : ""
-      }`}
-    >
-      <div className="flex items-center gap-2 mb-2">
-        <Icon className="h-4 w-4" />
-        <span className="font-medium text-sm">{title}</span>
-        <Badge variant="outline" className="ml-auto text-xs">
-          {items.length}
-        </Badge>
-      </div>
-      <p className="text-xs text-gray-600 mb-2">{description}</p>
-      
-      {items.length > 0 ? (
-        <div className="space-y-1 max-h-24 overflow-y-auto">
-          {items.slice(0, 5).map((item) => (
-            <div
-              key={item.conceptId}
-              className="text-xs flex justify-between items-center py-1 border-b border-gray-100 last:border-0"
-            >
-              <span className="truncate">{item.conceptName}</span>
-              <span className="text-gray-500 ml-2">
-                {item.competence}%
-              </span>
-            </div>
-          ))}
-          {items.length > 5 && (
-            <p className="text-xs text-gray-500">+{items.length - 5} more</p>
-          )}
-        </div>
-      ) : (
-        <p className="text-xs text-gray-400 italic">None</p>
-      )}
-    </div>
-  );
-
-  return (
-    <Card>
-      <CardHeader className="pb-2">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-base">Confidence vs Competence</CardTitle>
-          {quadrants["confident-wrong"].length > 0 && (
-            <Badge className="bg-red-100 text-red-800">
-              <Skull className="h-3 w-3 mr-1" />
-              {quadrants["confident-wrong"].length} dangerous
-            </Badge>
-          )}
-        </div>
-      </CardHeader>
-      <CardContent>
-        <div className="grid grid-cols-2 gap-3">
-          {/* Top Row: High Confidence */}
-          <QuadrantBox
-            title="Confident + Correct"
-            items={quadrants["confident-correct"]}
-            bgColor="bg-green-50 border-green-200"
-            icon={CheckCircle2}
-            description="Mastered concepts"
-          />
-          <QuadrantBox
-            title="Confident + Wrong"
-            items={quadrants["confident-wrong"]}
-            bgColor="bg-red-50 border-red-200"
-            icon={Skull}
-            description="DANGEROUS — blind spots"
-            isDangerous
-          />
-
-          {/* Bottom Row: Low Confidence */}
-          <QuadrantBox
-            title="Unsure + Correct"
-            items={quadrants["unsure-correct"]}
-            bgColor="bg-blue-50 border-blue-200"
-            icon={HelpCircle}
-            description="Underestimating yourself"
-          />
-          <QuadrantBox
-            title="Unsure + Wrong"
-            items={quadrants["unsure-wrong"]}
-            bgColor="bg-yellow-50 border-yellow-200"
-            icon={AlertTriangle}
-            description="Needs work — you know it"
-          />
-        </div>
-
-        {quadrants["confident-wrong"].length > 0 && (
-          <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
-            <div className="flex items-center gap-2 text-red-800">
-              <AlertCircle className="h-4 w-4" />
-              <span className="font-semibold text-sm">Priority Alert</span>
-            </div>
-            <p className="text-xs text-red-700 mt-1">
-              You have {quadrants["confident-wrong"].length} concepts where you
-              think you're good but you're not. These are the most dangerous
-              gaps — address them first.
-            </p>
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
 export function WeaknessSection({
   weakConcepts,
-  confidenceMatrix,
 }: WeaknessSectionProps) {
   return (
     <section className="space-y-4">
@@ -250,9 +116,8 @@ export function WeaknessSection({
         <p className="text-sm text-gray-500">Where to focus next</p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="max-w-3xl mx-auto">
         <WeakConceptList concepts={weakConcepts} />
-        <ConfidenceMatrix items={confidenceMatrix} />
       </div>
     </section>
   );

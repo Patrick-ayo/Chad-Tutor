@@ -631,7 +631,14 @@ export function LearningSessionPage({ plannerData }: LearningSessionPageProps) {
       let currentScheduledTask: ScheduledTask | undefined;
       let plannerLoaded = false;
 
-      const todayText = new Date().toDateString();
+      // Normalize today's date to start of day (midnight) for accurate comparison
+      const todayDate = (() => {
+        const date = new Date();
+        date.setHours(0, 0, 0, 0);
+        return date;
+      })();
+      const todayText = todayDate.toDateString();
+      
       const routeScheduleDays = plannerData?.scheduleDays ?? [];
       const routePlannerTasks = routeScheduleDays
         .flatMap((day) => day.tasks)
@@ -645,7 +652,11 @@ export function LearningSessionPage({ plannerData }: LearningSessionPageProps) {
         plannerLoaded = true;
         plannerTasks = routePlannerTasks;
         todayTasks = routeScheduleDays
-          .filter((day) => new Date(day.date).toDateString() === todayText)
+          .filter((day) => {
+            const dayDate = new Date(day.date);
+            dayDate.setHours(0, 0, 0, 0);
+            return dayDate.toDateString() === todayText;
+          })
           .flatMap((day) => day.tasks)
           .sort(
             (a, b) =>
@@ -666,7 +677,11 @@ export function LearningSessionPage({ plannerData }: LearningSessionPageProps) {
                 new Date(b.scheduledDate).getTime(),
             );
           todayTasks = planner.scheduleDays
-            .filter((day) => new Date(day.date).toDateString() === todayText)
+            .filter((day) => {
+              const dayDate = new Date(day.date);
+              dayDate.setHours(0, 0, 0, 0);
+              return dayDate.toDateString() === todayText;
+            })
             .flatMap((day) => day.tasks)
             .sort(
               (a, b) =>
