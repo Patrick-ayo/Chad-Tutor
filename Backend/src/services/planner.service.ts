@@ -11,6 +11,11 @@ import {
   withTransaction,
 } from "../repositories";
 import { rescheduleMissedTasks } from "./reschedule.service";
+import {
+  sortTasksByDimension,
+  type SchedulableTask,
+  type TaskDimensionGroup,
+} from "./scheduling.service";
 import type { Prisma } from "@prisma/client";
 import type { TaskPriority } from "@prisma/client";
 import { assertRowsAffected, ServiceNotFoundError } from "./serviceErrors";
@@ -21,6 +26,129 @@ const PRIORITY_WEIGHT: Record<TaskPriority, number> = {
   MEDIUM: 2,
   LOW: 1,
 };
+
+type PlaylistPerformanceProfile = {
+  progress: number;
+  accuracy: number;
+  difficulty: number;
+};
+
+type PlaylistSkillLinkRecord = {
+  playlistId: string;
+  skill: {
+    difficulty: string;
+    userProgress: Array<{
+      progressPercent: number;
+      accuracyRate: number;
+    }>;
+  };
+};
+
+function difficultyToScore(difficulty: string): number {
+  if (difficulty === "EXPERT") {
+    return 5;
+  }
+
+  if (difficulty === "ADVANCED") {
+    return 4;
+  }
+
+  if (difficulty === "INTERMEDIATE") {
+    return 3;
+  }
+
+  return 2;
+}
+
+function buildPlaylistPerformanceMap(
+  links: PlaylistSkillLinkRecord[],
+): Map<string, PlaylistPerformanceProfile> {
+  const profiles = new Map<string, PlaylistPerformanceProfile>();
+
+  for (const link of links) {
+    const progress = link.skill.userProgress[0]?.progressPercent ?? 50;
+    const accuracy = link.skill.userProgress[0]?.accuracyRate ?? 70;
+    const difficulty = difficultyToScore(link.skill.difficulty);
+
+    const existing = profiles.get(link.playlistId);
+    if (!existing) {
+      profiles.set(link.playlistId, {
+        progress,
+        accuracy,
+        difficulty,
+      });
+      continue;
+    }
+
+    profiles.set(link.playlistId, {
+      progress: Math.min(existing.progress, progress),
+      accuracy: Math.min(existing.accuracy, accuracy),
+      difficulty: Math.max(existing.difficulty, difficulty),
+    });
+  }
+
+  return profiles;
+}
+
+function getSyntheticDeadlineOffset(
+  sequence: number,
+  playlistLength: number,
+  planningWindowDays: number,
+): number {
+  const normalizedLength = Math.max(1, playlistLength);
+  const ratio = (sequence + 1) / normalizedLength;
+  return Math.max(1, Math.ceil(ratio * planningWindowDays));
+}
+
+const BASE_GROUP_WEIGHT: Record<TaskDimensionGroup, number> = {
+  deadline: 0.45,
+  time: 0.25,
+  effort: 0.3,
+};
+
+function buildDayTargets(
+  budget: number,
+  queueSizes: Record<TaskDimensionGroup, number>,
+): Record<TaskDimensionGroup, number> {
+  const activeGroups = (Object.keys(queueSizes) as TaskDimensionGroup[]).filter(
+    (group) => queueSizes[group] > 0,
+  );
+
+  if (activeGroups.length === 0) {
+    return {
+      deadline: 0,
+      time: 0,
+      effort: 0,
+    };
+  }
+
+  const activeWeight = activeGroups.reduce(
+    (sum, group) => sum + BASE_GROUP_WEIGHT[group],
+    0,
+  );
+
+  const normalizedWeight: Record<TaskDimensionGroup, number> = {
+    deadline: 0,
+    time: 0,
+    effort: 0,
+  };
+
+  for (const group of activeGroups) {
+    normalizedWeight[group] = BASE_GROUP_WEIGHT[group] / activeWeight;
+  }
+
+  const targets: Record<TaskDimensionGroup, number> = {
+    deadline: Math.floor(budget * normalizedWeight.deadline),
+    time: Math.floor(budget * normalizedWeight.time),
+    effort: Math.floor(budget * normalizedWeight.effort),
+  };
+
+  const assigned = targets.deadline + targets.time + targets.effort;
+  const remainder = Math.max(0, budget - assigned);
+  targets.deadline += remainder;
+
+  return targets;
+}
 
 async function shiftLectureChain(
   userId: string,
@@ -67,16 +195,35 @@ async function findNextAvailableSlotForChain(
   userId: string,
   estimatedMinutes: number,
 ): Promise<Date | null> {
-  const today = new Date();
+  const today = startOfDay(new Date());
+  const windowStart = addDays(today, 1);
+  const windowEnd = endOfDay(addDays(today, 7));
+  const upcomingTasks = await taskRepo.findByUserAndDateRange(
+    userId,
+    windowStart,
+    windowEnd,
+  );
+
+  const scheduledMinutesByDay = new Map<string, number>();
+
+  for (const task of upcomingTasks) {
+    if (
+      task.status !== "SCHEDULED" &&
+      task.status !== "IN_PROGRESS" &&
+      task.status !== "RESCHEDULED"
+    ) {
+      continue;
+    }
+
+    const key = startOfDay(task.scheduledDate).toISOString();
+    const current = scheduledMinutesByDay.get(key) ?? 0;
+    scheduledMinutesByDay.set(key, current + task.estimatedMinutes);
+  }
 
   for (let i = 1; i <= 7; i++) {
-    const candidate = new Date(today);
-    candidate.setDate(candidate.getDate() + i);
-
-    const scheduled = await taskRepo.getDailyScheduledMinutes(
-      userId,
-      candidate,
-    );
+    const candidate = addDays(today, i);
+    const key = startOfDay(candidate).toISOString();
+    const scheduled = scheduledMinutesByDay.get(key) ?? 0;
 
     if (scheduled + estimatedMinutes <= 120) {
       return candidate;
@@ -242,7 +389,10 @@ export async function getPlannerSnapshot(userId: string) {
         priority: toPriorityForUi(task.priority),
         dependencies: [],
         goalId: task.goalId ?? "general",
-        partialProgress: task.status === "IN_PROGRESS" ? 45 : undefined,
+        partialProgress:
+          task.status === "IN_PROGRESS" && typeof task.completedDurationMinutes === "number"
+            ? Math.max(1, Math.min(99, Math.round((task.completedDurationMinutes / Math.max(1, task.estimatedMinutes)) * 100)))
+            : undefined,
       })),
       totalMinutes,
       completedMinutes,
@@ -342,6 +492,7 @@ export async function generateScheduleFromPlaylists(
   input: {
     playlistIds: string[];
     startDate?: string;
+    horizonDays?: number;
   },
 ) {
   const settings = await settingsRepo.findByUserId(userId);
@@ -356,6 +507,14 @@ export async function generateScheduleFromPlaylists(
   const start = startOfDay(
     input.startDate ? new Date(input.startDate) : new Date(),
   );
+  const normalizedHorizonDays =
+    typeof input.horizonDays === "number" && Number.isFinite(input.horizonDays)
+      ? Math.max(1, Math.floor(input.horizonDays))
+      : undefined;
+  const horizonEnd =
+    normalizedHorizonDays !== undefined
+      ? endOfDay(addDays(start, normalizedHorizonDays - 1))
+      : null;
 
   type PlaylistWithItems = NonNullable<
     Awaited<ReturnType<typeof playlistRepo.findById>>
@@ -386,6 +545,149 @@ export async function generateScheduleFromPlaylists(
     return { createdCount: 0 };
   }
 
+  const planningWindowDays = normalizedHorizonDays ?? 14;
+  const linkedSkillRecords = (await playlistRepo.findSkillLinksByPlaylistIds(
+    userId,
+    input.playlistIds,
+  )) as PlaylistSkillLinkRecord[];
+  const playlistPerformanceMap = buildPlaylistPerformanceMap(linkedSkillRecords);
+
+  const toPriorityBySequence = (sequence: number): TaskPriority => {
+    if (sequence <= 1) {
+      return "HIGH";
+    }
+
+    return "MEDIUM";
+  };
+
+  const candidateTasks = validPlaylists.flatMap((playlist) =>
+    playlist.items.map((item) => {
+      const priority = toPriorityBySequence(item.sequence);
+      const performance = playlistPerformanceMap.get(playlist.id) ?? {
+        progress: 50,
+        accuracy: 70,
+        difficulty: 3,
+      };
+      const deadlineOffset = getSyntheticDeadlineOffset(
+        item.sequence,
+        playlist.items.length,
+        planningWindowDays,
+      );
+
+      return {
+        id: `${playlist.id}:${item.id}`,
+        playlistId: playlist.id,
+        playlistItemId: item.id,
+        title: item.title,
+        subject: playlist.name,
+        description: item.description ?? undefined,
+        estimatedMinutes: item.estimatedMinutes ?? 25,
+        priority,
+        deadline: addDays(start, deadlineOffset),
+        progress: performance.progress,
+        accuracy: performance.accuracy,
+        difficulty: performance.difficulty,
+        keyPoints: (item.keyPoints ?? undefined) as
+          | Prisma.InputJsonValue
+          | undefined,
+        learningOutcomes: (item.learningOutcomes ?? undefined) as
+          | Prisma.InputJsonValue
+          | undefined,
+      };
+    }),
+  );
+
+  if (candidateTasks.length === 0) {
+    return { createdCount: 0 };
+  }
+
+  const schedulableTasks: SchedulableTask[] = candidateTasks.map((task) => ({
+    id: task.id,
+    title: task.title,
+    subject: task.subject,
+    durationMinutes: task.estimatedMinutes,
+    priority: task.priority,
+    deadline: task.deadline,
+    progress: task.progress,
+    accuracy: task.accuracy,
+    difficulty: task.difficulty,
+    status: "PENDING",
+  }));
+
+  const dimensionSortedTasks = sortTasksByDimension(schedulableTasks, start);
+  const candidateById = new Map(candidateTasks.map((task) => [task.id, task]));
+  const groupQueues: Record<
+    TaskDimensionGroup,
+    Array<
+      (typeof candidateTasks)[number] & {
+        primaryGroup: TaskDimensionGroup;
+      }
+    >
+  > = {
+    deadline: [],
+    time: [],
+    effort: [],
+  };
+  const groupSummary = {
+    deadline: 0,
+    time: 0,
+    effort: 0,
+  } as Record<TaskDimensionGroup, number>;
+
+  for (const task of dimensionSortedTasks) {
+    const candidate = candidateById.get(task.id);
+    if (candidate) {
+      groupQueues[task.primaryGroup].push({
+        ...candidate,
+        primaryGroup: task.primaryGroup,
+      });
+      groupSummary[task.primaryGroup] += 1;
+    }
+  }
+
+  const getQueueSizes = (): Record<TaskDimensionGroup, number> => ({
+    deadline: groupQueues.deadline.length,
+    time: groupQueues.time.length,
+    effort: groupQueues.effort.length,
+  });
+
+  const remainingQueueItems = () => {
+    const sizes = getQueueSizes();
+    return sizes.deadline + sizes.time + sizes.effort;
+  };
+
+  const dequeueFirstFitting = (
+    group: TaskDimensionGroup,
+    remainingMinutes: number,
+  ): (typeof groupQueues)[TaskDimensionGroup][number] | null => {
+    const queue = groupQueues[group];
+    const index = queue.findIndex(
+      (task) => task.estimatedMinutes <= remainingMinutes,
+    );
+
+    if (index === -1) {
+      return null;
+    }
+
+    const [item] = queue.splice(index, 1);
+    return item ?? null;
+  };
+
+  const dequeueFallback = (
+    remainingMinutes: number,
+  ): (typeof groupQueues)[TaskDimensionGroup][number] | null => {
+    const fallbackOrder: TaskDimensionGroup[] = ["deadline", "effort", "time"];
+
+    for (const group of fallbackOrder) {
+      const task = dequeueFirstFitting(group, remainingMinutes);
+      if (task) {
+        return task;
+      }
+    }
+
+    return null;
+  };
+
   const tasksToCreate: Array<{
     userId: string;
     playlistId: string;
@@ -401,86 +703,118 @@ export async function generateScheduleFromPlaylists(
 
   let cursor = new Date(start);
   let consumedToday = 0;
+  let unscheduledCount = 0;
 
-  for (const playlist of validPlaylists) {
-    for (const item of playlist.items) {
-      const isFirstTask = tasksToCreate.length === 0;
-      const duration = item.estimatedMinutes ?? 25;
+  const isBeyondHorizon = (date: Date): boolean => {
+    if (!horizonEnd) {
+      return false;
+    }
 
-      if (isFirstTask) {
-        const sequencePriority: TaskPriority =
-          item.sequence <= 2 ? "HIGH" : "MEDIUM";
+    return startOfDay(date).getTime() > horizonEnd.getTime();
+  };
 
-        tasksToCreate.push({
-          userId,
-          playlistId: playlist.id,
-          playlistItemId: item.id,
-          title: item.title,
-          description: item.description ?? undefined,
-          scheduledDate: new Date(start),
-          estimatedMinutes: duration,
-          priority: sequencePriority,
-          keyPoints: (item.keyPoints ?? undefined) as
-            | Prisma.InputJsonValue
-            | undefined,
-          learningOutcomes: (item.learningOutcomes ?? undefined) as
-            | Prisma.InputJsonValue
-            | undefined,
-        });
+  while (remainingQueueItems() > 0) {
+    if (isBeyondHorizon(cursor)) {
+      unscheduledCount = remainingQueueItems();
+      break;
+    }
 
-        cursor = new Date(start);
-        consumedToday = duration;
-        continue;
+    let weekday = dayName(cursor);
+    while (!activeDays.includes(weekday)) {
+      cursor = addDays(cursor, 1);
+      consumedToday = 0;
+
+      if (isBeyondHorizon(cursor)) {
+        unscheduledCount = remainingQueueItems();
+        break;
       }
 
-      let weekday = dayName(cursor);
-      while (!activeDays.includes(weekday)) {
-        cursor = addDays(cursor, 1);
-        consumedToday = 0;
-        weekday = dayName(cursor);
-      }
+      weekday = dayName(cursor);
+    }
 
-      const budget = getDailyBudget(dailyMinutes, weekday);
+    if (isBeyondHorizon(cursor)) {
+      break;
+    }
 
-      if (consumedToday + duration > budget) {
-        cursor = addDays(cursor, 1);
-        consumedToday = 0;
+    const budget = getDailyBudget(dailyMinutes, weekday);
+    consumedToday = 0;
+    const dayUsageByGroup: Record<TaskDimensionGroup, number> = {
+      deadline: 0,
+      time: 0,
+      effort: 0,
+    };
+    const queueSizes = getQueueSizes();
+    const targets = buildDayTargets(budget, queueSizes);
+    let scheduledAny = false;
 
-        let nextDay = dayName(cursor);
-        while (!activeDays.includes(nextDay)) {
-          cursor = addDays(cursor, 1);
-          nextDay = dayName(cursor);
+    while (consumedToday < budget) {
+      const remainingMinutes = budget - consumedToday;
+
+      const groupOrder = (Object.keys(targets) as TaskDimensionGroup[]).sort(
+        (a, b) => {
+          const aGap = targets[a] - dayUsageByGroup[a];
+          const bGap = targets[b] - dayUsageByGroup[b];
+          return bGap - aGap;
+        },
+      );
+
+      let selectedTask: (typeof groupQueues)[TaskDimensionGroup][number] | null = null;
+
+      for (const group of groupOrder) {
+        if (groupQueues[group].length === 0) {
+          continue;
+        }
+
+        selectedTask = dequeueFirstFitting(group, remainingMinutes);
+        if (selectedTask) {
+          break;
         }
       }
 
-      const sequencePriority: TaskPriority =
-        item.sequence <= 2 ? "HIGH" : "MEDIUM";
+      if (!selectedTask) {
+        selectedTask = dequeueFallback(remainingMinutes);
+      }
+
+      if (!selectedTask) {
+        break;
+      }
+
       tasksToCreate.push({
         userId,
-        playlistId: playlist.id,
-        playlistItemId: item.id,
-        title: item.title,
-        description: item.description ?? undefined,
+        playlistId: selectedTask.playlistId,
+        playlistItemId: selectedTask.playlistItemId,
+        title: selectedTask.title,
+        description: selectedTask.description,
         scheduledDate: new Date(cursor),
-        estimatedMinutes: duration,
-        priority: sequencePriority,
-        keyPoints: (item.keyPoints ?? undefined) as
-          | Prisma.InputJsonValue
-          | undefined,
-        learningOutcomes: (item.learningOutcomes ?? undefined) as
-          | Prisma.InputJsonValue
-          | undefined,
+        estimatedMinutes: selectedTask.estimatedMinutes,
+        priority: selectedTask.priority,
+        keyPoints: selectedTask.keyPoints,
+        learningOutcomes: selectedTask.learningOutcomes,
       });
 
-      consumedToday += duration;
+      consumedToday += selectedTask.estimatedMinutes;
+      dayUsageByGroup[selectedTask.primaryGroup] += selectedTask.estimatedMinutes;
+      scheduledAny = true;
     }
+
+    if (!scheduledAny) {
+      unscheduledCount = remainingQueueItems();
+      break;
+    }
+
+    cursor = addDays(cursor, 1);
   }
 
   const createdCount = await withTransaction(async (tx) => {
     return taskRepo.createMany(tasksToCreate, tx);
   });
 
-  return { createdCount };
+  return {
+    createdCount,
+    unscheduledCount,
+    horizonDays: normalizedHorizonDays,
+    groupSummary,
+  };
 }
 
 export async function handleScheduleUpdate(userId: string) {
@@ -491,10 +825,26 @@ export async function handleScheduleUpdate(userId: string) {
   // await rebalanceSchedule(userId);
 }
 
-export async function resolveMissedTask(
+export async function recomputeGoalSchedule(userId: string, goalId: string, reason = 'manual') {
+  await handleScheduleUpdate(userId);
+
+  return {
+    goalId,
+    reason,
+    recomputeTriggered: true,
+  };
+}
+
+type MissedResolutionType =
+  | "push-forward"
+  | "compress"
+  | "convert-revision"
+  | "drop";
+
+async function applyMissedTaskResolution(
   userId: string,
   taskId: string,
-  resolutionType: "push-forward" | "compress" | "convert-revision" | "drop",
+  resolutionType: MissedResolutionType,
 ) {
   const task = await taskRepo.findById(taskId, userId);
   if (!task) {
@@ -513,7 +863,7 @@ export async function resolveMissedTask(
     }
 
     return {
-      type: "task-removed",
+      type: "task-removed" as const,
       task: updated,
     };
   }
@@ -523,20 +873,69 @@ export async function resolveMissedTask(
   });
   assertRowsAffected(updatedCount, "Task not found");
 
-  // 🔥 STAGE 4 LOGIC
   if (resolutionType === "push-forward" && task.playlistId) {
     await shiftLectureChain(userId, task.playlistId, task.id);
   }
 
-  // 🔥 use orchestrator instead
+  return {
+    type: "task-moved" as const,
+    taskId,
+    result: { success: true },
+  };
+}
+
+export async function resolveMissedTask(
+  userId: string,
+  taskId: string,
+  resolutionType: MissedResolutionType,
+) {
+  const resolutionResult = await applyMissedTaskResolution(
+    userId,
+    taskId,
+    resolutionType,
+  );
+
   await handleScheduleUpdate(userId);
 
-  const result = { success: true };
+  return resolutionResult;
+}
+
+export async function resolveMissedTasksBatch(
+  userId: string,
+  resolutions: Array<{
+    taskId: string;
+    type: MissedResolutionType;
+  }>,
+) {
+  if (resolutions.length === 0) {
+    return {
+      processed: 0,
+      results: [],
+    };
+  }
+
+  const results: Array<{
+    taskId: string;
+    type: "task-removed" | "task-moved";
+  }> = [];
+
+  for (const resolution of resolutions) {
+    const result = await applyMissedTaskResolution(
+      userId,
+      resolution.taskId,
+      resolution.type,
+    );
+    results.push({
+      taskId: resolution.taskId,
+      type: result.type,
+    });
+  }
+
+  await handleScheduleUpdate(userId);
 
   return {
-    type: "task-moved",
-    taskId,
-    result,
+    processed: results.length,
+    results,
   };
 }
 

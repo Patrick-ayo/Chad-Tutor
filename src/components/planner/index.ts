@@ -1,4 +1,7 @@
 export { PlannerPage } from "./PlannerPage";
+export { DetailedRoadmapView } from "./DetailedRoadmapView";
+export { TopicStatusBar } from "./TopicStatusBar";
+export { LectureSummaryPanel } from "./LectureSummaryPanel";
 export { TimelineView } from "./TimelineView";
 export { MissedTaskResolver } from "./MissedTaskResolver";
 export { WorkloadControl } from "./WorkloadControl";

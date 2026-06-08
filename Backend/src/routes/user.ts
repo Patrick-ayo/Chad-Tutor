@@ -124,6 +124,36 @@ router.patch('/profile', requireUser, async (req: Request, res: Response) => {
   }
 });
 
+router.post('/session/start', requireUser, async (req: Request, res: Response) => {
+  try {
+    await userService.startStudySession(req.user!.id);
+    res.json({ success: true, timestamp: new Date().toISOString() });
+  } catch (error) {
+    console.error('Session start error:', error);
+    res.status(500).json({ error: 'Create Failed', message: 'Failed to start study session' });
+  }
+});
+
+router.post('/session/break/start', requireUser, async (req: Request, res: Response) => {
+  try {
+    await userService.startBreak(req.user!.id);
+    res.json({ success: true, timestamp: new Date().toISOString() });
+  } catch (error) {
+    console.error('Break start error:', error);
+    res.status(500).json({ error: 'Create Failed', message: 'Failed to start break' });
+  }
+});
+
+router.post('/session/break/end', requireUser, async (req: Request, res: Response) => {
+  try {
+    await userService.endBreak(req.user!.id);
+    res.json({ success: true, timestamp: new Date().toISOString() });
+  } catch (error) {
+    console.error('Break end error:', error);
+    res.status(500).json({ error: 'Create Failed', message: 'Failed to end break' });
+  }
+});
+
 // Note: Session tracking routes removed - schema doesn't have session tracking fields
 // If session tracking is needed, a separate Session model should be added to the schema
 

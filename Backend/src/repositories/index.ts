@@ -31,5 +31,6 @@ export * as contentUsageRepo from './contentUsage.repo';
 // Session planner repositories
 export * as taskRepo from './task.repo';
 export * as playlistRepo from './playlist.repo';
+export * as skillRepo from './skill.repo';
 export * as quizRepo from './quiz.repo';
 export * as testCacheRepo from './testCache.repo';

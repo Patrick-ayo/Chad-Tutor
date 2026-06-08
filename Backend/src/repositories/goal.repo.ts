@@ -26,6 +26,7 @@ export interface UpdateGoalData {
   completedHours?: number;
   status?: GoalStatus;
   milestones?: object[];
+  detailedRoadmap?: Prisma.InputJsonValue;
 }
 
 /**

@@ -26,6 +26,33 @@ export async function getTasksForRange(userId: string, startDate: Date, endDate:
   return taskRepo.findByUserAndDateRange(userId, startOfDay(startDate), endOfDay(endDate));
 }
 
+export async function updateTaskProgress(
+  userId: string,
+  taskId: string,
+  watchedMinutes: number,
+  percentComplete: number,
+) {
+  const existingTask = await taskRepo.findById(taskId, userId);
+  assertRowsAffected(existingTask ? 1 : 0, 'Task not found');
+
+  const completedDurationMinutes = Math.max(0, Math.floor(watchedMinutes));
+  const updatedCount = await taskRepo.updateStatus(taskId, userId, 'IN_PROGRESS', {
+    completedDurationMinutes,
+  });
+  assertRowsAffected(updatedCount, 'Task not found');
+
+  const updatedTask = await taskRepo.findById(taskId, userId);
+  if (!updatedTask) {
+    throw new ServiceNotFoundError('Task not found');
+  }
+
+  return {
+    task: updatedTask,
+    percentComplete: Math.max(0, Math.min(100, percentComplete)),
+    bufferCreditMinutes: Math.max(0, completedDurationMinutes - updatedTask.estimatedMinutes),
+  };
+}
+
 export async function completeTask(
   userId: string,
   taskId: string,

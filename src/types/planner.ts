@@ -1,6 +1,6 @@
 // Planner/Rescheduler Types - Absorbing disruption without destroying the plan
 
-export type TaskStatus = "pending" | "in-progress" | "completed" | "overdue" | "blocked";
+export type TaskStatus = "pending" | "in-progress" | "completed" | "overdue" | "blocked" | "skipped";
 export type WorkloadIntensity = "light" | "normal" | "aggressive";
 export type RescheduleReason = 
   | "missed-task"
@@ -15,6 +15,22 @@ export type MissedTaskResolutionType =
   | "compress"
   | "convert-revision"
   | "drop";
+
+export type TaskType = "learn" | "practice" | "quiz" | "revision";
+
+export type Weekday =
+  | "monday"
+  | "tuesday"
+  | "wednesday"
+  | "thursday"
+  | "friday"
+  | "saturday"
+  | "sunday";
+
+export interface Availability {
+  activeDays: Weekday[];
+  minutesPerDay: Record<Weekday, number>;
+}
 
 export interface MissedTaskResolution {
   type: MissedTaskResolutionType;
@@ -33,20 +49,79 @@ export interface RescheduleTrigger {
 export interface ScheduledTask {
   id: string;
   title: string;
-  type: "learn" | "practice" | "revision";
+  type: "learn" | "practice" | "quiz" | "revision";
+  taskType?: TaskType;
+  taskId?: string;
+  topicId?: string;
+  subtopicId?: string;
   scheduledDate: string;
+  deadlineDate?: Date;
+  rescheduledDate?: Date;
+  missedOn?: Date;
+  resolutionType?: MissedTaskResolutionType;
+  completedDate?: Date;
   videoId?: string;
   videoUrl?: string;
   estimatedMinutes: number;
+  originalEstimatedMinutes?: number;
   actualMinutes?: number;
   keyPoints?: string[];
   learningOutcomes?: string[];
   status: TaskStatus;
   priority: "high" | "medium" | "low";
   dependencies: string[];
+  dependsOn?: string[];
+  rescheduleCount?: number;
+  burnRate?: number;
+  subtopicClusterId?: string;
+  topicWeight?: number;
+  notes?: string;
   goalId: string;
   partialProgress?: number; // 0-100 for partial tasks
   blockedReason?: string;
+}
+
+export interface TopicQueue {
+  topicId: string;
+  deadlineDate: Date;
+  tasks: ScheduledTask[];
+  totalMinutes: number;
+  remainingMinutes: number;
+  burnRate?: number;
+  topicWeight?: number;
+  status?: "on-track" | "at-risk";
+}
+
+export interface BufferPoolEntry {
+  date: Date;
+  minutes: number;
+}
+
+export interface BufferPool {
+  topicId: string;
+  accumulatedMinutes: number;
+  entries: BufferPoolEntry[];
+}
+
+export interface SuggestedAction {
+  type: "increase-budget" | "extend-deadline" | "drop-low-priority";
+  label: string;
+  details: string;
+}
+
+export interface ScheduleWarning {
+  topicId: string;
+  severity: "low" | "medium" | "high";
+  code: "AT_RISK" | "BUFFER_EXHAUSTED" | "DEADLINE_BREACH" | "GLOBAL_REBALANCE_REQUIRED";
+  message: string;
+  suggestedActions: SuggestedAction[];
+}
+
+export interface RescheduleResult {
+  updatedTasks: ScheduledTask[];
+  warnings: ScheduleWarning[];
+  appliedStrategy: "absorb" | "push_forward" | "global_rebalance";
+  suggestedActions?: SuggestedAction[];
 }
 
 // Day in timeline
@@ -134,11 +209,116 @@ export interface WorkloadStats {
   bufferUsage: { light: string; normal: string; aggressive: string };
 }
 
+export type TopicStatusState = 'on_track' | 'at_risk' | 'behind';
+
+export interface TopicStatus {
+  topicId: string;
+  burnRate: number;
+  remainingMinutes: number;
+  remainingDays: number;
+  status: TopicStatusState;
+}
+
 // Current load info
 export interface CurrentLoad {
   daily: number;
   weekly: number;
   maxRecommended: number;
+}
+
+export interface SessionVideo {
+  id: string;
+  title: string;
+  channelName?: string;
+  channelId?: string;
+  durationSeconds: number;
+  url?: string;
+  topicName?: string;
+  subtopicName?: string;
+  playlistId?: string;
+  playlistTitle?: string;
+}
+
+export type SessionPhase = "watch" | "practice" | "quiz";
+
+export interface MiniPractice {
+  id: string;
+  title: string;
+  prompt: string;
+  estimatedMinutes: number;
+  format: "recall" | "worked-example" | "timed-drill";
+  checkpoints: string[];
+}
+
+export interface SessionPhaseBlock {
+  id: string;
+  phase: SessionPhase;
+  title: string;
+  description: string;
+  estimatedMinutes: number;
+  videoIds?: string[];
+  practice?: MiniPractice;
+  quizPrompt?: string;
+}
+
+export interface RoadmapSession {
+  id: string;
+  dayNumber: number;
+  label: string;
+  title: string;
+  topicName: string;
+  subtopicName?: string;
+  clusterId: string;
+  videos: SessionVideo[];
+  totalMinutes: number;
+  phases: SessionPhaseBlock[];
+  keyOutcome: string;
+  revisitNotes: string[];
+}
+
+export interface RoadmapDay {
+  dayNumber: number;
+  label: string;
+  title: string;
+  summary: string;
+  focus: string;
+  sessions: RoadmapSession[];
+  totalMinutes: number;
+}
+
+export interface DetailedRoadmap {
+  id: string;
+  goalId?: string;
+  title: string;
+  overview: string;
+  days: RoadmapDay[];
+  totalDays: number;
+  totalMinutes: number;
+  createdAt: string;
+  source: "groq" | "gemini" | "hybrid" | "fallback";
+  availability: {
+    activeDays: Weekday[];
+    minutesPerDay: Record<Weekday, number>;
+  };
+  metadata?: Record<string, unknown>;
+}
+
+export interface DetailedRoadmapGenerationRequest {
+  goalId?: string;
+  goalName: string;
+  topicName: string;
+  playlistIds?: string[];
+  videos?: SessionVideo[];
+  startDate?: string;
+}
+
+export interface DetailedRoadmapGenerationResult {
+  roadmap: DetailedRoadmap;
+  planner: {
+    created: number;
+    scheduled: number;
+    source: DetailedRoadmap["source"];
+  };
 }
 
 // Planner state
@@ -162,4 +342,15 @@ export interface PlannerData {
   
   // Last reschedule
   lastReschedule: string;
+}
+
+export interface GenerateScheduleResult {
+  createdCount: number;
+  unscheduledCount?: number;
+  horizonDays?: number;
+  groupSummary?: {
+    deadline: number;
+    time: number;
+    effort: number;
+  };
 }

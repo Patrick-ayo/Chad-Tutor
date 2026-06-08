@@ -15,14 +15,18 @@ interface VideoPreferencesStepProps {
 }
 
 export function VideoPreferencesStep({ data, onUpdate, onNext, onBack }: VideoPreferencesStepProps) {
-  const [preferences, setPreferences] = useState<VideoPreferences>(
-    data.videoPreferences || {
-      sourceType: "mixed",
-      sortBy: "relevance",
-      includeOneShot: false,
-      preferredLanguage: "en",
-    }
-  );
+  const defaultPreferences: VideoPreferences = {
+    contentTier: "free",
+    sourceType: "mixed",
+    sortBy: "relevance",
+    includeOneShot: false,
+    preferredLanguage: "en",
+  };
+
+  const [preferences, setPreferences] = useState<VideoPreferences>({
+    ...defaultPreferences,
+    ...(data.videoPreferences || {}),
+  });
 
   const handleNext = () => {
     onUpdate({
@@ -43,21 +47,63 @@ export function VideoPreferencesStep({ data, onUpdate, onNext, onBack }: VideoPr
     <div className="space-y-6">
       {/* Header */}
       <div className="text-center">
-        <h2 className="text-2xl font-bold">Video Preferences</h2>
+        <h2 className="text-2xl font-bold">Course, Library & Video Preferences</h2>
         <p className="text-muted-foreground mt-2">
-          Tell us how you'd like your study videos to be organized
+          Choose the course tier first, then pick the library style for YouTube videos.
         </p>
       </div>
+
+      {/* Course Tier */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <Video className="h-5 w-5" />
+            Course Tier
+          </CardTitle>
+          <CardDescription>
+            Start by choosing whether you want free resources or a paid-course style plan.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <RadioGroup
+            value={preferences.contentTier}
+            onValueChange={(value) =>
+              updatePreference("contentTier", value as VideoPreferences["contentTier"])
+            }
+            className="grid grid-cols-2 gap-3"
+          >
+            <div className="flex items-center space-x-3 p-3 border rounded-lg hover:bg-accent cursor-pointer">
+              <RadioGroupItem value="free" id="free-course" />
+              <Label htmlFor="free-course" className="flex-1 cursor-pointer">
+                <span className="font-medium">Free Course</span>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Free YouTube lessons, tutorials, and open playlists
+                </p>
+              </Label>
+            </div>
+
+            <div className="flex items-center space-x-3 p-3 border rounded-lg hover:bg-accent cursor-pointer">
+              <RadioGroupItem value="paid" id="paid-course" />
+              <Label htmlFor="paid-course" className="flex-1 cursor-pointer">
+                <span className="font-medium">Paid Course</span>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Longer, more complete course-style videos and playlists
+                </p>
+              </Label>
+            </div>
+          </RadioGroup>
+        </CardContent>
+      </Card>
 
       {/* Source Type */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-lg">
             <Video className="h-5 w-5" />
-            Video Source
+            Library Style
           </CardTitle>
           <CardDescription>
-            How should we organize your learning content?
+            How should we organize the library of videos you will study?
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -73,7 +119,7 @@ export function VideoPreferencesStep({ data, onUpdate, onNext, onBack }: VideoPr
               <Label htmlFor="single-playlist" className="flex-1 cursor-pointer">
                 <div className="flex items-center gap-2">
                   <ListVideo className="h-4 w-4 text-primary" />
-                  <span className="font-medium">Single Playlist</span>
+                  <span className="font-medium">Single Playlist Library</span>
                 </div>
                 <p className="text-sm text-muted-foreground mt-1">
                   All videos from one complete course/playlist for consistency
@@ -86,7 +132,7 @@ export function VideoPreferencesStep({ data, onUpdate, onNext, onBack }: VideoPr
               <Label htmlFor="mixed" className="flex-1 cursor-pointer">
                 <div className="flex items-center gap-2">
                   <Shuffle className="h-4 w-4 text-primary" />
-                  <span className="font-medium">Mixed Sources</span>
+                  <span className="font-medium">Mixed Library</span>
                 </div>
                 <p className="text-sm text-muted-foreground mt-1">
                   Best videos from multiple channels for each topic
@@ -185,7 +231,10 @@ export function VideoPreferencesStep({ data, onUpdate, onNext, onBack }: VideoPr
             <div>
               <p className="font-medium">Your Selection</p>
               <p className="text-sm text-muted-foreground mt-1">
-                We'll find{" "}
+                <span className="text-primary font-medium">
+                  {preferences.contentTier === "paid" ? "Paid course" : "Free course"}
+                </span>{" "}
+                with{" "}
                 <span className="text-primary font-medium">
                   {preferences.sourceType === "single-playlist"
                     ? "a complete playlist"

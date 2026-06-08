@@ -213,6 +213,7 @@ model Goal {
   status         GoalStatus @default(ACTIVE)
   
   milestones Json[] @default([])
+  detailedRoadmap Json?
   
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -766,10 +767,32 @@ model StudyTask {
 
   @@index([userId, scheduledDate, status])
   @@index([userId, status])
+  @@index([userId, status, scheduledDate])
+  @@index([userId, priority, scheduledDate])
   @@index([priority, status])
   @@index([skillId])
   @@index([goalId])
   @@index([playlistId])
+  @@index([playlistId, scheduledDate])
+}
+
+model LectureSummary {
+  id String @id @default(cuid())
+
+  videoId String
+  taskId  String?
+
+  transcriptSummary String?
+  topicOverview     String?
+  expertInsight     String?
+  quizQuestions     Json?
+
+  rawTranscript String?
+
+  generatedAt DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([videoId])
 }
 
 model LearningPlaylist {

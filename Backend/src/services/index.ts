@@ -27,3 +27,5 @@ export * as taskService from './task.service';
 export * as playlistService from './playlist.service';
 export * as quizService from './quiz.service';
 export * as rescheduleService from './reschedule.service';
+export * as transcriptService from './transcript.service';
+export * as lectureSummaryService from './lectureSummary.service';

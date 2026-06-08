@@ -16,18 +16,42 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { ingestPlaylist, fetchPlaylists, generateScheduleFromPlaylists, resolveMissedTask } from "@/lib/plannerApi";
+import {
+  ingestPlaylist,
+  fetchPlaylists,
+  generateScheduleFromPlaylists,
+  resolveMissedTask,
+  resolveMissedTasksMultiTopic,
+  recomputeSchedule,
+  fetchTopicStatuses,
+} from "@/lib/plannerApi";
+import type { Roadmap } from "@/types/goal";
 import type {
   PlannerData,
+  SuggestedAction,
   ScheduledTask,
+  TopicStatus,
 } from "@/types/planner";
+import type { SessionScheduleSource } from "@/utils/sessionGoalPlanner";
+import { SuggestedActionsModal } from "@/components/planner/SuggestedActionsModal";
+import { TopicStatusBar } from "@/components/planner/TopicStatusBar";
+
+interface SessionScheduleRecord {
+  source: SessionScheduleSource;
+  roadmap: Roadmap;
+  startDate?: string;
+  permissionGranted?: boolean;
+  approvedAt?: string;
+}
 
 interface PlannerPageProps {
   data: PlannerData;
   onSync?: () => Promise<void> | void;
+  sessionSchedules?: SessionScheduleRecord[];
+  onSchedulePermissionChange?: (source: SessionScheduleSource, roadmapId: string, permissionGranted: boolean) => void;
 }
 
-export function PlannerPage({ data, onSync }: PlannerPageProps) {
+export function PlannerPage({ data, onSync, sessionSchedules = [], onSchedulePermissionChange }: PlannerPageProps) {
   const { userId } = useAuth();
   const importantSessionStorageKey = `user:${userId || "anonymous"}:planner-important-session-ids`;
   const navigate = useNavigate();
@@ -54,6 +78,33 @@ export function PlannerPage({ data, onSync }: PlannerPageProps) {
   const [selectedRescheduleTask, setSelectedRescheduleTask] = useState<ScheduledTask | null>(null);
   const [selectedRescheduleDate, setSelectedRescheduleDate] = useState<string | null>(null);
   const [isRescheduling, setIsRescheduling] = useState(false);
+  const [horizonDaysInput, setHorizonDaysInput] = useState("14");
+  const [isResolvingAllMissed, setIsResolvingAllMissed] = useState(false);
+  const [suggestedActions, setSuggestedActions] = useState<SuggestedAction[]>([]);
+  const [isSuggestedActionsOpen, setIsSuggestedActionsOpen] = useState(false);
+  const [topicStatuses, setTopicStatuses] = useState<TopicStatus[]>([]);
+  const currentGoalIds = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          data.scheduleDays
+            .flatMap((day) => day.tasks.map((task) => task.goalId))
+            .concat(data.missedTasks.map((task) => task.goalId))
+            .filter((goalId): goalId is string => typeof goalId === "string" && goalId.trim().length > 0),
+        ),
+      ),
+    [data.scheduleDays, data.missedTasks],
+  );
+
+  const approvedSchedules = useMemo(
+    () => sessionSchedules.filter((record) => record.permissionGranted !== false),
+    [sessionSchedules],
+  );
+
+  const pendingSchedules = useMemo(
+    () => sessionSchedules.filter((record) => record.permissionGranted === false),
+    [sessionSchedules],
+  );
 
   useEffect(() => {
     try {
@@ -75,6 +126,51 @@ export function PlannerPage({ data, onSync }: PlannerPageProps) {
     window.localStorage.setItem(importantSessionStorageKey, JSON.stringify(importantSessionIds));
   }, [importantSessionIds, importantSessionStorageKey]);
 
+  useEffect(() => {
+    const handleSuggestedActions = (event: Event) => {
+      const detail = (event as CustomEvent<{ source: string; actions: SuggestedAction[] }>).detail;
+
+      if (!detail?.actions?.length) {
+        return;
+      }
+
+      setSuggestedActions(detail.actions);
+      setIsSuggestedActionsOpen(true);
+    };
+
+    window.addEventListener("planner:suggested-actions", handleSuggestedActions);
+
+    return () => {
+      window.removeEventListener("planner:suggested-actions", handleSuggestedActions);
+    };
+  }, []);
+
+  useEffect(() => {
+    let isActive = true;
+
+    const refreshTopicStatuses = async () => {
+      const topics = await fetchTopicStatuses();
+      if (isActive) {
+        setTopicStatuses(topics);
+      }
+    };
+
+    // TOPIC STATUS REFRESH: initial mount
+    void refreshTopicStatuses();
+
+    const handleTopicStatusRefresh = () => {
+      // TOPIC STATUS REFRESH: planner event
+      void refreshTopicStatuses();
+    };
+
+    window.addEventListener("planner:topic-status-refresh", handleTopicStatusRefresh);
+
+    return () => {
+      isActive = false;
+      window.removeEventListener("planner:topic-status-refresh", handleTopicStatusRefresh);
+    };
+  }, []);
+
   const handleSync = async () => {
     if (!onSync) {
       return;
@@ -92,6 +188,26 @@ export function PlannerPage({ data, onSync }: PlannerPageProps) {
     } finally {
       setIsSyncing(false);
     }
+  };
+
+  const formatScheduleSource = (source: SessionScheduleSource) => {
+    if (source === "goal-builder") {
+      return "Goal Builder";
+    }
+
+    return "Mr Chad";
+  };
+
+  const formatScheduleStart = (startDate?: string) => {
+    if (!startDate) {
+      return "Starts now";
+    }
+
+    return new Date(startDate).toLocaleDateString("en-US", {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+    });
   };
 
   const parsePlaylistItems = () => {
@@ -153,6 +269,11 @@ export function PlannerPage({ data, onSync }: PlannerPageProps) {
       setPlaylistName("");
       setPlaylistUrl("");
       setPlaylistItemsInput("");
+
+      // RECOMPUTE TRIGGER: playlist-added — calls /api/planner/recompute
+      currentGoalIds.forEach((goalId) => {
+        void recomputeSchedule(goalId, "playlist-added");
+      });
     } catch (error) {
       setPlannerError(error instanceof Error ? error.message : "Failed to import playlist");
     } finally {
@@ -171,8 +292,33 @@ export function PlannerPage({ data, onSync }: PlannerPageProps) {
     setIsGeneratingSchedule(true);
 
     try {
-      const result = await generateScheduleFromPlaylists(playlistIds);
-      setPlannerMessage(`Schedule generated with ${result.createdCount} planned tasks.`);
+      const parsedHorizon = Number(horizonDaysInput);
+      const horizonDays =
+        Number.isFinite(parsedHorizon) && parsedHorizon > 0
+          ? Math.floor(parsedHorizon)
+          : undefined;
+
+      const result = await generateScheduleFromPlaylists(
+        playlistIds,
+        undefined,
+        horizonDays,
+      );
+      if ((result.unscheduledCount ?? 0) > 0) {
+        const horizonText = result.horizonDays
+          ? ` within ${result.horizonDays} day horizon`
+          : "";
+        const groupText = result.groupSummary
+          ? ` Split: deadline ${result.groupSummary.deadline}, time ${result.groupSummary.time}, effort ${result.groupSummary.effort}.`
+          : "";
+        setPlannerMessage(
+          `Schedule generated with ${result.createdCount} planned tasks${horizonText}. ${result.unscheduledCount} tasks could not be scheduled.${groupText}`,
+        );
+      } else {
+        const groupText = result.groupSummary
+          ? ` Split: deadline ${result.groupSummary.deadline}, time ${result.groupSummary.time}, effort ${result.groupSummary.effort}.`
+          : "";
+        setPlannerMessage(`Schedule generated with ${result.createdCount} planned tasks.${groupText}`);
+      }
       if (onSync) {
         await onSync();
       }
@@ -180,6 +326,32 @@ export function PlannerPage({ data, onSync }: PlannerPageProps) {
       setPlannerError(error instanceof Error ? error.message : "Failed to generate schedule");
     } finally {
       setIsGeneratingSchedule(false);
+    }
+  };
+
+  const handleResolveAllMissed = async () => {
+    if (data.missedTasks.length === 0) {
+      return;
+    }
+
+    setPlannerError(null);
+    setPlannerMessage(null);
+    setIsResolvingAllMissed(true);
+
+    try {
+      const result = await resolveMissedTasksMultiTopic(
+        data.missedTasks.map((task) => task.id),
+      );
+
+      setPlannerMessage(`Resolved ${result.updatedTasks.length} missed task${result.updatedTasks.length > 1 ? "s" : ""}.`);
+
+      if (onSync) {
+        await onSync();
+      }
+    } catch (error) {
+      setPlannerError(error instanceof Error ? error.message : "Failed to resolve missed tasks");
+    } finally {
+      setIsResolvingAllMissed(false);
     }
   };
 
@@ -278,6 +450,20 @@ export function PlannerPage({ data, onSync }: PlannerPageProps) {
       )
       .sort((a, b) => b.sortDate - a.sortDate);
   }, [data.scheduleDays]);
+
+  const handleConfirmSuggestedAction = (action: SuggestedAction) => {
+    setSuggestedActions((current) => {
+      const next = current.filter((item) => item.type !== action.type || item.label !== action.label);
+
+      if (next.length === 0) {
+        setIsSuggestedActionsOpen(false);
+      }
+
+      return next;
+    });
+
+    setPlannerMessage(`Confirmed: ${action.label}.`);
+  };
 
   const previousSessions = useMemo(() => {
     const minMinutes = previousMinMinutes ? Number(previousMinMinutes) : undefined;
@@ -427,7 +613,7 @@ export function PlannerPage({ data, onSync }: PlannerPageProps) {
     );
   };
 
-  const getAssessmentPlan = (taskType: "learn" | "practice" | "revision") => {
+  const getAssessmentPlan = (taskType: "learn" | "practice" | "quiz" | "revision") => {
     if (taskType === "practice") {
       return {
         quizType: "Timed problem set",
@@ -471,6 +657,13 @@ export function PlannerPage({ data, onSync }: PlannerPageProps) {
 
   return (
     <div className="py-6 px-4 md:px-6 max-w-5xl mx-auto space-y-6">
+      <SuggestedActionsModal
+        open={isSuggestedActionsOpen}
+        onOpenChange={setIsSuggestedActionsOpen}
+        actions={suggestedActions}
+        sourceLabel="planner"
+        onConfirmAction={handleConfirmSuggestedAction}
+      />
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -498,14 +691,26 @@ export function PlannerPage({ data, onSync }: PlannerPageProps) {
       {(hasMissedTasks || hasBurnoutWarning) && (
         <div className="flex gap-2 flex-wrap">
           {hasMissedTasks && (
-            <Button
-              variant="outline"
-              className="border-orange-300 bg-orange-50 text-orange-800 hover:bg-orange-100"
-              onClick={() => setActiveTab("weak")}
-            >
-              {data.missedTasks.length} missed task
-              {data.missedTasks.length > 1 ? "s" : ""} need attention
-            </Button>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="outline"
+                className="border-orange-300 bg-orange-50 text-orange-800 hover:bg-orange-100"
+                onClick={() => setActiveTab("weak")}
+              >
+                {data.missedTasks.length} missed task
+                {data.missedTasks.length > 1 ? "s" : ""} need attention
+              </Button>
+              <Button
+                variant="outline"
+                onClick={handleResolveAllMissed}
+                disabled={isResolvingAllMissed || data.missedTasks.length === 0}
+              >
+                {isResolvingAllMissed ? "Resolving..." : "Resolve All Missed"}
+              </Button>
+              <p className="text-xs text-muted-foreground">
+                Pushes all missed tasks forward in one action using your current schedule rules.
+              </p>
+            </div>
           )}
           {hasBurnoutWarning && (
             <Button
@@ -518,6 +723,82 @@ export function PlannerPage({ data, onSync }: PlannerPageProps) {
           )}
         </div>
       )}
+
+      <TopicStatusBar topics={topicStatuses} />
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-lg">My Schedules</CardTitle>
+          <CardDescription>
+            Approved schedules appear in the planner for this user. Pending schedules stay hidden until permission is granted.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {approvedSchedules.length > 0 ? (
+            <div className="space-y-2.5">
+              {approvedSchedules.map((record) => (
+                <div key={`${record.source}-${record.roadmap.id}`} className="rounded-lg border bg-card p-3 space-y-1.5">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-medium">{record.roadmap.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {formatScheduleSource(record.source)} • {formatScheduleStart(record.startDate)}
+                      </p>
+                    </div>
+                    {onSchedulePermissionChange && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 px-2 text-xs"
+                        onClick={() => onSchedulePermissionChange(record.source, record.roadmap.id, false)}
+                      >
+                        Hide
+                      </Button>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {record.roadmap.description || "Approved schedule ready for the individual user."}
+                  </p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">No approved schedules yet.</p>
+          )}
+
+          {pendingSchedules.length > 0 && (
+            <div className="rounded-lg border border-dashed bg-muted/30 p-3 space-y-2">
+              <p className="text-sm font-medium">Pending permission</p>
+              <div className="space-y-2">
+                {pendingSchedules.map((record) => (
+                  <div key={`${record.source}-${record.roadmap.id}-pending`} className="rounded-md border bg-card p-2.5 space-y-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-medium">{record.roadmap.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {formatScheduleSource(record.source)} • {formatScheduleStart(record.startDate)}
+                        </p>
+                      </div>
+                      {onSchedulePermissionChange && (
+                        <Button
+                          size="sm"
+                          className="h-7 px-2 text-xs"
+                          onClick={() => onSchedulePermissionChange(record.source, record.roadmap.id, true)}
+                        >
+                          Grant permission
+                        </Button>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      This schedule is done but hidden until it is approved for the individual user.
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader className="pb-3">
@@ -780,7 +1061,20 @@ export function PlannerPage({ data, onSync }: PlannerPageProps) {
             </p>
           </div>
 
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2 items-end">
+            <div className="space-y-1">
+              <Label htmlFor="horizon-days">Horizon Days</Label>
+              <Input
+                id="horizon-days"
+                type="number"
+                min={1}
+                step={1}
+                className="w-28"
+                value={horizonDaysInput}
+                onChange={(event) => setHorizonDaysInput(event.target.value)}
+                placeholder="14"
+              />
+            </div>
             <Button onClick={handleAddPlaylist} disabled={isSubmittingPlaylist}>
               {isSubmittingPlaylist ? "Importing..." : "Import Playlist"}
             </Button>

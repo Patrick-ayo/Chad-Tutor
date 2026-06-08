@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import prisma from '../db/client';
+import { requireUser } from '../middleware';
 
 const router = Router();
 
@@ -17,11 +18,15 @@ const ensureStringArray = (value: unknown): string[] => {
 };
 
 // Get user goals
-router.get('/user/:userId', async (req: Request, res: Response) => {
+router.get('/:userId/goals', requireUser, async (req: Request, res: Response) => {
   try {
     const userId = req.params.userId;
     if (typeof userId !== 'string' || userId.trim().length === 0) {
       return res.status(400).json({ success: false, message: 'Invalid userId' });
+    }
+
+    if (req.user?.id !== userId) {
+      return res.status(403).json({ success: false, message: 'Forbidden' });
     }
 
     const goals = await prisma.userGoals.findUnique({
@@ -39,11 +44,14 @@ router.get('/user/:userId', async (req: Request, res: Response) => {
 });
 
 // Update user goals
-router.post('/user/:userId', async (req: Request, res: Response) => {
+router.post('/:userId/goals', requireUser, async (req: Request, res: Response) => {
   try {
     const userId = req.params.userId;
     if (typeof userId !== 'string' || userId.trim().length === 0) {
       return res.status(400).json({ success: false, message: 'Invalid userId' });
+    }
+    if (req.user?.id !== userId) {
+      return res.status(403).json({ success: false, message: 'Forbidden' });
     }
     const { selectedSkills, selectedRoles } = req.body as UserGoalsPayload;
 

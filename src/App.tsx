@@ -16,7 +16,9 @@ import { AccessibilityProvider } from "@/contexts/AccessibilityContext";
 import { mockDashboardData } from "@/data/mockDashboard";
 import { mockSettings } from "@/data/mockSettings";
 import { clearPlannerData, fetchPlannerSnapshot } from "@/lib/plannerApi";
+import { recomputeSchedule } from "@/lib/plannerApi";
 import { applyGoalRoadmapToSessionPlanner } from "@/utils/sessionGoalPlanner";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import type { UserSettings } from "@/types/settings";
 import type { PlannerData } from "@/types/planner";
 import type { Roadmap } from "@/types/goal";
@@ -27,6 +29,8 @@ interface SessionScheduleRecord {
   source: SessionScheduleSource;
   roadmap: Roadmap;
   startDate?: string;
+  permissionGranted?: boolean;
+  approvedAt?: string;
 }
 
 const SETTINGS_STORAGE_KEY = "chad_tutor_settings";
@@ -107,6 +111,7 @@ function App() {
       return [];
     }
   });
+  const [plannerNotice, setPlannerNotice] = useState<string | null>(null);
 
   useEffect(() => {
     const loadUserScoped = <T,>(key: string, fallback: T): T => {
@@ -150,6 +155,10 @@ function App() {
 
   const applySessionSchedules = (basePlanner: PlannerData, schedules: SessionScheduleRecord[]) => {
     return schedules.reduce((acc, item) => {
+      if (item.permissionGranted === false) {
+        return acc;
+      }
+
       return applyGoalRoadmapToSessionPlanner(
         acc,
         item.roadmap,
@@ -183,6 +192,34 @@ function App() {
   }, [userId]);
 
   useEffect(() => {
+    const handleRecomputeSuccess = () => {
+      void refreshPlanner();
+    };
+
+    const handleRecomputeWarning = (event: Event) => {
+      const detail = (event as CustomEvent<string>).detail;
+      setPlannerNotice(detail || "Schedule recompute failed — your plan may be outdated");
+    };
+
+    window.addEventListener("planner:recompute-success", handleRecomputeSuccess);
+    window.addEventListener("planner:recompute-warning", handleRecomputeWarning);
+
+    return () => {
+      window.removeEventListener("planner:recompute-success", handleRecomputeSuccess);
+      window.removeEventListener("planner:recompute-warning", handleRecomputeWarning);
+    };
+  }, [refreshPlanner]);
+
+  useEffect(() => {
+    if (!plannerNotice) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => setPlannerNotice(null), 5000);
+    return () => window.clearTimeout(timeoutId);
+  }, [plannerNotice]);
+
+  useEffect(() => {
     try {
       window.localStorage.setItem(plannerDataStorageKey, JSON.stringify(plannerData));
     } catch {
@@ -202,6 +239,15 @@ function App() {
     console.log("Settings saved:", newSettings);
     persistSettings(newSettings);
     // In real app, this would persist to backend
+
+    const goalIds = Array.from(
+      new Set(sessionSchedules.map((record) => record.roadmap.id).filter(Boolean)),
+    );
+
+    // RECOMPUTE TRIGGER: availability-change — calls /api/planner/recompute
+    goalIds.forEach((goalId) => {
+      void recomputeSchedule(goalId, "availability-change");
+    });
   };
 
   const upsertSessionSchedule = (
@@ -213,19 +259,36 @@ function App() {
       const filtered = prev.filter((record) => {
         return !(record.source === source && record.roadmap.id === roadmap.id);
       });
-      return [...filtered, { source, roadmap, startDate }];
+      return [...filtered, { source, roadmap, startDate, permissionGranted: false }];
     });
 
-    setPlannerData((current) =>
-      applyGoalRoadmapToSessionPlanner(current, roadmap, {
-        activeDays: settings.availability.activeDays,
-        minutesPerDay: settings.availability.minutesPerDay,
-      }, startDate, source),
-    );
+    setPlannerData((current) => current);
+  };
+
+  const handleSchedulePermissionChange = (source: SessionScheduleSource, roadmapId: string, permissionGranted: boolean) => {
+    setSessionSchedules((prev) => {
+      const next = prev.map((record) =>
+        record.source === source && record.roadmap.id === roadmapId
+          ? {
+              ...record,
+              permissionGranted,
+              approvedAt: permissionGranted ? new Date().toISOString() : undefined,
+            }
+          : record,
+      );
+
+      void refreshPlanner(next);
+      return next;
+    });
   };
 
   const handleGoalSessionSave = (roadmap: Roadmap, startDate?: string) => {
     upsertSessionSchedule("goal-builder", roadmap, startDate);
+
+    // RECOMPUTE TRIGGER: deadline-change — calls /api/planner/recompute
+    if (roadmap.id) {
+      void recomputeSchedule(roadmap.id, "deadline-change");
+    }
   };
 
   const handleMrChadSessionSave = (roadmap: Roadmap, startDate?: string) => {
@@ -277,6 +340,13 @@ function App() {
       }}
     >
       <BrowserRouter>
+        {plannerNotice && (
+          <div className="fixed right-4 top-4 z-50 w-[min(90vw,28rem)]">
+            <Alert variant="destructive" className="shadow-lg">
+              <AlertDescription>{plannerNotice}</AlertDescription>
+            </Alert>
+          </div>
+        )}
         <Routes>
           <Route path="/" element={<LoginPage />} />
           <Route path="/sign-up" element={<LoginPage />} />
@@ -287,7 +357,17 @@ function App() {
             <Route path="/session" element={<LearningSessionPage plannerData={plannerData} />} />
             <Route path="/session/:taskId" element={<LearningSessionPage plannerData={plannerData} />} />
             <Route path="/progress" element={<ProgressAnalyticsPage />} />
-            <Route path="/schedule" element={<PlannerPage data={plannerData} onSync={refreshPlanner} />} />
+            <Route
+              path="/schedule"
+              element={
+                <PlannerPage
+                  data={plannerData}
+                  onSync={refreshPlanner}
+                  sessionSchedules={sessionSchedules}
+                  onSchedulePermissionChange={handleSchedulePermissionChange}
+                />
+              }
+            />
             <Route path="/planner" element={<Navigate to="/schedule" replace />} />
             <Route
               path="/settings"

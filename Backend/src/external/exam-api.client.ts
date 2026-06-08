@@ -107,6 +107,47 @@ function createClient(): AxiosInstance {
 const client = createClient();
 
 /**
+ * Fallback public university search (no API key required).
+ */
+async function searchHipolabsUniversities(query: string): Promise<ExternalUniversity[]> {
+  const normalized = query.trim();
+  if (!normalized) {
+    return [];
+  }
+
+  try {
+    const response = await axios.get<Array<{
+      name?: string;
+      country?: string;
+      alpha_two_code?: string;
+      state_province?: string | null;
+    }>>('http://universities.hipolabs.com/search', {
+      params: { name: normalized },
+      timeout: 10000,
+    });
+
+    return (response.data || [])
+      .filter((item) => typeof item?.name === 'string' && item.name.trim().length > 0)
+      .map((item) => {
+        const name = item.name!.trim();
+        const country = item.country?.trim();
+        const alphaCode = item.alpha_two_code?.trim();
+        const state = item.state_province?.trim() || undefined;
+
+        return {
+          id: `hipolabs:${alphaCode || 'XX'}:${name.toLowerCase().replace(/\s+/g, '-')}`,
+          name,
+          country,
+          type: state ? `Public University (${state})` : 'Public University',
+        };
+      });
+  } catch (error) {
+    console.error('Hipolabs fallback failed:', error);
+    return [];
+  }
+}
+
+/**
  * Make API request with retry logic
  */
 async function makeRequest<T>(
@@ -164,6 +205,10 @@ export async function searchUniversities(
 ): Promise<ExternalUniversity[]> {
   // If no API key configured, return mock data
   if (!config.examApiKey || config.examApiKey === 'your-exam-api-key') {
+    const hipolabsResults = await searchHipolabsUniversities(query);
+    if (hipolabsResults.length > 0) {
+      return hipolabsResults;
+    }
     return getMockUniversities(query);
   }
 
@@ -176,7 +221,11 @@ export async function searchUniversities(
     return data.universities || [];
   } catch (error) {
     console.error('Failed to fetch universities from API:', error);
-    // Fallback to mock data on error
+    // Fallback to live public search before static mock data.
+    const hipolabsResults = await searchHipolabsUniversities(query);
+    if (hipolabsResults.length > 0) {
+      return hipolabsResults;
+    }
     return getMockUniversities(query);
   }
 }

@@ -165,3 +165,51 @@ export async function findSkillPlaylists(
     ],
   });
 }
+
+export async function findSkillLinksByPlaylistIds(
+  userId: string,
+  playlistIds: string[],
+  tx?: TransactionClient,
+) {
+  const client = tx || prisma;
+
+  if (playlistIds.length === 0) {
+    return [];
+  }
+
+  return client.skillPlaylistLink.findMany({
+    where: {
+      userId,
+      playlistId: { in: playlistIds },
+    },
+    include: {
+      playlist: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+      skill: {
+        select: {
+          id: true,
+          name: true,
+          difficulty: true,
+          userProgress: {
+            where: { userId },
+            select: {
+              progressPercent: true,
+              accuracyRate: true,
+              masteryLevel: true,
+            },
+            take: 1,
+          },
+        },
+      },
+    },
+    orderBy: [
+      { playlistId: 'asc' },
+      { sequence: 'asc' },
+      { createdAt: 'asc' },
+    ],
+  });
+}

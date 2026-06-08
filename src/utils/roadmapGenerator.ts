@@ -6,6 +6,8 @@ import type {
   RoadmapTopic,
   Topic as SelectedTopic // Topic from GoalDefinition (with subtopics)
 } from "@/types/goal";
+import type { DetailedRoadmap, SessionPhaseBlock, SessionVideo } from "@/types/planner";
+import { generateDetailedRoadmap as generateDetailedRoadmapApi } from "@/lib/plannerApi";
 
 /**
  * Generate a personalized roadmap based on actual user selections
@@ -215,6 +217,123 @@ export function generateRoadmapFromSelection(definition: GoalDefinition): Roadma
       totalVideos: selectedVideos.length,
       totalVideoMinutes: Math.round(totalVideoSeconds / 60),
       generatedAt: new Date().toISOString(),
+    },
+  };
+}
+
+function getGoalTopicName(definition: GoalDefinition): string {
+  if (definition.type === "exam") {
+    return definition.topics?.[0]?.name || definition.subjects?.[0]?.name || definition.course?.name || definition.customName || "Exam prep";
+  }
+
+  if (definition.type === "skill") {
+    return definition.selectedSkills?.[0]?.name || definition.customName || "Skill mastery";
+  }
+
+  if (definition.type === "role") {
+    return definition.selectedRoles?.[0] || definition.customName || "Role prep";
+  }
+
+  return definition.customName || "Learning goal";
+}
+
+function toDetailedVideo(video: NonNullable<GoalDefinition["videos"]>[number]): SessionVideo {
+  const url = video.id ? `https://www.youtube.com/watch?v=${video.id}` : undefined;
+
+  return {
+    id: video.id,
+    title: video.title,
+    channelName: video.channelName,
+    channelId: video.channelId,
+    durationSeconds: video.durationSeconds || 900,
+    url,
+    topicName: video.topicName,
+    subtopicName: video.subtopicName,
+    playlistId: video.playlistId,
+    playlistTitle: video.playlistTitle,
+  };
+}
+
+function phaseDifficulty(phase: SessionPhaseBlock["phase"]): "easy" | "medium" | "hard" {
+  if (phase === "watch") {
+    return "hard";
+  }
+
+  if (phase === "practice") {
+    return "medium";
+  }
+
+  return "easy";
+}
+
+export async function generateDetailedRoadmap(definition: GoalDefinition): Promise<DetailedRoadmap> {
+  const goalName = definition.customName || getGoalTopicName(definition);
+  const topicName = getGoalTopicName(definition);
+  const videos = (definition.videos || []).map(toDetailedVideo);
+
+  return generateDetailedRoadmapApi({
+    goalId: definition.goalId,
+    goalName,
+    topicName,
+    videos,
+  });
+}
+
+export function convertDetailedRoadmapToRoadmap(roadmap: DetailedRoadmap): Roadmap {
+  const phases: Phase[] = roadmap.days.map((day) => ({
+    id: `phase-day-${day.dayNumber}`,
+    name: day.label,
+    description: day.summary,
+    order: day.dayNumber,
+    estimatedMinutes: day.totalMinutes,
+    topics: day.sessions.map((session) => ({
+      id: session.id,
+      name: session.title,
+      description: session.keyOutcome,
+      estimatedMinutes: session.totalMinutes,
+      tasks: session.phases.map((phase) => ({
+        id: phase.id,
+        name: phase.title,
+        description: phase.description,
+        estimatedMinutes: phase.estimatedMinutes,
+        difficulty: phaseDifficulty(phase.phase),
+        dependencies: phase.phase === "watch" ? [] : [session.phases[0].id],
+        revisionWeight: phase.phase === "quiz" ? 0.6 : phase.phase === "practice" ? 0.7 : 0.8,
+        status: "scheduled",
+        scheduleReason: phase.description,
+        metadata: {
+          phase: phase.phase,
+          videos: session.videos.map((video) => ({
+            id: video.id,
+            title: video.title,
+            durationSeconds: video.durationSeconds,
+            channelName: video.channelName,
+            url: video.url,
+          })),
+          keyOutcome: session.keyOutcome,
+          clusterId: session.clusterId,
+        },
+      })),
+    })),
+  }));
+
+  const totalEstimatedMinutes = phases.reduce((sum, phase) => sum + phase.estimatedMinutes, 0);
+
+  return {
+    id: roadmap.id,
+    goalId: roadmap.goalId || roadmap.id,
+    name: roadmap.title,
+    description: roadmap.overview,
+    phases,
+    totalEstimatedMinutes,
+    bufferDays: Math.max(1, Math.round(roadmap.days.length * 0.15)),
+    revisionSlots: Math.max(1, Math.round(roadmap.days.length * 0.5)),
+    generatedAt: roadmap.createdAt,
+    metadata: {
+      source: roadmap.source,
+      detailedRoadmapId: roadmap.id,
+      totalDays: roadmap.totalDays,
+      totalMinutes: roadmap.totalMinutes,
     },
   };
 }

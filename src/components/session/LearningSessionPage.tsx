@@ -1,9 +1,22 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "@clerk/clerk-react";
-import { AlertCircle } from "lucide-react";
+import {
+  AlertCircle,
+  Loader2,
+} from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import { LectureSummaryPanel } from "@/components/planner/LectureSummaryPanel";
 import { TaskContextBar } from "./TaskContextBar";
 import { SessionSidebar } from "./SessionSidebar";
 import { SessionMobileNav } from "./SessionMobileNav";
@@ -47,10 +60,136 @@ import type {
   SuggestedVideo,
   ConceptTags,
 } from "@/types/session";
-import { completeTask, fetchPlannerSnapshot, generateSessionQuiz, type SessionQuizQuestion } from "@/lib/plannerApi";
+import {
+  completeTask,
+  fetchLectureSummary,
+  fetchPlannerSnapshot,
+  fetchTasksForDate,
+  generateSessionQuiz,
+  markTaskMissed,
+  resolveMissedTasksMultiTopic,
+  type SessionQuizQuestion,
+  type LectureQuizQuestion,
+} from "@/lib/plannerApi";
 import type { PlannerData, ScheduledTask } from "@/types/planner";
 
 const STRICT_SCHEDULED_VIDEO_MODE = true;
+
+type TodayTask = ScheduledTask;
+
+type TaskMode = "learn" | "practice" | "quiz" | "revision";
+
+type QuizAnswers = Record<number, "A" | "B" | "C" | "D">;
+
+function formatTodayLabel(date: Date): string {
+  return date.toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function formatMinutes(minutes: number): string {
+  return `${Math.max(0, Math.round(minutes))} min`;
+}
+
+function getTaskMode(task: ScheduledTask): TaskMode {
+  if (task.taskType) {
+    return task.taskType;
+  }
+
+  return task.type;
+}
+
+function getTaskTypeLabel(task: ScheduledTask): string {
+  const mode = getTaskMode(task);
+
+  if (mode === "learn") return "📹";
+  if (mode === "practice") return "✏️";
+  if (mode === "quiz") return "❓";
+  return "🔄";
+}
+
+function getStatusLabel(task: ScheduledTask): string {
+  if (task.status === "completed") return "Done";
+  if (task.status === "in-progress") return "In Progress";
+  if (task.status === "overdue" || task.status === "blocked" || task.status === "skipped") return "Missed";
+  return "Pending";
+}
+
+function getStatusIcon(task: ScheduledTask): string {
+  if (task.status === "completed") return "●";
+  if (task.status === "in-progress") return "◐";
+  if (task.status === "overdue" || task.status === "blocked" || task.status === "skipped") return "✕";
+  return "○";
+}
+
+function extractYouTubeVideoIdFromUrl(url?: string): string | null {
+  if (!url) return null;
+
+  const watchMatch = url.match(/[?&]v=([a-zA-Z0-9_-]{6,})/);
+  if (watchMatch?.[1]) return watchMatch[1];
+
+  const shortMatch = url.match(/youtu\.be\/([a-zA-Z0-9_-]{6,})/);
+  if (shortMatch?.[1]) return shortMatch[1];
+
+  const embedMatch = url.match(/embed\/([a-zA-Z0-9_-]{6,})/);
+  if (embedMatch?.[1]) return embedMatch[1];
+
+  return null;
+}
+
+function getTaskVideoId(task: ScheduledTask): string {
+  return task.videoId || extractYouTubeVideoIdFromUrl(task.videoUrl) || "";
+}
+
+function getTaskDisplayTopic(task: ScheduledTask): string {
+  return task.keyPoints?.[0] || task.learningOutcomes?.[0] || task.notes || task.title;
+}
+
+function getTaskTopics(task: ScheduledTask): string[] {
+  const topics = [
+    ...(task.keyPoints ?? []),
+    ...(task.learningOutcomes ?? []),
+    task.notes ?? "",
+  ]
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  if (topics.length > 0) {
+    return Array.from(new Set(topics)).slice(0, 6);
+  }
+
+  return [task.title];
+}
+
+function getPracticeInstruction(task: ScheduledTask): string {
+  if (task.notes) {
+    return task.notes;
+  }
+
+  if (task.learningOutcomes && task.learningOutcomes.length > 0) {
+    return task.learningOutcomes[0];
+  }
+
+  return `Work through ${task.title} using the scheduled practice time.`;
+}
+
+function getRevisionNote(task: ScheduledTask): string {
+  if (task.notes) {
+    return task.notes;
+  }
+
+  if (task.learningOutcomes && task.learningOutcomes.length > 0) {
+    return task.learningOutcomes.join(" ");
+  }
+
+  return `Revise the core ideas from ${task.title}.`;
+}
+
+function normalizeQuizQuestions(input: LectureQuizQuestion[]): LectureQuizQuestion[] {
+  return Array.isArray(input) ? input : [];
+}
 
 function normalizeText(value: string): string {
   return value.toLowerCase().trim();
@@ -91,21 +230,6 @@ function buildUnavailableVideoMetadata(task: SessionTask | null): VideoMetadata 
     keyTakeaways: ["This task has no designated video in the schedule."],
     transcript: "Assign a video to this scheduled task and re-open the session.",
   };
-}
-
-function extractYouTubeVideoIdFromUrl(url?: string): string | null {
-  if (!url) return null;
-
-  const watchMatch = url.match(/[?&]v=([a-zA-Z0-9_-]{6,})/);
-  if (watchMatch?.[1]) return watchMatch[1];
-
-  const shortMatch = url.match(/youtu\.be\/([a-zA-Z0-9_-]{6,})/);
-  if (shortMatch?.[1]) return shortMatch[1];
-
-  const embedMatch = url.match(/embed\/([a-zA-Z0-9_-]{6,})/);
-  if (embedMatch?.[1]) return embedMatch[1];
-
-  return null;
 }
 
 function suggestedVideoFromScheduledTask(task: ScheduledTask): SuggestedVideo | null {
@@ -616,8 +740,184 @@ export function LearningSessionPage({ plannerData }: LearningSessionPageProps) {
   const [nextScheduledTaskTitle, setNextScheduledTaskTitle] = useState<string | null>(null);
   const [noSessionsPlanned, setNoSessionsPlanned] = useState(false);
   const [sessionNotice, setSessionNotice] = useState<string | null>(null);
+  const [completionToast, setCompletionToast] = useState<string | null>(null);
   const [aiPracticeQuestions, setAiPracticeQuestions] = useState<PracticeQuestionData[] | null>(null);
   const [aiMiniTestQuestions, setAiMiniTestQuestions] = useState<TestQuestionData[] | null>(null);
+  const [todaysTasks, setTodaysTasks] = useState<TodayTask[]>([]);
+  const [todaysTasksLoading, setTodaysTasksLoading] = useState(true);
+  const [selectedTodayTask, setSelectedTodayTask] = useState<TodayTask | null>(null);
+  const [isTaskDrawerOpen, setIsTaskDrawerOpen] = useState(false);
+  const [showLectureSummary, setShowLectureSummary] = useState(false);
+  const [drawerQuizQuestions, setDrawerQuizQuestions] = useState<LectureQuizQuestion[] | null>(null);
+  const [drawerQuizLoading, setDrawerQuizLoading] = useState(false);
+  const [drawerQuizAnswers, setDrawerQuizAnswers] = useState<QuizAnswers>({});
+  const [drawerFeedback, setDrawerFeedback] = useState<{ type: 'success' | 'warning' | 'error'; message: string } | null>(null);
+
+  const todayIsoDate = useMemo(() => new Date().toISOString(), []);
+
+  const refreshTodayTasks = useCallback(async () => {
+    setTodaysTasksLoading(true);
+    const tasks = await fetchTasksForDate(new Date().toISOString());
+    setTodaysTasks(tasks);
+    setTodaysTasksLoading(false);
+  }, []);
+
+  const updateTodayTaskStatus = useCallback((taskId: string, status: ScheduledTask['status']) => {
+    setTodaysTasks((current) =>
+      current.map((item) =>
+        item.id === taskId
+          ? {
+              ...item,
+              status,
+              completedDate: status === 'completed' ? new Date() : item.completedDate,
+              missedOn: status === 'skipped' ? new Date() : item.missedOn,
+            }
+          : item,
+      ),
+    );
+  }, []);
+
+  const closeTaskDrawer = useCallback(() => {
+    setIsTaskDrawerOpen(false);
+    setSelectedTodayTask(null);
+    setShowLectureSummary(false);
+    setDrawerQuizQuestions(null);
+    setDrawerQuizLoading(false);
+    setDrawerQuizAnswers({});
+  }, []);
+
+  const openTaskDrawer = useCallback((nextTask: TodayTask) => {
+    if (nextTask.status === 'completed') {
+      return;
+    }
+
+    setSelectedTodayTask(nextTask);
+    setIsTaskDrawerOpen(true);
+    setShowLectureSummary(false);
+    setDrawerQuizQuestions(null);
+    setDrawerQuizLoading(false);
+    setDrawerQuizAnswers({});
+    setDrawerFeedback(null);
+  }, []);
+
+  const handleTaskComplete = useCallback(async (nextTask: TodayTask, completedMinutes: number) => {
+    try {
+      await completeTask(nextTask.id, {
+        completedDurationMinutes: completedMinutes,
+      });
+      updateTodayTaskStatus(nextTask.id, 'completed');
+      setCompletionToast('✅ Session complete!');
+      closeTaskDrawer();
+      await refreshTodayTasks();
+      window.dispatchEvent(
+        new CustomEvent('planner:topic-status-refresh', {
+          detail: { reason: 'task-complete' },
+        }),
+      );
+    } catch (error) {
+      console.error('Failed to complete task:', error);
+      setDrawerFeedback({ type: 'error', message: 'Could not complete this session.' });
+    }
+  }, [closeTaskDrawer, refreshTodayTasks, updateTodayTaskStatus]);
+
+  const handleTaskMissed = useCallback(async (nextTask: TodayTask) => {
+    try {
+      await markTaskMissed(nextTask.id, 'Marked from session drawer');
+      await resolveMissedTasksMultiTopic([nextTask.id], todayIsoDate);
+      updateTodayTaskStatus(nextTask.id, 'skipped');
+      setDrawerFeedback({ type: 'warning', message: 'Task marked as missed. Rescheduling...' });
+      closeTaskDrawer();
+      await refreshTodayTasks();
+      window.dispatchEvent(
+        new CustomEvent('planner:topic-status-refresh', {
+          detail: { reason: 'task-missed' },
+        }),
+      );
+    } catch (error) {
+      console.error('Failed to mark task as missed:', error);
+      setDrawerFeedback({ type: 'error', message: 'Could not mark the task as missed.' });
+    }
+  }, [closeTaskDrawer, refreshTodayTasks, todayIsoDate, updateTodayTaskStatus]);
+
+  const handleStartWatchingTask = useCallback((nextTask: TodayTask) => {
+    const videoId = getTaskVideoId(nextTask);
+    const topicName = getTaskDisplayTopic(nextTask);
+    const searchParams = new URLSearchParams();
+
+    if (videoId) {
+      searchParams.set('videoId', videoId);
+    }
+
+    searchParams.set('topicName', topicName);
+    closeTaskDrawer();
+    navigate(`/session/${nextTask.id}${searchParams.toString() ? `?${searchParams.toString()}` : ''}`);
+  }, [closeTaskDrawer, navigate]);
+
+  const loadDrawerQuiz = useCallback(async () => {
+    if (!selectedTodayTask) {
+      return;
+    }
+
+    const videoId = getTaskVideoId(selectedTodayTask);
+    if (!videoId) {
+      setDrawerFeedback({ type: 'warning', message: 'No video is available for this quiz yet.' });
+      return;
+    }
+
+    setDrawerQuizLoading(true);
+    setDrawerFeedback(null);
+
+    try {
+      const response = await fetchLectureSummary(
+        videoId,
+        'quiz',
+        selectedTodayTask.title,
+        getTaskDisplayTopic(selectedTodayTask),
+        selectedTodayTask.id,
+      );
+      const questions = 'questions' in response ? response.questions : [];
+      setDrawerQuizQuestions(normalizeQuizQuestions(questions));
+      setDrawerQuizAnswers({});
+    } catch (error) {
+      console.error('Failed to load quiz for task drawer:', error);
+      setDrawerFeedback({ type: 'error', message: 'Could not load the quiz.' });
+    } finally {
+      setDrawerQuizLoading(false);
+    }
+  }, [selectedTodayTask]);
+
+  const submitDrawerQuiz = useCallback(async () => {
+    if (!selectedTodayTask || !drawerQuizQuestions || drawerQuizQuestions.length === 0) {
+      return;
+    }
+
+    const correctCount = drawerQuizQuestions.reduce((count, question, index) => {
+      return drawerQuizAnswers[index] === question.correct ? count + 1 : count;
+    }, 0);
+
+    try {
+      await completeTask(selectedTodayTask.id, {
+        completedDurationMinutes: selectedTodayTask.estimatedMinutes,
+        quiz: {
+          questionsCount: drawerQuizQuestions.length,
+          correctCount,
+          metadata: { source: 'session-drawer' },
+        },
+      });
+      updateTodayTaskStatus(selectedTodayTask.id, 'completed');
+      setDrawerFeedback({ type: 'success', message: 'Quiz submitted and task completed.' });
+      closeTaskDrawer();
+      await refreshTodayTasks();
+      window.dispatchEvent(
+        new CustomEvent('planner:topic-status-refresh', {
+          detail: { reason: 'task-complete' },
+        }),
+      );
+    } catch (error) {
+      console.error('Failed to submit quiz completion:', error);
+      setDrawerFeedback({ type: 'error', message: 'Quiz completed but could not be saved.' });
+    }
+  }, [closeTaskDrawer, drawerQuizAnswers, drawerQuizQuestions, refreshTodayTasks, selectedTodayTask, updateTodayTaskStatus]);
 
   // Load task data
   useEffect(() => {
@@ -843,6 +1143,31 @@ export function LearningSessionPage({ plannerData }: LearningSessionPageProps) {
       isCancelled = true;
     };
   }, [taskId, navigate, plannerData]);
+
+  useEffect(() => {
+    let isActive = true;
+
+    const runRefresh = async () => {
+      await refreshTodayTasks();
+    };
+
+    void runRefresh();
+
+    const handleFocus = () => {
+      if (!isActive) {
+        return;
+      }
+
+      void refreshTodayTasks();
+    };
+
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      isActive = false;
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [refreshTodayTasks]);
 
   // Timer effect
   useEffect(() => {
@@ -1219,6 +1544,18 @@ export function LearningSessionPage({ plannerData }: LearningSessionPageProps) {
   }, [activeMode, hasSessionMiniTest]);
 
   useEffect(() => {
+    if (!completionToast) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setCompletionToast(null);
+    }, 2500);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [completionToast]);
+
+  useEffect(() => {
     let cancelled = false;
 
     const loadSessionQuestions = async () => {
@@ -1293,21 +1630,300 @@ export function LearningSessionPage({ plannerData }: LearningSessionPageProps) {
     currentVideoData.transcript,
   ]);
 
+  const renderTodayTasksSection = () => {
+    const completedCount = todaysTasks.filter((item) => item.status === 'completed').length;
+    const totalCount = todaysTasks.length;
+    const completedMinutes = todaysTasks
+      .filter((item) => item.status === 'completed')
+      .reduce((sum, item) => sum + item.estimatedMinutes, 0);
+    const totalMinutes = todaysTasks.reduce((sum, item) => sum + item.estimatedMinutes, 0);
+    const progressValue = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+
+    return (
+      <div className="mb-5 rounded-2xl border bg-card p-4 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-muted-foreground">Today's Sessions</p>
+            <p className="mt-1 text-sm text-muted-foreground">{formatTodayLabel(new Date())}</p>
+          </div>
+        </div>
+
+        <div className="mt-4 space-y-2">
+          <div className="flex items-center justify-between text-sm">
+            <span className="font-medium">Today's Progress</span>
+            <span className="text-muted-foreground">
+              {completedCount}/{totalCount} sessions · {completedMinutes}/{totalMinutes} min
+            </span>
+          </div>
+          <Progress value={progressValue} className="h-2" />
+        </div>
+
+        <div className="mt-4">
+          {todaysTasksLoading ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Loading today's sessions...
+            </div>
+          ) : todaysTasks.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No sessions scheduled for today. You're all caught up! 🎉</p>
+          ) : (
+            <div className="space-y-2.5">
+              {todaysTasks.map((item) => {
+                const isCompleted = item.status === 'completed';
+                const isMissed = item.status === 'overdue' || item.status === 'blocked' || item.status === 'skipped';
+                const cardClass = [
+                  'rounded-xl border p-3 transition-all',
+                  isMissed ? 'border-red-300 border-l-4 border-l-red-500' : 'border-border',
+                  isCompleted ? 'opacity-50' : 'hover:border-primary/50 hover:bg-muted/30 cursor-pointer',
+                ].join(' ');
+
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className={cardClass}
+                    onClick={() => openTaskDrawer(item)}
+                    disabled={isCompleted}
+                  >
+                    <div className="flex items-start justify-between gap-3 text-left">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-base">{getStatusIcon(item)}</span>
+                          <span className="text-base">{getTaskTypeLabel(item)}</span>
+                          <p className={[
+                            'truncate font-medium',
+                            isCompleted ? 'line-through' : '',
+                          ].join(' ')}>
+                            {item.title}
+                          </p>
+                        </div>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {getTaskDisplayTopic(item)}
+                        </p>
+                        <div className="mt-2 flex items-center gap-2">
+                          <Badge variant="outline" className="text-[11px] font-normal">
+                            {getStatusLabel(item)}
+                          </Badge>
+                          <span className="text-xs text-muted-foreground">{formatMinutes(item.estimatedMinutes)}</span>
+                        </div>
+                      </div>
+                      <div className="text-right text-xs text-muted-foreground">{item.estimatedMinutes} min</div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  const renderTaskDrawer = () => {
+    if (!selectedTodayTask) {
+      return null;
+    }
+
+    const mode = getTaskMode(selectedTodayTask);
+    const taskTopics = getTaskTopics(selectedTodayTask);
+    const videoId = getTaskVideoId(selectedTodayTask);
+    const practiceLabel = (() => {
+      const text = `${selectedTodayTask.title} ${selectedTodayTask.notes || ''}`.toLowerCase();
+      if (text.includes('flashcard')) return 'Flashcard';
+      if (text.includes('code')) return 'Coding';
+      if (text.includes('mcq') || text.includes('quiz')) return 'MCQ';
+      return 'Written';
+    })();
+
+    const allQuizAnswered = drawerQuizQuestions
+      ? drawerQuizQuestions.every((_, index) => Boolean(drawerQuizAnswers[index]))
+      : false;
+
+    return (
+      <Sheet open={isTaskDrawerOpen} onOpenChange={(open) => (open ? setIsTaskDrawerOpen(true) : closeTaskDrawer())}>
+        <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-2xl">
+          <SheetHeader className="space-y-1 pr-8 text-left">
+            <SheetTitle className="text-xl">
+              {mode === 'practice' ? '✏️' : mode === 'quiz' ? '❓' : mode === 'revision' ? '🔄' : '📹'} {selectedTodayTask.title}
+            </SheetTitle>
+            <SheetDescription>
+              {mode === 'learn' ? `${getTaskDisplayTopic(selectedTodayTask)} · ${selectedTodayTask.estimatedMinutes} min` : `${selectedTodayTask.estimatedMinutes} min`}
+            </SheetDescription>
+          </SheetHeader>
+
+          <div className="mt-5 space-y-4">
+            {drawerFeedback && (
+              <Alert variant={drawerFeedback.type === 'error' ? 'destructive' : 'default'}>
+                <AlertDescription>{drawerFeedback.message}</AlertDescription>
+              </Alert>
+            )}
+
+            {mode === 'learn' && (
+              <>
+                <div className="rounded-xl border bg-muted/30 p-3">
+                  <p className="text-sm font-semibold">What you'll learn:</p>
+                  <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
+                    {taskTopics.map((topic) => (
+                      <li key={topic}>• {topic}</li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div className="rounded-xl border bg-card p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold">Video brief</p>
+                      <p className="text-xs text-muted-foreground">{selectedTodayTask.title}</p>
+                    </div>
+                    <Badge variant="secondary">{formatMinutes(selectedTodayTask.estimatedMinutes)}</Badge>
+                  </div>
+                  {selectedTodayTask.keyPoints && selectedTodayTask.keyPoints.length >= 2 && (
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      {selectedTodayTask.keyPoints[0]}. {selectedTodayTask.keyPoints[1]}.
+                    </p>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <Button onClick={() => handleStartWatchingTask(selectedTodayTask)}>▶ Start Watching</Button>
+                  <Button variant="outline" onClick={() => setShowLectureSummary((current) => !current)}>📄 View Summary</Button>
+                  <Button variant="outline" onClick={() => void handleTaskMissed(selectedTodayTask)}>Mark as Missed</Button>
+                </div>
+
+                {showLectureSummary && videoId && (
+                  <LectureSummaryPanel
+                    videoId={videoId}
+                    videoTitle={selectedTodayTask.title}
+                    topicName={getTaskDisplayTopic(selectedTodayTask)}
+                    taskId={selectedTodayTask.id}
+                  />
+                )}
+              </>
+            )}
+
+            {mode === 'practice' && (
+              <>
+                <div className="rounded-xl border bg-muted/30 p-3">
+                  <p className="text-sm font-semibold">✏️ {selectedTodayTask.title}</p>
+                  <p className="text-xs text-muted-foreground mt-1">{selectedTodayTask.estimatedMinutes} min</p>
+                  <p className="mt-2 text-sm">{getPracticeInstruction(selectedTodayTask)}</p>
+                  <Badge variant="secondary" className="mt-3">{practiceLabel}</Badge>
+                </div>
+
+                {selectedTodayTask.keyPoints && selectedTodayTask.keyPoints.length > 0 && (
+                  <details className="rounded-xl border bg-card p-3">
+                    <summary className="cursor-pointer text-sm font-medium">Hints</summary>
+                    <div className="mt-2 space-y-1 text-sm text-muted-foreground">
+                      {selectedTodayTask.keyPoints.map((hint) => (
+                        <p key={hint}>• {hint}</p>
+                      ))}
+                    </div>
+                  </details>
+                )}
+
+                <div className="flex flex-wrap gap-2">
+                  <Button onClick={() => void handleTaskComplete(selectedTodayTask, selectedTodayTask.estimatedMinutes)}>✅ Mark Complete</Button>
+                  <Button variant="outline" onClick={() => void handleTaskMissed(selectedTodayTask)}>Mark as Missed</Button>
+                </div>
+              </>
+            )}
+
+            {mode === 'quiz' && (
+              <>
+                <div className="rounded-xl border bg-muted/30 p-3">
+                  <p className="text-sm font-semibold">❓ {selectedTodayTask.title}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">{selectedTodayTask.estimatedMinutes} min</p>
+                  <p className="mt-2 text-sm">5 questions covering: {taskTopics.join(', ')}</p>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <Button onClick={() => void loadDrawerQuiz()} disabled={drawerQuizLoading}>
+                    {drawerQuizLoading ? 'Loading...' : '❓ Start Quiz'}
+                  </Button>
+                  <Button variant="outline" onClick={() => void handleTaskMissed(selectedTodayTask)}>Mark as Missed</Button>
+                </div>
+
+                {drawerQuizQuestions && drawerQuizQuestions.length > 0 && (
+                  <div className="space-y-3">
+                    {drawerQuizQuestions.map((question, index) => {
+                      const selected = drawerQuizAnswers[index];
+                      return (
+                        <div key={`${question.question}-${index}`} className="rounded-xl border bg-card p-3 space-y-2">
+                          <p className="text-sm font-medium">{index + 1}. {question.question}</p>
+                          <div className="grid gap-2">
+                            {(['A', 'B', 'C', 'D'] as const).map((choice) => (
+                              <Button
+                                key={choice}
+                                variant="outline"
+                                className="justify-start text-left h-auto py-2"
+                                disabled={Boolean(selected)}
+                                onClick={() => setDrawerQuizAnswers((current) => ({ ...current, [index]: choice }))}
+                              >
+                                <span className="mr-2 font-semibold">{choice}.</span>
+                                <span>{question.options[choice]}</span>
+                              </Button>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    <Button onClick={() => void submitDrawerQuiz()} disabled={!allQuizAnswered}>
+                      Complete Quiz
+                    </Button>
+                  </div>
+                )}
+              </>
+            )}
+
+            {mode === 'revision' && (
+              <>
+                <div className="rounded-xl border bg-muted/30 p-3">
+                  <p className="text-sm font-semibold">🔄 {selectedTodayTask.title}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">{selectedTodayTask.estimatedMinutes} min</p>
+                  <p className="mt-2 text-sm">{getRevisionNote(selectedTodayTask)}</p>
+                </div>
+
+                <div className="rounded-xl border bg-card p-3">
+                  <p className="text-sm font-semibold">Topics being revised</p>
+                  <div className="mt-2 space-y-1 text-sm text-muted-foreground">
+                    {taskTopics.map((topic) => (
+                      <p key={topic}>• {topic}</p>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <Button onClick={() => void handleTaskComplete(selectedTodayTask, selectedTodayTask.estimatedMinutes)}>✅ Mark Complete</Button>
+                  <Button variant="outline" onClick={() => void handleTaskMissed(selectedTodayTask)}>Mark as Missed</Button>
+                </div>
+              </>
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
+    );
+  };
+
   // Loading/Error state
   if (noSessionsPlanned) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background p-4">
-        <Alert className="max-w-lg border-border bg-card text-card-foreground shadow-sm">
-          <AlertCircle className="h-4 w-4" />
-          <AlertTitle>No session scheduled for today</AlertTitle>
-          <AlertDescription>
-            There are no learning sessions scheduled for today. Add or move a task to today in Schedule to start a session.
-          </AlertDescription>
-          <div className="mt-4 flex gap-2">
-            <Button onClick={() => navigate("/schedule")}>Open Schedule</Button>
-            <Button variant="outline" onClick={() => navigate("/goals")}>Create Goal</Button>
-          </div>
-        </Alert>
+        <div className="w-full max-w-4xl space-y-4">
+          <Alert className="border-border bg-card text-card-foreground shadow-sm">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>No session scheduled for today</AlertTitle>
+            <AlertDescription>
+              There are no learning sessions scheduled for today. Add or move a task to today in Schedule to start a session.
+            </AlertDescription>
+            <div className="mt-4 flex gap-2">
+              <Button onClick={() => navigate("/schedule")}>Open Schedule</Button>
+              <Button variant="outline" onClick={() => navigate("/goals")}>Create Goal</Button>
+            </div>
+          </Alert>
+
+          {renderTodayTasksSection()}
+        </div>
       </div>
     );
   }
@@ -1316,16 +1932,18 @@ export function LearningSessionPage({ plannerData }: LearningSessionPageProps) {
   if (!task) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background p-4">
-        <Alert className="max-w-md border-border bg-card text-card-foreground shadow-sm">
-          <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Task Not Found</AlertTitle>
-          <AlertDescription>
-            The learning task you're looking for doesn't exist or has been completed.
-          </AlertDescription>
-          <Button className="mt-4" onClick={() => navigate("/")}>
-            Return to Dashboard
-          </Button>
-        </Alert>
+        <div className="w-full max-w-4xl space-y-4">
+          <Alert className="border-border bg-card text-card-foreground shadow-sm">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Task Not Found</AlertTitle>
+            <AlertDescription>
+              The learning task you're looking for doesn't exist or has been completed.
+            </AlertDescription>
+            <Button className="mt-4" onClick={() => navigate("/")}>Return to Dashboard</Button>
+          </Alert>
+
+          {renderTodayTasksSection()}
+        </div>
       </div>
     );
   }
@@ -1334,7 +1952,30 @@ export function LearningSessionPage({ plannerData }: LearningSessionPageProps) {
   const renderMainContent = () => {
     switch (activeMode) {
       case 'video':
-        return <VideoMode key={currentVideoData.videoId} videoData={currentVideoData} />;
+        return (
+          <div className="space-y-4">
+            <VideoMode
+              key={currentVideoData.videoId}
+              videoData={currentVideoData}
+              taskId={taskId}
+              onAutoComplete={() => {
+                setCompletionToast('✅ Session complete!');
+                if (taskId) {
+                  updateTodayTaskStatus(taskId, 'completed');
+                }
+                void refreshTodayTasks();
+              }}
+            />
+            {taskId && (
+              <LectureSummaryPanel
+                videoId={currentVideoData.videoId}
+                videoTitle={currentVideoData.title || task?.name || "Scheduled Lecture"}
+                topicName={task?.topicName || task?.name || "Topic"}
+                taskId={taskId}
+              />
+            )}
+          </div>
+        );
       case 'notes':
         return <NotesMode conceptTags={sessionConceptTags} structuredNotes={sessionNotesContent} />;
       case 'ai-summary':
@@ -1397,12 +2038,42 @@ export function LearningSessionPage({ plannerData }: LearningSessionPageProps) {
       case 'my-notes':
         return <MyNotesMode notes={sessionUserNotes} />;
       default:
-        return <VideoMode videoData={currentVideoData} />;
+        return (
+          <div className="space-y-4">
+            <VideoMode
+              videoData={currentVideoData}
+              taskId={taskId}
+              onAutoComplete={() => {
+                setCompletionToast('✅ Session complete!');
+                if (taskId) {
+                  updateTodayTaskStatus(taskId, 'completed');
+                }
+                void refreshTodayTasks();
+              }}
+            />
+            {taskId && (
+              <LectureSummaryPanel
+                videoId={currentVideoData.videoId}
+                videoTitle={currentVideoData.title || task?.name || "Scheduled Lecture"}
+                topicName={task?.topicName || task?.name || "Topic"}
+                taskId={taskId}
+              />
+            )}
+          </div>
+        );
     }
   };
 
   return (
     <div className="min-h-screen bg-background">
+      {completionToast && (
+        <div className="fixed top-4 right-4 z-50 max-w-sm rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 shadow-lg">
+          {completionToast}
+        </div>
+      )}
+
+      {renderTodayTasksSection()}
+
       {/* Task Context Bar - Compact top bar */}
       <TaskContextBar
         task={task}
@@ -1501,6 +2172,8 @@ export function LearningSessionPage({ plannerData }: LearningSessionPageProps) {
           onResume={handleResume}
         />
       )}
+
+      {renderTaskDrawer()}
     </div>
   );
 }

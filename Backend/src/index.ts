@@ -14,6 +14,7 @@ import {
   universityRoutes,
   skillsRoutes,
   roadmapsRoutes,
+  roadmapRoutes,
   plannerRoutes,
   tasksRoutes,
   playlistsRoutes,
@@ -21,12 +22,19 @@ import {
   youtubeRoutes,
   aiRoutes,
   geminiRoutes,
+  lectureSummaryRoutes,
 } from './routes';
 import { errorHandler, notFoundHandler } from './middleware';
 import { HipolabsProvider } from './external/providers/HipolabsProvider';
 import { enrichVideosBatch } from './services/video-intelligence.service';
 
 const app = express();
+const DB_RETRY_MS = 15000;
+
+let isDatabaseReady = false;
+let jobsRegistered = false;
+let redisInitialized = false;
+let reconnectTimer: NodeJS.Timeout | null = null;
 
 // Trust proxy for production environments
 app.set('trust proxy', 1);
@@ -46,9 +54,10 @@ app.use(express.urlencoded({ extended: true }));
 // Health check endpoint (before auth)
 app.get('/health', (_req, res) => {
   res.json({
-    status: 'healthy',
+    status: isDatabaseReady ? 'healthy' : 'degraded',
     timestamp: new Date().toISOString(),
     environment: config.nodeEnv,
+    database: isDatabaseReady ? 'connected' : 'reconnecting',
   });
 });
 
@@ -74,186 +83,6 @@ app.get('/test/universities', async (req, res) => {
       timestamp: new Date().toISOString()
     });
   }
-});
-
-// Exam API routes (no auth required for university search)
-app.get('/api/exam/universities', async (req, res) => {
-  try {
-    const search = req.query.search as string;
-    
-    // Add debug headers to help troubleshoot frontend issues
-    res.header('X-Debug-Search', search || 'empty');
-    res.header('X-Debug-Timestamp', new Date().toISOString());
-    
-    // Handle empty or missing search gracefully
-    if (!search || typeof search !== 'string' || search.trim().length === 0) {
-      return res.json({
-        universities: [],
-        meta: {
-          cacheHit: false,
-          latencyMs: 0,
-          message: 'Empty search query - provide a search term to get results',
-          debug: 'no-search-term'
-        },
-      });
-    }
-    
-    console.log(`[DEBUG] University search for: "${search}"`);
-    
-    const provider = new HipolabsProvider();
-    const results = await provider.search(search.trim());
-    
-    console.log(`[DEBUG] Found ${results.length} universities for "${search}"`);
-    
-    // Map to the format the frontend expects: { id, name, type }
-    const universities = results.slice(0, 20).map(uni => ({
-      id: uni.domain || uni.name.toLowerCase().replace(/\s+/g, '-'),
-      name: uni.name,
-      type: uni.country || 'University'
-    }));
-    
-    res.json({
-      universities,
-      meta: {
-        cacheHit: false,
-        latencyMs: Date.now(),
-        searchTerm: search.trim(),
-        resultCount: results.length
-      },
-    });
-  } catch (error) {
-    console.error('University search error:', error);
-    res.status(500).json({
-      error: 'Search Failed',
-      message: 'Failed to search universities',
-      debug: error instanceof Error ? error.message : 'Unknown error'
-    });
-  }
-});
-
-// Additional exam API routes for robustness
-app.get('/api/exam/courses', async (req, res) => {
-  const universityId = req.query.university as string;
-  
-  // Mock courses based on university
-  const coursesByUniversity: { [key: string]: any[] } = {
-    'mu.ac.in': [
-      { id: 'btech-cs', name: 'B.Tech Computer Science', duration: '4 years', totalSemesters: 8 },
-      { id: 'bcom', name: 'Bachelor of Commerce', duration: '3 years', totalSemesters: 6 },
-      { id: 'mba', name: 'Master of Business Administration', duration: '2 years', totalSemesters: 4 }
-    ],
-    'stanford.edu': [
-      { id: 'cs-ms', name: 'MS Computer Science', duration: '2 years', totalSemesters: 4 },
-      { id: 'cs-bs', name: 'BS Computer Science', duration: '4 years', totalSemesters: 8 },
-      { id: 'ee-bs', name: 'BS Electrical Engineering', duration: '4 years', totalSemesters: 8 }
-    ],
-    'mit.edu': [
-      { id: 'cs-6', name: 'Course 6 (EECS)', duration: '4 years', totalSemesters: 8 },
-      { id: 'meng', name: 'Master of Engineering', duration: '1 year', totalSemesters: 2 },
-      { id: 'phd-cs', name: 'PhD Computer Science', duration: '5-7 years', totalSemesters: 10 }
-    ]
-  };
-  
-  const courses = coursesByUniversity[universityId] || [
-    { id: 'general-1', name: 'Bachelor of Science', duration: '3 years', totalSemesters: 6 },
-    { id: 'general-2', name: 'Bachelor of Arts', duration: '3 years', totalSemesters: 6 },
-    { id: 'general-3', name: 'Master\'s Program', duration: '2 years', totalSemesters: 4 }
-  ];
-  
-  res.json({
-    courses,
-    meta: { message: `Courses for university: ${universityId}`, universityId }
-  });
-});
-
-app.get('/api/exam/semesters', async (req, res) => {
-  const universityId = req.query.university as string;
-  const courseId = req.query.course as string;
-  
-  // Mock semesters based on course
-  const semestersByCourse: { [key: string]: any[] } = {
-    'btech-cs': [
-      { id: 'sem-1', name: 'Semester 1', number: 1 },
-      { id: 'sem-2', name: 'Semester 2', number: 2 },
-      { id: 'sem-3', name: 'Semester 3', number: 3 },
-      { id: 'sem-4', name: 'Semester 4', number: 4 },
-      { id: 'sem-5', name: 'Semester 5', number: 5 },
-      { id: 'sem-6', name: 'Semester 6', number: 6 },
-      { id: 'sem-7', name: 'Semester 7', number: 7 },
-      { id: 'sem-8', name: 'Semester 8', number: 8 }
-    ],
-    'cs-ms': [
-      { id: 'fall-1', name: 'Fall Year 1', number: 1 },
-      { id: 'spring-1', name: 'Spring Year 1', number: 2 },
-      { id: 'fall-2', name: 'Fall Year 2', number: 3 },
-      { id: 'spring-2', name: 'Spring Year 2', number: 4 }
-    ],
-    'cs-bs': [
-      { id: 'fresh-fall', name: 'Freshman Fall', number: 1 },
-      { id: 'fresh-spring', name: 'Freshman Spring', number: 2 },
-      { id: 'soph-fall', name: 'Sophomore Fall', number: 3 },
-      { id: 'soph-spring', name: 'Sophomore Spring', number: 4 },
-      { id: 'junior-fall', name: 'Junior Fall', number: 5 },
-      { id: 'junior-spring', name: 'Junior Spring', number: 6 },
-      { id: 'senior-fall', name: 'Senior Fall', number: 7 },
-      { id: 'senior-spring', name: 'Senior Spring', number: 8 }
-    ]
-  };
-  
-  const semesters = semestersByCourse[courseId] || [
-    { id: 'semester-1', name: 'Semester 1', number: 1 },
-    { id: 'semester-2', name: 'Semester 2', number: 2 },
-    { id: 'semester-3', name: 'Semester 3', number: 3 },
-    { id: 'semester-4', name: 'Semester 4', number: 4 }
-  ];
-  
-  res.json({
-    semesters,
-    meta: { message: `Semesters for course: ${courseId}`, universityId, courseId }
-  });
-});
-
-app.get('/api/exam/subjects', async (req, res) => {
-  const universityId = req.query.university as string;
-  const courseId = req.query.course as string;
-  const semesterId = req.query.semester as string;
-  
-  // Mock subjects based on semester and course
-  const subjectsBySemester: { [key: string]: any[] } = {
-    'sem-1': [
-      { id: 'math-1', name: 'Engineering Mathematics I', code: 'MATH101', credits: 4, marks: 100 },
-      { id: 'physics-1', name: 'Engineering Physics I', code: 'PHY101', credits: 3, marks: 100 },
-      { id: 'chem-1', name: 'Engineering Chemistry', code: 'CHEM101', credits: 3, marks: 100 },
-      { id: 'prog-1', name: 'Programming Fundamentals', code: 'CS101', credits: 4, marks: 100 }
-    ],
-    'sem-2': [
-      { id: 'math-2', name: 'Engineering Mathematics II', code: 'MATH102', credits: 4, marks: 100 },
-      { id: 'physics-2', name: 'Engineering Physics II', code: 'PHY102', credits: 3, marks: 100 },
-      { id: 'ds-1', name: 'Data Structures', code: 'CS201', credits: 4, marks: 100 },
-      { id: 'digital-1', name: 'Digital Electronics', code: 'ECE101', credits: 3, marks: 100 }
-    ],
-    'fall-1': [
-      { id: 'algorithms', name: 'Design and Analysis of Algorithms', code: 'CS161', credits: 3, marks: 100 },
-      { id: 'systems', name: 'Computer Systems', code: 'CS107', credits: 3, marks: 100 },
-      { id: 'ml-intro', name: 'Introduction to Machine Learning', code: 'CS229', credits: 3, marks: 100 }
-    ],
-    'spring-1': [
-      { id: 'databases', name: 'Database Systems', code: 'CS245', credits: 3, marks: 100 },
-      { id: 'networks', name: 'Computer Networks', code: 'CS144', credits: 3, marks: 100 },
-      { id: 'ai-intro', name: 'Artificial Intelligence', code: 'CS221', credits: 3, marks: 100 }
-    ]
-  };
-  
-  const subjects = subjectsBySemester[semesterId] || [
-    { id: 'sub-1', name: 'Core Subject 1', code: 'CORE101', credits: 3, marks: 100 },
-    { id: 'sub-2', name: 'Core Subject 2', code: 'CORE102', credits: 3, marks: 100 },
-    { id: 'sub-3', name: 'Elective 1', code: 'ELEC101', credits: 3, marks: 100 }
-  ];
-  
-  res.json({
-    subjects,
-    meta: { message: `Subjects for ${semesterId}`, universityId, courseId, semesterId }
-  });
 });
 
 // Get topics for selected subjects
@@ -644,7 +473,7 @@ app.post('/api/videos/search', async (req, res) => {
     const order = orderMap[preferences?.sortBy] || 'relevance';
     
     // How many videos to fetch per item
-    const videosPerItem = preferences?.includeOneShot ? 3 : 5;
+    const videosPerItem = preferences?.includeOneShot ? 3 : (preferences?.contentTier === 'paid' ? 4 : 5);
 
     // Build search queries for each item
     const allVideos: any[] = [];
@@ -692,6 +521,12 @@ app.post('/api/videos/search', async (req, res) => {
         }
         
         // 5. Add lecture/tutorial keywords based on preferences
+        if (preferences?.contentTier === 'paid') {
+          queryParts.push('paid course full course premium');
+        } else {
+          queryParts.push('free course tutorial');
+        }
+
         if (preferences?.includeOneShot) {
           queryParts.push('one shot lecture complete');
         } else {
@@ -723,7 +558,9 @@ app.post('/api/videos/search', async (req, res) => {
         
         // Video duration filter (only for video type)
         if (searchType === 'video') {
-          if (preferences?.includeOneShot) {
+          if (preferences?.contentTier === 'paid') {
+            searchUrl.searchParams.set('videoDuration', 'long');
+          } else if (preferences?.includeOneShot) {
             searchUrl.searchParams.set('videoDuration', 'long');
           } else {
             searchUrl.searchParams.set('videoDuration', 'medium');
@@ -1201,13 +1038,15 @@ app.use('/api/user', userRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/exam', examRoutes);
 app.use('/api/goals', goalsRoutes);
-app.use('/api/goals', userGoalsRoutes);
+app.use('/api/users', userGoalsRoutes);
 app.use('/api/universities', universityRoutes);
 app.use('/api/skills', skillsRoutes);
 app.use('/api/planner', plannerRoutes);
+app.use('/api/roadmap', roadmapRoutes);
 app.use('/api/tasks', tasksRoutes);
 app.use('/api/playlists', playlistsRoutes);
 app.use('/api/quiz', quizRoutes);
+app.use('/api/lecture', lectureSummaryRoutes);
 
 // 404 handler
 app.use(notFoundHandler);
@@ -1216,25 +1055,51 @@ app.use(notFoundHandler);
 app.use(errorHandler);
 
 // Start server
-async function startServer() {
+async function initializeInfrastructure() {
+  if (isDatabaseReady) {
+    return;
+  }
+
   try {
-    // Connect to PostgreSQL
     await connectDatabase();
+    isDatabaseReady = true;
     console.log('✓ PostgreSQL connected');
 
-    // Initialize Redis (optional)
-    if (config.redisUrl) {
+    if (config.redisUrl && !redisInitialized) {
       await cacheService.initializeRedis();
+      redisInitialized = true;
       console.log('✓ Redis connected');
-    } else {
+    } else if (!config.redisUrl) {
       console.log('○ Redis not configured (using L2 cache only)');
     }
 
-    // Register background jobs (stubs)
-    registerAllJobs();
-    console.log('✓ Background jobs registered');
+    if (!jobsRegistered) {
+      registerAllJobs();
+      jobsRegistered = true;
+      console.log('✓ Background jobs registered');
+    }
 
-    // Start Express server
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    }
+  } catch (error) {
+    isDatabaseReady = false;
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`Database connection unavailable (${message}). Retrying in ${DB_RETRY_MS / 1000}s...`);
+
+    if (!reconnectTimer) {
+      reconnectTimer = setTimeout(() => {
+        reconnectTimer = null;
+        void initializeInfrastructure();
+      }, DB_RETRY_MS);
+    }
+  }
+}
+
+async function startServer() {
+  try {
+    // Start Express server even when DB is temporarily unavailable.
     app.listen(config.port, () => {
       console.log(`
 ╔═══════════════════════════════════════════════════╗
@@ -1242,12 +1107,14 @@ async function startServer() {
 ╠═══════════════════════════════════════════════════╣
 ║  Environment: ${config.nodeEnv.padEnd(35)}║
 ║  Port: ${config.port.toString().padEnd(42)}║
-║  Database: PostgreSQL                             ║
+║  Database: ${isDatabaseReady ? 'PostgreSQL connected' : 'PostgreSQL reconnecting'}${''.padEnd(isDatabaseReady ? 17 : 14)}║
 ║  Cache: ${config.redisUrl ? 'Redis + PostgreSQL' : 'PostgreSQL (L2 only)'}${''.padEnd(config.redisUrl ? 21 : 12)}║
 ║  Frontend: ${config.frontendUrl.padEnd(38)}║
 ╚═══════════════════════════════════════════════════╝
       `);
     });
+
+    await initializeInfrastructure();
   } catch (error) {
     console.error('Failed to start server:', error);
     process.exit(1);
@@ -1257,6 +1124,11 @@ async function startServer() {
 // Handle graceful shutdown
 async function shutdown(signal: string) {
   console.log(`${signal} received, shutting down gracefully...`);
+
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
   
   try {
     await cacheService.closeRedis();

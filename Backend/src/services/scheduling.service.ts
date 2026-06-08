@@ -99,6 +99,26 @@ export interface SkipHandlingResult {
   reason?: string;
 }
 
+export type TaskDimensionGroup = 'deadline' | 'time' | 'effort';
+
+export type DeadlineBand = 'critical' | 'soon' | 'later';
+
+export type TimeBand = 'short' | 'medium' | 'long';
+
+export type EffortBand = 'high' | 'medium' | 'low';
+
+export interface TaskDimensionClassification {
+  deadlineBand: DeadlineBand;
+  timeBand: TimeBand;
+  effortBand: EffortBand;
+  primaryGroup: TaskDimensionGroup;
+  scores: {
+    deadline: number;
+    time: number;
+    effort: number;
+  };
+}
+
 const PRIORITY_WEIGHT: Record<SchedulePriority, number> = {
   LOW: 1,
   MEDIUM: 2,
@@ -166,6 +186,129 @@ export function calculateScore(task: SchedulableTask, now = new Date()): number 
 
   // Weighted composite score: urgency + weakness + baseline priority
   return Number((urgency * 0.5 + weakness * 0.35 + priorityScore * 0.15).toFixed(2));
+}
+
+export function classifyDeadlineBand(
+  task: SchedulableTask,
+  now = new Date(),
+): DeadlineBand {
+  const deadline = parseDeadline(task.deadline);
+
+  if (!deadline) {
+    const urgency = calculateUrgency(task, now);
+    if (urgency >= 85) {
+      return 'critical';
+    }
+
+    if (urgency >= 60) {
+      return 'soon';
+    }
+
+    return 'later';
+  }
+
+  const dueInDays = daysUntil(deadline, now);
+
+  if (dueInDays <= 2) {
+    return 'critical';
+  }
+
+  if (dueInDays <= 7) {
+    return 'soon';
+  }
+
+  return 'later';
+}
+
+export function classifyTimeBand(task: SchedulableTask): TimeBand {
+  if (task.durationMinutes < 30) {
+    return 'short';
+  }
+
+  if (task.durationMinutes <= 60) {
+    return 'medium';
+  }
+
+  return 'long';
+}
+
+export function classifyEffortBand(task: SchedulableTask): EffortBand {
+  const weakness = calculateWeakness(task);
+
+  if (weakness >= 70) {
+    return 'high';
+  }
+
+  if (weakness >= 40) {
+    return 'medium';
+  }
+
+  return 'low';
+}
+
+export function classifyTaskDimensions(
+  task: SchedulableTask,
+  now = new Date(),
+): TaskDimensionClassification {
+  const deadlineBand = classifyDeadlineBand(task, now);
+  const timeBand = classifyTimeBand(task);
+  const effortBand = classifyEffortBand(task);
+
+  const deadlineScore = calculateUrgency(task, now);
+  const timeScore = clamp((task.durationMinutes / 90) * 100, 0, 100);
+  const effortScore = calculateWeakness(task);
+
+  const scores = {
+    deadline: deadlineScore,
+    time: timeScore,
+    effort: effortScore,
+  };
+
+  const primaryGroup = (Object.entries(scores).sort((a, b) => b[1] - a[1])[0]?.[0] ?? 'deadline') as TaskDimensionGroup;
+
+  return {
+    deadlineBand,
+    timeBand,
+    effortBand,
+    primaryGroup,
+    scores,
+  };
+}
+
+export function sortTasksByDimension(
+  tasks: SchedulableTask[],
+  now = new Date(),
+): Array<SchedulableTask & TaskDimensionClassification> {
+  return tasks
+    .map((task) => ({
+      ...task,
+      ...classifyTaskDimensions(task, now),
+    }))
+    .sort((a, b) => {
+      const groupRank: Record<TaskDimensionGroup, number> = {
+        deadline: 3,
+        effort: 2,
+        time: 1,
+      };
+
+      if (groupRank[b.primaryGroup] !== groupRank[a.primaryGroup]) {
+        return groupRank[b.primaryGroup] - groupRank[a.primaryGroup];
+      }
+
+      if (b.scores.deadline !== a.scores.deadline) {
+        return b.scores.deadline - a.scores.deadline;
+      }
+
+      if (b.scores.effort !== a.scores.effort) {
+        return b.scores.effort - a.scores.effort;
+      }
+
+      if (b.scores.time !== a.scores.time) {
+        return b.scores.time - a.scores.time;
+      }
+
+      return calculateScore(b, now) - calculateScore(a, now);
+    });
 }
 
 function calculateSubjectUrgencyIndex(tasks: ScoredTask[]): Map<string, number> {

@@ -3,16 +3,20 @@ import type {
   GoalConstraints,
   GoalAssessment,
   GoalPreferences,
+  Topic,
   Roadmap,
 } from "@/types/goal";
+import type { DetailedRoadmap } from "@/types/planner";
 import { StepperWizard } from "./StepperWizard";
 import { GoalTypeStep, ExamSelectionStep, TopicSelectionStep, VideoPreferencesStep, VideoResultsStep, DeadlineStep, AssessmentStep, PreferenceStep } from "./steps";
 import { RoadmapPreview } from "./roadmap";
 import { RoadmapControls } from "./RoadmapControls";
+import { DetailedRoadmapView } from "@/components/planner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { goalOptions } from "@/data/mockGoals";
-import { generateRoadmapFromSelection } from "@/utils/roadmapGenerator";
+import { roles } from "@/data/roles";
+import { convertDetailedRoadmapToRoadmap, generateDetailedRoadmap } from "@/utils/roadmapGenerator";
 import { useState, useMemo, useCallback } from "react";
 
 type WizardStep = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
@@ -31,9 +35,11 @@ const WIZARD_STEPS_EXAM = [
 
 const WIZARD_STEPS_OTHER = [
   { id: 1, name: "Goal Type", description: "What are you learning?" },
-  { id: 2, name: "Timeline", description: "When do you need it?" },
-  { id: 3, name: "Assessment", description: "Where are you now?" },
-  { id: 4, name: "Preferences", description: "How do you learn?" },
+  { id: 2, name: "Course & Library", description: "Free or paid, then choose the library" },
+  { id: 3, name: "Videos", description: "Fetch YouTube content" },
+  { id: 4, name: "Timeline", description: "When do you need it?" },
+  { id: 5, name: "Assessment", description: "Where are you now?" },
+  { id: 6, name: "Preferences", description: "How do you learn?" },
 ];
 
 interface GoalBuilderPageProps {
@@ -52,25 +58,76 @@ export function GoalBuilderPage({ onSaveGoalSchedule }: GoalBuilderPageProps) {
   const [preferences, setPreferences] = useState<Partial<GoalPreferences>>({});
 
   // Roadmap state
+  const [detailedRoadmap, setDetailedRoadmap] = useState<DetailedRoadmap | null>(null);
+  const [originalDetailedRoadmap, setOriginalDetailedRoadmap] = useState<DetailedRoadmap | null>(null);
   const [roadmap, setRoadmap] = useState<Roadmap | null>(null);
   const [originalRoadmap, setOriginalRoadmap] = useState<Roadmap | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
 
+  const focusTopics = useMemo<Topic[]>(() => {
+    if (definition.type === "exam") {
+      return definition.topics || [];
+    }
+
+    if (definition.type === "skill") {
+      return (definition.selectedSkills || []).map((selection, index) => ({
+        id: selection.skillId,
+        name: selection.name,
+        subjectId: selection.skillId,
+        module: "Skill Library",
+        difficulty: index % 3 === 0 ? "easy" : index % 3 === 1 ? "medium" : "hard",
+        estimatedHours: selection.includeSubskills ? 14 : 8,
+      }));
+    }
+
+    if (definition.type === "role") {
+      return (definition.selectedRoles || []).map((roleId, index) => {
+        const role = roles.find((item) => item.id === roleId);
+        return {
+          id: roleId,
+          name: role?.name || roleId,
+          subjectId: roleId,
+          module: "Role Library",
+          difficulty: index % 3 === 0 ? "medium" : "hard",
+          estimatedHours: 20,
+        };
+      });
+    }
+
+    return [];
+  }, [definition.type, definition.topics, definition.selectedSkills, definition.selectedRoles]);
+
+  const planningDefinition = useMemo<Partial<GoalDefinition>>(() => ({
+    ...definition,
+    topics: focusTopics,
+  }), [definition, focusTopics]);
+
+  const selectedVideoHours = useMemo(() => {
+    if (!Array.isArray(planningDefinition.videos)) {
+      return 0;
+    }
+
+    const totalSeconds = planningDefinition.videos.reduce((sum, video) => sum + (video.durationSeconds || 0), 0);
+    return Math.round((totalSeconds / 3600) * 10) / 10;
+  }, [planningDefinition.videos]);
+
   // Complete wizard and generate roadmap
   const handleComplete = useCallback(async () => {
     setIsGenerating(true);
-    
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-    
-    // Generate personalized roadmap from actual selections
-    const generatedRoadmap = generateRoadmapFromSelection(definition as GoalDefinition);
-    setRoadmap(generatedRoadmap);
-    setOriginalRoadmap(generatedRoadmap); // Store original for restore
-    setIsGenerating(false);
-    setView("roadmap");
-  }, [definition]);
+    try {
+      const generatedDetailedRoadmap = await generateDetailedRoadmap(planningDefinition as GoalDefinition);
+      const generatedRoadmap = convertDetailedRoadmapToRoadmap(generatedDetailedRoadmap);
+
+      setDetailedRoadmap(generatedDetailedRoadmap);
+      setOriginalDetailedRoadmap(JSON.parse(JSON.stringify(generatedDetailedRoadmap)) as DetailedRoadmap);
+      setRoadmap(generatedRoadmap);
+      setOriginalRoadmap(JSON.parse(JSON.stringify(generatedRoadmap)) as Roadmap);
+      setView("roadmap");
+    } finally {
+      setIsGenerating(false);
+    }
+  }, [planningDefinition]);
 
   // Get selected goal info
   const selectedGoal = useMemo(() => {
@@ -143,7 +200,7 @@ export function GoalBuilderPage({ onSaveGoalSchedule }: GoalBuilderPageProps) {
       if (currentStep === 4) {
         return (
           <VideoPreferencesStep
-            data={definition}
+            data={planningDefinition}
             onUpdate={setDefinition}
             onNext={handleNext}
             onBack={handleBack}
@@ -153,7 +210,7 @@ export function GoalBuilderPage({ onSaveGoalSchedule }: GoalBuilderPageProps) {
       if (currentStep === 5) {
         return (
           <VideoResultsStep
-            data={definition}
+            data={planningDefinition}
             onUpdate={setDefinition}
             onNext={handleNext}
             onBack={handleBack}
@@ -161,15 +218,10 @@ export function GoalBuilderPage({ onSaveGoalSchedule }: GoalBuilderPageProps) {
         );
       }
       if (currentStep === 6) {
-          // Calculate total study time from selected videos
-          const totalVideoSeconds = Array.isArray(definition.videos)
-            ? definition.videos.reduce((sum, video) => sum + (video.durationSeconds || 0), 0)
-            : 0;
-          const totalVideoHours = Math.round(totalVideoSeconds / 3600 * 10) / 10;
           return (
             <DeadlineStep
               data={constraints}
-              estimatedHours={totalVideoHours}
+              estimatedHours={selectedVideoHours || 0}
               onUpdate={setConstraints}
               onNext={handleNext}
               onBack={handleBack}
@@ -201,13 +253,12 @@ export function GoalBuilderPage({ onSaveGoalSchedule }: GoalBuilderPageProps) {
         );
       }
     } else {
-      // Non-exam flow: step 2 = Deadline, 3 = Assessment, 4 = Preferences
+      // Skill/role flow: 2=VideoPrefs, 3=Videos, 4=Timeline, 5=Assessment, 6=Preferences
       if (currentStep === 2) {
         return (
-          <DeadlineStep
-            data={constraints}
-            estimatedHours={selectedGoal?.estimatedHours ?? (definition.type === "role" ? 120 : 0)}
-            onUpdate={setConstraints}
+          <VideoPreferencesStep
+            data={planningDefinition}
+            onUpdate={setDefinition}
             onNext={handleNext}
             onBack={handleBack}
           />
@@ -215,16 +266,37 @@ export function GoalBuilderPage({ onSaveGoalSchedule }: GoalBuilderPageProps) {
       }
       if (currentStep === 3) {
         return (
-          <AssessmentStep
-            data={assessment}
-            goalName={selectedGoal?.name ?? definition.customName ?? "this topic"}
-            onUpdate={setAssessment}
+          <VideoResultsStep
+            data={planningDefinition}
+            onUpdate={setDefinition}
             onNext={handleNext}
             onBack={handleBack}
           />
         );
       }
       if (currentStep === 4) {
+        return (
+          <DeadlineStep
+            data={constraints}
+            estimatedHours={selectedVideoHours > 0 ? selectedVideoHours : (selectedGoal?.estimatedHours ?? 0)}
+            onUpdate={setConstraints}
+            onNext={handleNext}
+            onBack={handleBack}
+          />
+        );
+      }
+      if (currentStep === 5) {
+        return (
+          <AssessmentStep
+            data={assessment}
+            goalName={selectedGoal?.name ?? definition.customName ?? planningDefinition.topics?.[0]?.name ?? "this topic"}
+            onUpdate={setAssessment}
+            onNext={handleNext}
+            onBack={handleBack}
+          />
+        );
+      }
+      if (currentStep === 6) {
         return (
           <PreferenceStep
             data={preferences}
@@ -237,7 +309,7 @@ export function GoalBuilderPage({ onSaveGoalSchedule }: GoalBuilderPageProps) {
     }
 
     return null;
-  }, [currentStep, definition, constraints, assessment, preferences, selectedGoal, handleNext, handleBack, handleComplete]);
+  }, [currentStep, definition, planningDefinition, constraints, assessment, preferences, selectedGoal, selectedVideoHours, handleNext, handleBack, handleComplete]);
 
   // Roadmap actions
   const handleTaskDefer = useCallback((taskId: string) => {
@@ -260,20 +332,27 @@ export function GoalBuilderPage({ onSaveGoalSchedule }: GoalBuilderPageProps) {
 
   const handleRegenerate = useCallback(async () => {
     setIsGenerating(true);
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-    const regeneratedRoadmap = generateRoadmapFromSelection(definition as GoalDefinition);
-    setRoadmap(regeneratedRoadmap);
-    setOriginalRoadmap(regeneratedRoadmap); // Update original on regenerate
-    setIsGenerating(false);
-    setHasChanges(false);
-  }, [definition]);
+    try {
+      const regeneratedDetailedRoadmap = await generateDetailedRoadmap(planningDefinition as GoalDefinition);
+      const regeneratedRoadmap = convertDetailedRoadmapToRoadmap(regeneratedDetailedRoadmap);
+
+      setDetailedRoadmap(regeneratedDetailedRoadmap);
+      setOriginalDetailedRoadmap(JSON.parse(JSON.stringify(regeneratedDetailedRoadmap)) as DetailedRoadmap);
+      setRoadmap(regeneratedRoadmap);
+      setOriginalRoadmap(JSON.parse(JSON.stringify(regeneratedRoadmap)) as Roadmap);
+      setHasChanges(false);
+    } finally {
+      setIsGenerating(false);
+    }
+  }, [planningDefinition]);
 
   const handleRestore = useCallback(() => {
-    if (originalRoadmap) {
+    if (originalDetailedRoadmap && originalRoadmap) {
+      setDetailedRoadmap(JSON.parse(JSON.stringify(originalDetailedRoadmap)) as DetailedRoadmap);
       setRoadmap(JSON.parse(JSON.stringify(originalRoadmap))); // Deep copy
       setHasChanges(false);
     }
-  }, [originalRoadmap]);
+  }, [originalDetailedRoadmap, originalRoadmap]);
 
   const handleTaskSchedule = useCallback((taskId: string, date: string | undefined) => {
     if (!roadmap) return;
@@ -294,17 +373,21 @@ export function GoalBuilderPage({ onSaveGoalSchedule }: GoalBuilderPageProps) {
   }, [roadmap]);
 
   const handleSave = useCallback(async () => {
-    if (!roadmap) {
+    const roadmapToSave = detailedRoadmap
+      ? convertDetailedRoadmapToRoadmap(detailedRoadmap)
+      : roadmap;
+
+    if (!roadmapToSave) {
       return;
     }
 
     console.log("Saving goal and roadmap...");
     // Session-only save for development: no backend persistence.
     await new Promise((resolve) => setTimeout(resolve, 1000));
-    await onSaveGoalSchedule?.(roadmap);
+    await onSaveGoalSchedule?.(roadmapToSave);
     setHasChanges(false);
     alert("Goal saved for this session. Check Schedule tab.");
-  }, [onSaveGoalSchedule, roadmap]);
+  }, [detailedRoadmap, onSaveGoalSchedule, roadmap]);
 
   const handleBackToWizard = useCallback(() => {
     setView("wizard");
@@ -375,8 +458,10 @@ export function GoalBuilderPage({ onSaveGoalSchedule }: GoalBuilderPageProps) {
               </p>
             </div>
 
-            {/* Roadmap Preview */}
-            {roadmap && (
+              {/* Roadmap Preview */}
+              {detailedRoadmap ? (
+                <DetailedRoadmapView roadmap={detailedRoadmap} />
+              ) : roadmap ? (
               <RoadmapPreview
                 roadmap={roadmap}
                 onTaskDefer={handleTaskDefer}
@@ -385,7 +470,7 @@ export function GoalBuilderPage({ onSaveGoalSchedule }: GoalBuilderPageProps) {
                 onTaskSchedule={handleTaskSchedule}
                 isEditable={true}
               />
-            )}
+              ) : null}
 
             {/* Controls */}
             <RoadmapControls

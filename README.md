@@ -35,6 +35,11 @@ Required keys for production:
 - `CLERK_SECRET_KEY=sk_...`
 - `DATABASE_URL=postgresql://...`
 
+Scheduler / detailed roadmap AI:
+
+- `GROQ_API_KEY=...`
+- `GROQ_MODEL=llama3-70b-8192`
+
 ## Local Development
 
 1. Install dependencies:

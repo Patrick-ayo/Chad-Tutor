@@ -63,6 +63,7 @@ export interface GoalOption {
 
 // Video preferences for YouTube content fetching
 export interface VideoPreferences {
+  contentTier: "free" | "paid";
   sourceType: "single-playlist" | "mixed";
   sortBy: "relevance" | "views" | "rating" | "date";
   includeOneShot: boolean;

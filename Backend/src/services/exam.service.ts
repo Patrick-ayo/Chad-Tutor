@@ -15,6 +15,7 @@
 import { examApiClient } from '../external';
 import * as cacheService from './cache.service';
 import * as normalizationService from './normalization.service';
+import type { EntityType } from '@prisma/client';
 import {
   universityRepo,
   courseRepo,
@@ -25,6 +26,13 @@ import {
 import { normalizeSearchQuery } from '../utils/normalization';
 
 const SOURCE_NAME = 'ExamDB'; // Default source name for external API
+
+const ENTITY_TYPES = {
+  university: 'UNIVERSITY',
+  course: 'COURSE',
+  semester: 'SEMESTER',
+  subject: 'SUBJECT',
+} as const satisfies Record<string, EntityType>;
 
 // ============================================================================
 // RESPONSE TYPES
@@ -74,7 +82,7 @@ export async function searchUniversities(
   const normalizedQuery = normalizeSearchQuery(query);
 
   // Try cache first
-  const cached = await cacheService.getCachedSearch(normalizedQuery, 'university');
+  const cached = await cacheService.getCachedSearch(normalizedQuery, ENTITY_TYPES.university);
   
   if (cached) {
     // Get universities by IDs
@@ -82,7 +90,7 @@ export async function searchUniversities(
     const latencyMs = Date.now() - startTime;
 
     // Log search
-    await logSearch(userId, query, normalizedQuery, 'university', true, universities.length, latencyMs);
+    await logSearch(userId, query, normalizedQuery, ENTITY_TYPES.university, true, universities.length, latencyMs);
 
     return { universities, cacheHit: true, latencyMs };
   }
@@ -111,14 +119,14 @@ export async function searchUniversities(
   // Update cache
   await cacheService.setCachedSearch(
     normalizedQuery,
-    'university',
+    ENTITY_TYPES.university,
     universities.map((u) => u.id)
   );
 
   const latencyMs = Date.now() - startTime;
 
   // Log search
-  await logSearch(userId, query, normalizedQuery, 'university', false, universities.length, latencyMs);
+  await logSearch(userId, query, normalizedQuery, ENTITY_TYPES.university, false, universities.length, latencyMs);
 
   return { universities, cacheHit: false, latencyMs };
 }
@@ -157,12 +165,12 @@ export async function getCourses(
   const cacheKey = `uni:${universityId}`;
 
   // Try cache first
-  const cached = await cacheService.getCachedSearch(cacheKey, 'course');
+  const cached = await cacheService.getCachedSearch(cacheKey, ENTITY_TYPES.course);
 
   if (cached) {
     const courses = await getCoursesByIds(cached.resultIds);
     const latencyMs = Date.now() - startTime;
-    await logSearch(userId, cacheKey, cacheKey, 'course', true, courses.length, latencyMs);
+    await logSearch(userId, cacheKey, cacheKey, ENTITY_TYPES.course, true, courses.length, latencyMs);
     return { courses, cacheHit: true, latencyMs };
   }
 
@@ -202,10 +210,10 @@ export async function getCourses(
   }));
 
   // Update cache
-  await cacheService.setCachedSearch(cacheKey, 'course', result.map((c) => c.id));
+  await cacheService.setCachedSearch(cacheKey, ENTITY_TYPES.course, result.map((c) => c.id));
 
   const latencyMs = Date.now() - startTime;
-  await logSearch(userId, cacheKey, cacheKey, 'course', false, result.length, latencyMs);
+  await logSearch(userId, cacheKey, cacheKey, ENTITY_TYPES.course, false, result.length, latencyMs);
 
   return { courses: result, cacheHit: false, latencyMs };
 }
@@ -246,12 +254,12 @@ export async function getSemesters(
   const cacheKey = `course:${courseId}`;
 
   // Try cache first
-  const cached = await cacheService.getCachedSearch(cacheKey, 'semester');
+  const cached = await cacheService.getCachedSearch(cacheKey, ENTITY_TYPES.semester);
 
   if (cached) {
     const semesters = await getSemestersByIds(cached.resultIds);
     const latencyMs = Date.now() - startTime;
-    await logSearch(userId, cacheKey, cacheKey, 'semester', true, semesters.length, latencyMs);
+    await logSearch(userId, cacheKey, cacheKey, ENTITY_TYPES.semester, true, semesters.length, latencyMs);
     return { semesters, cacheHit: true, latencyMs };
   }
 
@@ -289,10 +297,10 @@ export async function getSemesters(
   }));
 
   // Update cache
-  await cacheService.setCachedSearch(cacheKey, 'semester', result.map((s) => s.id));
+  await cacheService.setCachedSearch(cacheKey, ENTITY_TYPES.semester, result.map((s) => s.id));
 
   const latencyMs = Date.now() - startTime;
-  await logSearch(userId, cacheKey, cacheKey, 'semester', false, result.length, latencyMs);
+  await logSearch(userId, cacheKey, cacheKey, ENTITY_TYPES.semester, false, result.length, latencyMs);
 
   return { semesters: result, cacheHit: false, latencyMs };
 }
@@ -332,12 +340,12 @@ export async function getSubjects(
   const cacheKey = `semester:${semesterId}`;
 
   // Try cache first
-  const cached = await cacheService.getCachedSearch(cacheKey, 'subject');
+  const cached = await cacheService.getCachedSearch(cacheKey, ENTITY_TYPES.subject);
 
   if (cached) {
     const subjects = await getSubjectsByIds(cached.resultIds);
     const latencyMs = Date.now() - startTime;
-    await logSearch(userId, cacheKey, cacheKey, 'subject', true, subjects.length, latencyMs);
+    await logSearch(userId, cacheKey, cacheKey, ENTITY_TYPES.subject, true, subjects.length, latencyMs);
     return { subjects, cacheHit: true, latencyMs };
   }
 
@@ -385,10 +393,10 @@ export async function getSubjects(
   }));
 
   // Update cache
-  await cacheService.setCachedSearch(cacheKey, 'subject', result.map((s) => s.id));
+  await cacheService.setCachedSearch(cacheKey, ENTITY_TYPES.subject, result.map((s) => s.id));
 
   const latencyMs = Date.now() - startTime;
-  await logSearch(userId, cacheKey, cacheKey, 'subject', false, result.length, latencyMs);
+  await logSearch(userId, cacheKey, cacheKey, ENTITY_TYPES.subject, false, result.length, latencyMs);
 
   return { subjects: result, cacheHit: false, latencyMs };
 }
@@ -424,7 +432,7 @@ async function logSearch(
   userId: string | undefined,
   rawQuery: string,
   normalizedQuery: string,
-  entityType: string,
+  entityType: EntityType,
   cacheHit: boolean,
   resultCount: number,
   latencyMs: number
@@ -434,7 +442,7 @@ async function logSearch(
       userId,
       rawQuery,
       normalizedQuery,
-      entityType: entityType as any,
+      entityType,
       cacheHit,
       resultCount,
       latencyMs,

@@ -20,6 +20,41 @@ router.get('/date', requireUser, asyncHandler(async (req: Request, res: Response
   return res.json({ tasks });
 }));
 
+router.get('/range', requireUser, asyncHandler(async (req: Request, res: Response) => {
+  const startDateRaw = req.query.startDate as string | undefined;
+  const endDateRaw = req.query.endDate as string | undefined;
+
+  if (!startDateRaw || !endDateRaw) {
+    return res.status(400).json({ error: 'Bad Request', message: 'startDate and endDate are required' });
+  }
+
+  const startDate = new Date(startDateRaw);
+  const endDate = new Date(endDateRaw);
+
+  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
+    return res.status(400).json({ error: 'Bad Request', message: 'startDate and endDate must be valid ISO dates' });
+  }
+
+  if (startDate.getTime() > endDate.getTime()) {
+    return res.status(400).json({ error: 'Bad Request', message: 'startDate must be before or equal to endDate' });
+  }
+
+  const tasks = await taskService.getTasksForRange(req.user!.id, startDate, endDate);
+  return res.json({ tasks });
+}));
+
+router.patch('/:taskId/progress', requireUser, asyncHandler(async (req: Request, res: Response) => {
+  const { taskId } = req.params as { taskId: string };
+  const { watchedMinutes, percentComplete } = req.body as { watchedMinutes?: number; percentComplete?: number };
+
+  if (typeof watchedMinutes !== 'number' || typeof percentComplete !== 'number') {
+    return res.status(400).json({ error: 'Bad Request', message: 'watchedMinutes and percentComplete are required numbers' });
+  }
+
+  const result = await taskService.updateTaskProgress(req.user!.id, taskId, watchedMinutes, percentComplete);
+  return res.json(result);
+}));
+
 router.post('/:taskId/complete', requireUser, asyncHandler(async (req: Request, res: Response) => {
   const { taskId } = req.params as { taskId: string };
   const { completedDurationMinutes, quiz } = req.body as {

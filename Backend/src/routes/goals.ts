@@ -6,8 +6,9 @@
  */
 
 import { Router, Request, Response } from 'express';
-import { goalService } from '../services';
+import { goalService, plannerService } from '../services';
 import { asyncHandler, requireUser } from '../middleware';
+import { goalRepo, playlistRepo } from '../repositories';
 
 const router = Router();
 
@@ -212,6 +213,54 @@ router.post('/:id/reactivate', requireUser, asyncHandler(async (req: Request, re
     const goal = await goalService.reactivateGoal(goalId, req.user!.id);
 
     res.json({ goal, message: 'Goal reactivated' });
+}));
+
+/**
+ * POST /api/goals/:goalId/playlists
+ * Link an existing playlist to the goal.
+ */
+router.post('/:goalId/playlists', requireUser, asyncHandler(async (req: Request, res: Response) => {
+    const goalId = req.params.goalId as string;
+    const { playlistId } = req.body as { playlistId?: string };
+
+    if (!playlistId) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'playlistId is required',
+      });
+    }
+
+    const existingGoal = await goalRepo.findById(goalId, req.user!.id);
+    if (!existingGoal) {
+      return res.status(404).json({
+        error: 'Not Found',
+        message: 'Goal not found',
+      });
+    }
+
+    const playlist = await playlistRepo.findById(playlistId, req.user!.id);
+    if (!playlist) {
+      return res.status(404).json({
+        error: 'Not Found',
+        message: 'Playlist not found',
+      });
+    }
+
+    const linkedAt = new Date().toISOString();
+    const link = {
+      goalId,
+      playlistId,
+      playlistName: playlist.name,
+      linkedAt,
+    };
+
+    const milestones = Array.isArray(existingGoal.milestones) ? [...existingGoal.milestones] : [];
+    milestones.push(link);
+
+    await goalRepo.update(goalId, req.user!.id, { milestones: milestones as object[] });
+    await plannerService.recomputeGoalSchedule(req.user!.id, goalId, 'playlist-added');
+
+    return res.json({ link, recomputeTriggered: true });
 }));
 
 /**
