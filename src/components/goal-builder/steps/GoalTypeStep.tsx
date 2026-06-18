@@ -273,7 +273,7 @@ export function GoalTypeStep({ data, onUpdate, onNext }: GoalTypeStepProps) {
       onNext();
       return;
     }
-    // For roles, use selected roles and anchor the goalId to first selection
+    // For roles, use selected roles
     if (selectedType === "role" && selectedRoles.length > 0) {
       const roleNames = selectedRoles
         .map((roleId) => roles.find((role) => role.id === roleId)?.name)
@@ -281,7 +281,6 @@ export function GoalTypeStep({ data, onUpdate, onNext }: GoalTypeStepProps) {
 
       onUpdate({
         type: "role",
-        goalId: selectedRoles[0],
         selectedRoles,
         customName: roleNames.join(", "),
       });

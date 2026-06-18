@@ -1,16 +1,54 @@
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { BookOpen, Target } from "lucide-react";
+import { BookOpen, Target, Loader2 } from "lucide-react";
 import type { ConceptTags } from "@/types/session";
+import { fetchLectureSummary } from "@/lib/plannerApi";
 
 interface NotesModeProps {
   conceptTags: ConceptTags;
-  structuredNotes: string; // HTML content
+  structuredNotes: string; // HTML content fallback
+  videoId?: string;
+  videoTitle?: string;
+  topicName?: string;
+  taskId?: string;
   onNotesRead?: () => void;
 }
 
-export function NotesMode({ conceptTags, structuredNotes, onNotesRead }: NotesModeProps) {
+export function NotesMode({ conceptTags, structuredNotes, videoId, videoTitle, topicName, taskId, onNotesRead }: NotesModeProps) {
+  const [aiNotes, setAiNotes] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    async function loadAiNotes() {
+      const idToUse = videoId || taskId;
+      if (!idToUse || !topicName) return;
+
+      setIsLoading(true);
+      try {
+        const response = await fetchLectureSummary(
+          idToUse,
+          'structured-notes',
+          videoTitle || topicName,
+          topicName,
+          taskId
+        );
+        if ('content' in response && response.content) {
+          const rawContent = response.content;
+          setAiNotes(typeof rawContent === 'string' ? rawContent : rawContent.summary);
+        }
+      } catch (error) {
+        console.error("Failed to load AI notes:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    void loadAiNotes();
+  }, [videoId, videoTitle, topicName, taskId]);
+
+  const displayNotes = aiNotes || structuredNotes;
+
   return (
     <div className="space-y-6">
       {/* Topic Overview */}
@@ -68,16 +106,17 @@ export function NotesMode({ conceptTags, structuredNotes, onNotesRead }: NotesMo
           <CardTitle className="flex items-center gap-2">
             <BookOpen className="h-5 w-5" />
             Structured Notes
+            {isLoading && <Loader2 className="h-4 w-4 animate-spin ml-2" />}
           </CardTitle>
           <p className="text-sm text-muted-foreground">
-            Organized concepts extracted from the video content
+            {aiNotes ? "AI-generated study notes based on the video transcript" : "Organized concepts extracted from the video content"}
           </p>
         </CardHeader>
         <CardContent>
           <ScrollArea className="h-[600px] pr-4">
             <div 
               className="prose prose-sm dark:prose-invert max-w-none leading-relaxed"
-              dangerouslySetInnerHTML={{ __html: structuredNotes }}
+              dangerouslySetInnerHTML={{ __html: displayNotes }}
               onScroll={(e) => {
                 // Mark as read when scrolled to bottom
                 const element = e.target as HTMLElement;

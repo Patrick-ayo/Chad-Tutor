@@ -9,7 +9,13 @@ import type {
   PlannerData,
   TopicStatus,
   ScheduledTask,
+  TaskStatus,
+  TaskType,
+  LearningSessionData,
+  QuizQuestion,
 } from '@/types/planner';
+
+export type { LearningSessionData, QuizQuestion };
 
 interface ClerkLike {
   session?: {
@@ -36,27 +42,11 @@ type PlaylistItemLike = {
 
 type TaskLike = ScheduledTask & {
   playlistItem?: PlaylistItemLike | null;
+  playlistItemId?: string | null;
+  description?: string | null;
   notes?: string | null;
+  status?: string;
 };
-
-export interface LearningSessionData {
-  taskId: string;
-  videoId: string;
-  videoUrl: string;
-  videoTitle: string;
-  topicName: string;
-  transcriptSummary: string;
-  topicOverview: string;
-  expertInsight: string;
-  quizQuestions: LectureQuizQuestion[];
-  keyPoints: string[];
-  estimatedMinutes: number;
-  topicsCovered: string[];
-  practiceNote: string;
-  sessionGoal: string;
-  warning?: string;
-  materialsLoaded: boolean;
-}
 
 interface SuggestedActionsEventDetail {
   source: 'resolve-multitopic' | 'recompute';
@@ -80,17 +70,7 @@ interface TopicStatusesResponse {
 
 type LectureSummaryType = 'transcript-summary' | 'topic-overview' | 'expert-insight' | 'quiz' | 'all';
 
-export interface LectureQuizQuestion {
-  question: string;
-  options: {
-    A: string;
-    B: string;
-    C: string;
-    D: string;
-  };
-  correct: 'A' | 'B' | 'C' | 'D';
-  explanation: string;
-}
+export type LectureQuizQuestion = QuizQuestion;
 
 export interface LectureSummaryAllResponse {
   videoId: string;
@@ -162,16 +142,21 @@ function dispatchTopicStatusRefresh(reason: string) {
   );
 }
 
-function extractYouTubeVideoIdFromUrl(url?: string | null): string | null {
+function extractYouTubeVideoId(url?: string | null): string | null {
   if (!url) return null;
 
-  const watchMatch = url.match(/[?&]v=([a-zA-Z0-9_-]{6,})/);
-  if (watchMatch?.[1]) return watchMatch[1];
+  try {
+    const parsed = new URL(url);
+    const watchId = parsed.searchParams.get('v');
+    if (watchId) return watchId;
+  } catch {
+    // Fall through to regex patterns for non-standard URLs.
+  }
 
-  const shortMatch = url.match(/youtu\.be\/([a-zA-Z0-9_-]{6,})/);
+  const shortMatch = url.match(/youtu\.be\/([^?&]+)/);
   if (shortMatch?.[1]) return shortMatch[1];
 
-  const embedMatch = url.match(/embed\/([a-zA-Z0-9_-]{6,})/);
+  const embedMatch = url.match(/embed\/([^?&]+)/);
   if (embedMatch?.[1]) return embedMatch[1];
 
   return null;
@@ -187,25 +172,122 @@ function toStringArray(value: unknown): string[] {
     .filter((item) => item.length > 0);
 }
 
+function inferTaskType(task: TaskLike): TaskType {
+  if (task.taskType) {
+    return task.taskType;
+  }
+
+  if (task.type) {
+    return task.type;
+  }
+
+  if (task.playlistItemId || task.playlistItem) {
+    return 'learn';
+  }
+
+  const title = (task.title || '').toLowerCase();
+  if (title.includes('quiz')) return 'quiz';
+  if (title.includes('practice')) return 'practice';
+  if (title.includes('revision') || title.includes('revise')) return 'revision';
+  return 'practice';
+}
+
+function mapApiTaskStatus(status?: string): TaskStatus {
+  switch ((status || '').toUpperCase()) {
+    case 'COMPLETED':
+      return 'completed';
+    case 'IN_PROGRESS':
+      return 'in-progress';
+    case 'MISSED':
+    case 'SKIPPED':
+      return 'skipped';
+    case 'BLOCKED':
+      return 'blocked';
+    default:
+      return 'pending';
+  }
+}
+
+function mapApiTaskPriority(priority?: string): ScheduledTask['priority'] {
+  switch ((priority || '').toUpperCase()) {
+    case 'HIGH':
+      return 'high';
+    case 'LOW':
+      return 'low';
+    default:
+      return 'medium';
+  }
+}
+
 function getTaskTopics(task: TaskLike): string[] {
   return [
     ...toStringArray(task.keyPoints),
     ...toStringArray(task.learningOutcomes),
+    ...toStringArray(task.playlistItem?.keyPoints),
+    ...toStringArray(task.playlistItem?.learningOutcomes),
+    ...(task.description ? [String(task.description)] : []),
     ...(task.notes ? [String(task.notes)] : []),
   ].filter(Boolean);
 }
 
+function resolveLearnTaskVideo(task: TaskLike): { videoId: string; videoUrl: string } {
+  let videoId = task.videoId?.trim() || '';
+  let videoUrl = task.videoUrl?.trim() || '';
+
+  if (!videoId) {
+    videoId = task.playlistItem?.externalId?.trim()
+      || extractYouTubeVideoId(task.playlistItem?.externalUrl)
+      || extractYouTubeVideoId(videoUrl)
+      || '';
+  }
+
+  if (!videoUrl && task.playlistItem?.externalUrl) {
+    videoUrl = task.playlistItem.externalUrl.trim();
+  }
+
+  if (!videoUrl && videoId) {
+    videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
+  }
+
+  return { videoId, videoUrl };
+}
+
 function deriveTaskVideo(task: TaskLike): { videoId: string; videoUrl: string; videoTitle: string } {
   const playlistItem = task.playlistItem ?? undefined;
-  const explicitVideoId = task.videoId?.trim() || extractYouTubeVideoIdFromUrl(task.videoUrl ?? undefined);
-  const playlistVideoId = playlistItem?.externalId?.trim() || extractYouTubeVideoIdFromUrl(playlistItem?.externalUrl ?? undefined);
-  const videoId = explicitVideoId || playlistVideoId || '';
-  const videoUrl = task.videoUrl?.trim()
-    || playlistItem?.externalUrl?.trim()
-    || (videoId ? `https://www.youtube.com/watch?v=${videoId}` : '');
+  const { videoId, videoUrl } = resolveLearnTaskVideo(task);
   const videoTitle = playlistItem?.title?.trim() || task.title;
 
   return { videoId, videoUrl, videoTitle };
+}
+
+function normalizeScheduledTask(task: TaskLike): ScheduledTask {
+  const taskType = inferTaskType(task);
+  const scheduledDate = task.scheduledDate
+    ? (typeof task.scheduledDate === 'string' ? task.scheduledDate : new Date(task.scheduledDate).toISOString())
+    : new Date().toISOString();
+  const video = taskType === 'learn' ? resolveLearnTaskVideo(task) : { videoId: task.videoId || '', videoUrl: task.videoUrl || '' };
+
+  return {
+    ...task,
+    id: task.id,
+    title: task.title,
+    type: taskType,
+    taskType,
+    scheduledDate,
+    estimatedMinutes: task.estimatedMinutes ?? 25,
+    keyPoints: toStringArray(task.keyPoints),
+    learningOutcomes: toStringArray(task.learningOutcomes),
+    status: typeof task.status === 'string' && !['pending', 'in-progress', 'completed', 'overdue', 'blocked', 'skipped'].includes(task.status)
+      ? mapApiTaskStatus(task.status)
+      : (task.status as TaskStatus) ?? 'pending',
+    priority: mapApiTaskPriority(task.priority as string | undefined),
+    dependencies: task.dependencies ?? [],
+    goalId: task.goalId ?? 'general',
+    notes: task.description ?? task.notes ?? undefined,
+    videoId: taskType === 'learn' ? (video.videoId || undefined) : task.videoId,
+    videoUrl: taskType === 'learn' ? (video.videoUrl || undefined) : task.videoUrl,
+    videoTitle: task.videoTitle || (taskType === 'learn' ? task.playlistItem?.title || undefined : undefined),
+  };
 }
 
 export async function fetchPlannerSnapshot(): Promise<PlannerData> {
@@ -213,6 +295,105 @@ export async function fetchPlannerSnapshot(): Promise<PlannerData> {
 
   const payload = await parseJson<PlannerResponse>(response);
   return payload.planner;
+}
+
+export interface NextPendingTaskInfo {
+  task: ScheduledTask;
+  isToday: boolean;
+  daysFromToday: number;
+}
+
+function startOfLocalDay(date: Date): Date {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function daysFromToday(scheduledDate: string, reference = new Date()): number {
+  const today = startOfLocalDay(reference);
+  const taskDay = startOfLocalDay(new Date(scheduledDate));
+  return Math.round((taskDay.getTime() - today.getTime()) / (24 * 60 * 60 * 1000));
+}
+
+function isPendingScheduledTask(task: ScheduledTask, excludeTaskId?: string): boolean {
+  return task.status === 'pending' && task.id !== excludeTaskId;
+}
+
+function collectFuturePendingTasks(
+  planner: PlannerData,
+  excludeTaskId?: string,
+  reference = new Date(),
+): ScheduledTask[] {
+  const today = startOfLocalDay(reference);
+
+  return planner.scheduleDays
+    .flatMap((day) => day.tasks)
+    .filter((task) => {
+      const taskDay = startOfLocalDay(new Date(task.scheduledDate));
+      return taskDay.getTime() > today.getTime() && isPendingScheduledTask(task, excludeTaskId);
+    })
+    .sort(
+      (a, b) =>
+        new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime(),
+    );
+}
+
+export async function findNextPendingTask(
+  excludeTaskId?: string,
+  plannerSnapshot?: PlannerData,
+): Promise<NextPendingTaskInfo | null> {
+  const reference = new Date();
+  const todayIso = reference.toISOString();
+  const todayTasks = await fetchTasksForDate(todayIso);
+  const todayPending = todayTasks.find((task) => isPendingScheduledTask(task, excludeTaskId));
+
+  if (todayPending) {
+    return {
+      task: todayPending,
+      isToday: true,
+      daysFromToday: 0,
+    };
+  }
+
+  try {
+    const planner = plannerSnapshot ?? await fetchPlannerSnapshot();
+    const futurePending = collectFuturePendingTasks(planner, excludeTaskId, reference);
+    const nextTask = futurePending[0];
+
+    if (!nextTask) {
+      return null;
+    }
+
+    return {
+      task: nextTask,
+      isToday: false,
+      daysFromToday: daysFromToday(nextTask.scheduledDate, reference),
+    };
+  } catch (error) {
+    console.error('Failed to find next pending task:', error);
+    return null;
+  }
+}
+
+export async function findUpcomingPendingTasks(
+  limit = 3,
+  plannerSnapshot?: PlannerData,
+): Promise<NextPendingTaskInfo[]> {
+  const reference = new Date();
+
+  try {
+    const planner = plannerSnapshot ?? await fetchPlannerSnapshot();
+    return collectFuturePendingTasks(planner, undefined, reference)
+      .slice(0, limit)
+      .map((task) => ({
+        task,
+        isToday: false,
+        daysFromToday: daysFromToday(task.scheduledDate, reference),
+      }));
+  } catch (error) {
+    console.error('Failed to find upcoming pending tasks:', error);
+    return [];
+  }
 }
 
 export async function fetchTasksForDate(date: string): Promise<ScheduledTask[]> {
@@ -224,17 +405,7 @@ export async function fetchTasksForDate(date: string): Promise<ScheduledTask[]> 
     const payload = await parseJson<TasksForDateResponse>(response);
     const tasks = Array.isArray(payload.tasks) ? payload.tasks : [];
 
-    return tasks.map((task) => {
-      const taskLike = task as TaskLike;
-      const video = deriveTaskVideo(taskLike);
-
-      return {
-        ...task,
-        ...(task.type === 'learn' && !task.videoId && video.videoId ? { videoId: video.videoId } : {}),
-        ...(task.type === 'learn' && !task.videoUrl && video.videoUrl ? { videoUrl: video.videoUrl } : {}),
-        ...(taskLike.playlistItem?.title && !task.title ? { title: taskLike.playlistItem.title } : {}),
-      };
-    });
+    return tasks.map((task) => normalizeScheduledTask(task as TaskLike));
   } catch (error) {
     console.error('Failed to fetch tasks for date:', error);
     return [];
@@ -254,12 +425,13 @@ export async function fetchTopicStatuses(): Promise<TopicStatus[]> {
 
 export async function fetchLectureSummary(
   videoId: string,
-  type: LectureSummaryType,
+  type: LectureSummaryType | 'structured-notes' | 'ai-summary',
   title: string,
   topic: string,
   taskId?: string,
 ): Promise<
-  | { videoId: string; type: 'transcript-summary' | 'topic-overview' | 'expert-insight'; content: string }
+  | { videoId: string; type: 'transcript-summary' | 'topic-overview' | 'expert-insight' | 'structured-notes'; content: string }
+  | { videoId: string; type: 'ai-summary'; content: { summary: string; keyInsights: string[]; analogies: string[] } }
   | { videoId: string; type: 'quiz'; questions: LectureQuizQuestion[] }
   | LectureSummaryAllResponse
 > {
@@ -289,34 +461,42 @@ export async function startLearningSession(
     fetchTasksForDate(todayIso),
   ]);
 
-  const lecture = lectureResult.status === 'fulfilled' ? lectureResult.value : null;
+  const lecture = lectureResult.status === 'fulfilled' && lectureResult.value
+    ? lectureResult.value as LectureSummaryAllResponse
+    : null;
   const todaysTasks = todaysTasksResult.status === 'fulfilled' ? todaysTasksResult.value : [];
 
-  const task = todaysTasks.find((item) => item.id === taskId) as TaskLike | undefined;
-  const taskTopics = task ? getTaskTopics(task) : [];
-  const derivedVideo = task ? deriveTaskVideo(task) : { videoId, videoUrl: '', videoTitle };
-
+  const task = todaysTasks.find((item) => item.id === taskId);
+  const taskTopics = task ? getTaskTopics(task as TaskLike) : [];
+  const resolvedVideoId = lecture?.videoId || videoId || (task ? deriveTaskVideo(task as TaskLike).videoId : '');
   const fallbackTopic = topicName || task?.title || videoTitle;
+  const topicsCovered = toStringArray(task?.learningOutcomes).length > 0
+    ? toStringArray(task?.learningOutcomes)
+    : taskTopics.length > 0
+      ? taskTopics
+      : [fallbackTopic];
+  const keyPoints = toStringArray(task?.keyPoints).length > 0
+    ? toStringArray(task?.keyPoints)
+    : taskTopics.slice(0, 6);
 
   return {
     taskId,
-    videoId: lecture?.videoId || derivedVideo.videoId || videoId,
-    videoUrl: derivedVideo.videoUrl || (lecture?.videoId ? `https://www.youtube.com/watch?v=${lecture.videoId}` : ''),
-    videoTitle: videoTitle || derivedVideo.videoTitle,
+    videoId: resolvedVideoId,
+    videoTitle: videoTitle || task?.title || fallbackTopic,
+    videoUrl: resolvedVideoId ? `https://www.youtube.com/watch?v=${resolvedVideoId}` : '',
     topicName: fallbackTopic,
-    transcriptSummary: lecture?.transcriptSummary || '',
-    topicOverview: lecture?.topicOverview || '',
-    expertInsight: lecture?.expertInsight || '',
-    quizQuestions: lecture?.quizQuestions || [],
-    keyPoints: taskTopics.slice(0, 6),
+    transcriptSummary: lecture?.transcriptSummary ?? '',
+    topicOverview: lecture?.topicOverview ?? '',
+    expertInsight: lecture?.expertInsight ?? '',
+    quizQuestions: lecture?.quizQuestions ?? [],
+    keyPoints,
     estimatedMinutes: task?.estimatedMinutes ?? 0,
-    topicsCovered: taskTopics.length > 0 ? taskTopics : [fallbackTopic],
-    practiceNote: task?.description || task?.notes || `Practice the core ideas from ${fallbackTopic}.`,
-    sessionGoal: `By the end of this session, you should be able to explain ${fallbackTopic}.`,
-    warning: lectureResult.status === 'rejected' || todaysTasksResult.status === 'rejected'
-      ? 'Some session materials failed to load'
-      : undefined,
-    materialsLoaded: lectureResult.status === 'fulfilled' && todaysTasksResult.status === 'fulfilled',
+    topicsCovered,
+    practiceNote: (task as TaskLike | undefined)?.description
+      || task?.notes
+      || `Practice the core ideas from ${fallbackTopic}.`,
+    sessionGoal: task?.learningOutcomes?.[0]
+      || `By the end of this session, you should be able to explain ${fallbackTopic}.`,
   };
 }
 
@@ -443,6 +623,23 @@ export async function generateDetailedRoadmap(
 
   const payload = await parseJson<DetailedRoadmapGenerationResult & { roadmap: DetailedRoadmap }>(response);
   return payload.roadmap;
+}
+
+export async function createGoal(input: {
+  name: string;
+  description?: string;
+  deadline: string;
+  totalHours?: number;
+}): Promise<{ id: string }> {
+  const response = await authorizedFetch('/api/goals', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  });
+  const payload = await parseJson<{ goal: { id: string } }>(response);
+  return payload.goal;
 }
 
 export async function resolveMissedTasksBatch(
@@ -609,3 +806,37 @@ export async function generateSessionQuiz(input: {
 
   return questions.slice(0, 10);
 }
+
+export async function fetchNextPendingTask(
+  completedTaskId?: string,
+): Promise<{ task: ScheduledTask | null; isToday: boolean }> {
+  try {
+    const reference = new Date();
+    const todayIso = reference.toISOString();
+    const todayTasks = await fetchTasksForDate(todayIso);
+    const todayPending = todayTasks.find((task) => task.status === 'pending' && task.id !== completedTaskId);
+
+    if (todayPending) {
+      return {
+        task: todayPending,
+        isToday: true,
+      };
+    }
+
+    // Fall back to GET /api/planner for future tasks
+    const response = await authorizedFetch('/api/planner');
+    const payload = await parseJson<PlannerResponse>(response);
+    const planner = payload.planner;
+    const futurePending = collectFuturePendingTasks(planner, completedTaskId, reference);
+    const nextTask = futurePending[0] || null;
+
+    return {
+      task: nextTask,
+      isToday: false,
+    };
+  } catch (error) {
+    console.error('Failed in fetchNextPendingTask:', error);
+    return { task: null, isToday: false };
+  }
+}
+

@@ -114,7 +114,8 @@ export function LectureSummaryPanel({ videoId, videoTitle, topicName, taskId }: 
     setTranscript((state) => ({ ...state, loading: true, error: null }));
     try {
       const response = await fetchLectureSummary(videoId, 'transcript-summary', videoTitle, topicName, taskId);
-      const content = 'content' in response ? response.content : '';
+      const rawContent = 'content' in response ? response.content : '';
+      const content = typeof rawContent === 'string' ? rawContent : rawContent.summary;
       setTranscript({ loading: false, error: null, content });
     } catch (error) {
       setTranscript({
@@ -134,7 +135,8 @@ export function LectureSummaryPanel({ videoId, videoTitle, topicName, taskId }: 
     setOverview((state) => ({ ...state, loading: true, error: null }));
     try {
       const response = await fetchLectureSummary(videoId, 'topic-overview', videoTitle, topicName, taskId);
-      const content = 'content' in response ? response.content : '';
+      const rawContent = 'content' in response ? response.content : '';
+      const content = typeof rawContent === 'string' ? rawContent : rawContent.summary;
       setOverview({ loading: false, error: null, content });
     } catch (error) {
       setOverview({
@@ -154,7 +156,8 @@ export function LectureSummaryPanel({ videoId, videoTitle, topicName, taskId }: 
     setInsight((state) => ({ ...state, loading: true, error: null }));
     try {
       const response = await fetchLectureSummary(videoId, 'expert-insight', videoTitle, topicName, taskId);
-      const content = 'content' in response ? response.content : '';
+      const rawContent = 'content' in response ? response.content : '';
+      const content = typeof rawContent === 'string' ? rawContent : rawContent.summary;
       setInsight({ loading: false, error: null, content });
     } catch (error) {
       setInsight({

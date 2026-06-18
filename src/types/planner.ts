@@ -62,6 +62,7 @@ export interface ScheduledTask {
   completedDate?: Date;
   videoId?: string;
   videoUrl?: string;
+  videoTitle?: string;
   estimatedMinutes: number;
   originalEstimatedMinutes?: number;
   actualMinutes?: number;
@@ -353,4 +354,33 @@ export interface GenerateScheduleResult {
     time: number;
     effort: number;
   };
+}
+
+export interface QuizQuestion {
+  question: string;
+  options: {
+    A: string;
+    B: string;
+    C: string;
+    D: string;
+  };
+  correct: 'A' | 'B' | 'C' | 'D';
+  explanation: string;
+}
+
+export interface LearningSessionData {
+  taskId: string;
+  videoId: string;
+  videoTitle: string;
+  videoUrl: string;
+  topicName: string;
+  transcriptSummary: string;
+  topicOverview: string;
+  expertInsight: string;
+  quizQuestions: QuizQuestion[];
+  keyPoints: string[];
+  estimatedMinutes: number;
+  topicsCovered: string[];
+  practiceNote: string;
+  sessionGoal: string;
 }

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@clerk/clerk-react";
-import { CalendarDays, Settings2, RefreshCw, ListVideo, Star } from "lucide-react";
+import { CalendarDays, Settings2, RefreshCw, ListVideo, Star, ChevronDown, ChevronUp, Play, Award, CheckSquare, BookOpen, ShieldAlert } from "lucide-react";
+import { useScheduleStore } from "@/lib/scheduleStore";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -66,8 +67,9 @@ export function PlannerPage({ data, onSync, sessionSchedules = [], onSchedulePer
   const [plannerError, setPlannerError] = useState<string | null>(null);
   const [isSubmittingPlaylist, setIsSubmittingPlaylist] = useState(false);
   const [isGeneratingSchedule, setIsGeneratingSchedule] = useState(false);
-  const [showFurtherSessions, setShowFurtherSessions] = useState(false);
-  const [expandedTodayTaskIds, setExpandedTodayTaskIds] = useState<string[]>([]);
+  const { tasks } = useScheduleStore();
+  const [expandedRoadmapIds, setExpandedRoadmapIds] = useState<string[]>([]);
+  const [expandedTaskIds, setExpandedTaskIds] = useState<string[]>([]);
   const [previousSearch, setPreviousSearch] = useState("");
   const [previousDateFilter, setPreviousDateFilter] = useState("");
   const [previousMinMinutes, setPreviousMinMinutes] = useState("");
@@ -265,17 +267,35 @@ export function PlannerPage({ data, onSync, sessionSchedules = [], onSchedulePer
       });
 
       setPlaylistIds((prev) => [...new Set([...prev, playlist.id])]);
-      setPlannerMessage(`Imported playlist: ${playlist.name}`);
+      
+      const parsedHorizon = Number(horizonDaysInput);
+      const horizonDays = Number.isFinite(parsedHorizon) && parsedHorizon > 0 ? Math.floor(parsedHorizon) : undefined;
+      
+      const result = await generateScheduleFromPlaylists(
+        [playlist.id],
+        undefined,
+        horizonDays
+      );
+
+      const horizonText = result.horizonDays ? ` within ${result.horizonDays} day horizon` : "";
+      const groupText = result.groupSummary ? ` Split: deadline ${result.groupSummary.deadline}, time ${result.groupSummary.time}, effort ${result.groupSummary.effort}.` : "";
+      
+      setPlannerMessage(`Imported playlist "${playlist.name}" and generated ${result.createdCount} planned tasks${horizonText}.${groupText}`);
+      
       setPlaylistName("");
       setPlaylistUrl("");
       setPlaylistItemsInput("");
 
-      // RECOMPUTE TRIGGER: playlist-added — calls /api/planner/recompute
+      // Recompute other goals just in case
       currentGoalIds.forEach((goalId) => {
         void recomputeSchedule(goalId, "playlist-added");
       });
+
+      if (onSync) {
+        await onSync();
+      }
     } catch (error) {
-      setPlannerError(error instanceof Error ? error.message : "Failed to import playlist");
+      setPlannerError(error instanceof Error ? error.message : "Failed to import playlist and generate schedule");
     } finally {
       setIsSubmittingPlaylist(false);
     }
@@ -365,31 +385,7 @@ export function PlannerPage({ data, onSync, sessionSchedules = [], onSchedulePer
     return date;
   })();
   
-  const today = todayDate.toDateString();
   const startOfToday = new Date(todayDate); // Already normalized to start of day
-  
-  const todaySchedule = data.scheduleDays.find(
-    (day) => {
-      const dayDate = new Date(day.date);
-      dayDate.setHours(0, 0, 0, 0);
-      return dayDate.toDateString() === today;
-    }
-  );
-  const futureScheduleDays = data.scheduleDays
-    .filter((day) => {
-      const dayDate = new Date(day.date);
-      dayDate.setHours(0, 0, 0, 0);
-      return dayDate > startOfToday && day.tasks.length > 0;
-    })
-    .slice(0, 7);
-
-  const toggleTodayTaskExpand = (taskId: string) => {
-    setExpandedTodayTaskIds((prev) =>
-      prev.includes(taskId)
-        ? prev.filter((id) => id !== taskId)
-        : [...prev, taskId]
-    );
-  };
 
   const toggleImportantSession = (taskId: string) => {
     setImportantSessionIds((prev) =>
@@ -637,23 +633,6 @@ export function PlannerPage({ data, onSync, sessionSchedules = [], onSchedulePer
     };
   };
 
-  const getTodayTaskCardClass = (task: { status: string; partialProgress?: number }) => {
-    const isHalfDone =
-      task.status === "in-progress" ||
-      (typeof task.partialProgress === "number" &&
-        task.partialProgress > 0 &&
-        task.partialProgress < 100);
-
-    if (task.status === "completed") {
-      return "rounded-lg border border-green-300 bg-green-50/70 p-3";
-    }
-
-    if (isHalfDone) {
-      return "rounded-lg border border-red-300 bg-red-50/70 p-3";
-    }
-
-    return "rounded-lg border bg-card p-3";
-  };
 
   return (
     <div className="py-6 px-4 md:px-6 max-w-5xl mx-auto space-y-6">
@@ -726,285 +705,363 @@ export function PlannerPage({ data, onSync, sessionSchedules = [], onSchedulePer
 
       <TopicStatusBar topics={topicStatuses} />
 
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-lg">My Schedules</CardTitle>
-          <CardDescription>
-            Approved schedules appear in the planner for this user. Pending schedules stay hidden until permission is granted.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {approvedSchedules.length > 0 ? (
-            <div className="space-y-2.5">
-              {approvedSchedules.map((record) => (
-                <div key={`${record.source}-${record.roadmap.id}`} className="rounded-lg border bg-card p-3 space-y-1.5">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-medium">{record.roadmap.name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {formatScheduleSource(record.source)} • {formatScheduleStart(record.startDate)}
-                      </p>
-                    </div>
-                    {onSchedulePermissionChange && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-7 px-2 text-xs"
-                        onClick={() => onSchedulePermissionChange(record.source, record.roadmap.id, false)}
-                      >
-                        Hide
-                      </Button>
-                    )}
-                  </div>
+      {pendingSchedules.length > 0 && (
+        <Card className="border-dashed border-2 border-amber-300 bg-amber-50/10 dark:border-amber-950 dark:bg-amber-950/5 shadow-sm">
+          <CardHeader className="pb-3 flex flex-row items-center justify-between">
+            <div>
+              <CardTitle className="text-lg text-amber-800 dark:text-amber-300 flex items-center gap-2">
+                <ShieldAlert className="h-5 w-5 animate-pulse text-amber-600 dark:text-amber-400" />
+                Pending Permission ({pendingSchedules.length})
+              </CardTitle>
+              <CardDescription className="text-xs text-amber-700 dark:text-amber-400">
+                These schedules are prepared but hidden from the daily calendar until permission is granted.
+              </CardDescription>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {pendingSchedules.map((record) => (
+              <div key={`${record.source}-${record.roadmap.id}-pending`} className="rounded-lg border bg-card p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 hover:border-amber-400/50 transition-colors">
+                <div className="space-y-1">
+                  <p className="text-sm font-semibold text-foreground">{record.roadmap.name}</p>
                   <p className="text-xs text-muted-foreground">
-                    {record.roadmap.description || "Approved schedule ready for the individual user."}
+                    {formatScheduleSource(record.source)} • {formatScheduleStart(record.startDate)}
                   </p>
+                  {record.roadmap.description && (
+                    <p className="text-xs text-muted-foreground mt-1">{record.roadmap.description}</p>
+                  )}
                 </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">No approved schedules yet.</p>
-          )}
-
-          {pendingSchedules.length > 0 && (
-            <div className="rounded-lg border border-dashed bg-muted/30 p-3 space-y-2">
-              <p className="text-sm font-medium">Pending permission</p>
-              <div className="space-y-2">
-                {pendingSchedules.map((record) => (
-                  <div key={`${record.source}-${record.roadmap.id}-pending`} className="rounded-md border bg-card p-2.5 space-y-2">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-medium">{record.roadmap.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {formatScheduleSource(record.source)} • {formatScheduleStart(record.startDate)}
-                        </p>
-                      </div>
-                      {onSchedulePermissionChange && (
-                        <Button
-                          size="sm"
-                          className="h-7 px-2 text-xs"
-                          onClick={() => onSchedulePermissionChange(record.source, record.roadmap.id, true)}
-                        >
-                          Grant permission
-                        </Button>
-                      )}
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      This schedule is done but hidden until it is approved for the individual user.
-                    </p>
-                  </div>
-                ))}
+                {onSchedulePermissionChange && (
+                  <Button
+                    size="sm"
+                    onClick={() => onSchedulePermissionChange(record.source, record.roadmap.id, true)}
+                    className="bg-amber-600 hover:bg-amber-700 text-white font-semibold shadow-sm h-8"
+                  >
+                    Grant Permission
+                  </Button>
+                )}
               </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+            ))}
+          </CardContent>
+        </Card>
+      )}
 
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-lg">Today's Schedule</CardTitle>
-          <CardDescription>
-            What you should focus on today within your planned study budget.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {todaySchedule && todaySchedule.tasks.length > 0 ? (
-            todaySchedule.tasks.map((task) => {
-              const isExpanded = expandedTodayTaskIds.includes(task.id);
-              const assessment = getAssessmentPlan(task.type);
+      {approvedSchedules.length === 0 ? (
+        <Card className="border border-muted/50 shadow-sm">
+          <CardContent className="p-8 text-center text-muted-foreground">
+            No active schedules. Use the Goal Builder or consult Mr. Chad to generate a detailed roadmap.
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-4">
+          {approvedSchedules.map((record) => {
+            const isExpanded = expandedRoadmapIds.includes(record.roadmap.id);
+            
+            // Filter tasks belonging to this roadmap/goal
+            const roadmapTasks = tasks.filter((t) => t.goalId === record.roadmap.id);
+            const total = roadmapTasks.length;
+            const completed = roadmapTasks.filter((t) => t.status === "completed").length;
+            const progressPercent = total > 0 ? Math.round((completed / total) * 100) : 0;
+            
+            // Find active task (in-progress, or first pending if none is in-progress)
+            let activeTaskId = roadmapTasks.find((t) => t.status === "in-progress")?.id;
+            if (!activeTaskId) {
+              activeTaskId = roadmapTasks.find((t) => t.status === "pending")?.id;
+            }
 
-              return (
-                <div
-                  key={task.id}
-                  className={getTodayTaskCardClass(task)}
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="font-medium text-sm">{task.title}</p>
-                      <p className="text-xs text-muted-foreground capitalize">
-                        {task.type} • {task.priority} priority
-                      </p>
+            // Group tasks by scheduledDate
+            const tasksByDate = new Map<string, ScheduledTask[]>();
+            roadmapTasks.forEach((task) => {
+              const dateStr = task.scheduledDate;
+              const list = tasksByDate.get(dateStr) || [];
+              list.push(task);
+              tasksByDate.set(dateStr, list);
+            });
+
+            // Sort dates chronologically
+            const sortedDates = Array.from(tasksByDate.keys()).sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
+
+            return (
+              <Card key={record.roadmap.id} className="border border-muted/50 shadow-sm hover:shadow-md transition-all duration-300 overflow-hidden">
+                <CardHeader className="bg-gradient-to-r from-indigo-50/40 to-purple-50/10 dark:from-slate-900/50 dark:to-slate-800/10 pb-4 border-b">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-200 uppercase tracking-wider">
+                          {formatScheduleSource(record.source)}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          Starts {formatScheduleStart(record.startDate)}
+                        </span>
+                      </div>
+                      <CardTitle className="text-lg font-bold tracking-tight text-foreground">
+                        {record.roadmap.name || "Learning Roadmap"}
+                      </CardTitle>
+                      <CardDescription className="text-xs">
+                        {record.roadmap.description || "A personalized learning plan designed for your goals."}
+                      </CardDescription>
                     </div>
-                    <div className="text-right space-y-1">
-                      <p className="text-xs text-muted-foreground whitespace-nowrap">{task.estimatedMinutes} min</p>
-                      <div className="flex justify-end gap-1">
-                        <Button
-                          size="sm"
-                          className="h-6 px-2 text-xs"
-                          onClick={() => handleStartSession(task.id)}
-                        >
-                          Start Session
-                        </Button>
+                    
+                    <div className="flex items-center gap-4">
+                      <div className="text-right space-y-0.5">
+                        <div className="text-sm font-semibold text-foreground">
+                          {progressPercent}% Complete
+                        </div>
+                        <div className="text-[10px] text-muted-foreground">
+                          {completed} of {total} Tasks Completed
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {onSchedulePermissionChange && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => onSchedulePermissionChange(record.source, record.roadmap.id, false)}
+                            className="h-8 border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 dark:border-red-950 dark:hover:bg-red-950/20 text-xs"
+                          >
+                            Hide
+                          </Button>
+                        )}
                         <Button
                           variant="outline"
                           size="sm"
-                          className="h-6 px-2 text-xs"
-                          onClick={() => openRescheduleDialog(task, todaySchedule.date)}
+                          onClick={() => {
+                            setExpandedRoadmapIds((prev) =>
+                              prev.includes(record.roadmap.id)
+                                ? prev.filter((id) => id !== record.roadmap.id)
+                                : [...prev, record.roadmap.id]
+                            );
+                          }}
+                          className="h-8 gap-1 text-xs"
                         >
-                          Reschedule
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-6 px-2 text-xs"
-                          onClick={() => toggleTodayTaskExpand(task.id)}
-                        >
-                          {isExpanded ? "Hide" : "Expand"}
+                          {isExpanded ? (
+                            <>
+                              Collapse <ChevronUp className="h-3.5 w-3.5" />
+                            </>
+                          ) : (
+                            <>
+                              Expand Plan <ChevronDown className="h-3.5 w-3.5" />
+                            </>
+                          )}
                         </Button>
                       </div>
                     </div>
                   </div>
+                  
+                  {/* Progress Bar */}
+                  <div className="w-full bg-muted rounded-full h-1.5 mt-3 overflow-hidden">
+                    <div
+                      className="bg-gradient-to-r from-indigo-500 to-purple-600 h-1.5 rounded-full transition-all duration-500 ease-out"
+                      style={{ width: `${progressPercent}%` }}
+                    />
+                  </div>
+                </CardHeader>
+                
+                {isExpanded && (
+                  <CardContent className="p-0 animate-in fade-in duration-300">
+                    <div className="divide-y divide-muted/30">
+                      {sortedDates.map((dateStr, dayIndex) => {
+                        const dayTasks = tasksByDate.get(dateStr) || [];
+                        const dayDate = new Date(dateStr);
+                        const isToday = dayDate.toDateString() === new Date().toDateString();
+                        const formattedDate = dayDate.toLocaleDateString("en-US", {
+                          weekday: "short",
+                          month: "short",
+                          day: "numeric",
+                        });
+                        
+                        const dayTotalMinutes = dayTasks.reduce((sum, t) => sum + t.estimatedMinutes, 0);
+                        const dayCompletedTasks = dayTasks.filter(t => t.status === 'completed').length;
+                        const isDayComplete = dayCompletedTasks === dayTasks.length;
 
-                  {task.keyPoints && task.keyPoints.length > 0 && (
-                    <div className="mt-2 space-y-1">
-                      {task.keyPoints.slice(0, 2).map((point) => (
-                        <p key={point} className="text-xs text-muted-foreground">
-                          • {point}
-                        </p>
-                      ))}
-                    </div>
-                  )}
-
-                  {isExpanded && (
-                    <div className="mt-3 rounded-md border bg-muted/30 p-2.5 space-y-2">
-                      <div>
-                        <p className="text-xs font-medium text-muted-foreground">Subtopics in this session</p>
-                        {task.keyPoints && task.keyPoints.length > 0 ? (
-                          <div className="space-y-1 mt-1">
-                            {task.keyPoints.map((point) => (
-                              <p key={`${task.id}-sub-${point}`} className="text-xs text-muted-foreground">
-                                • {point}
-                              </p>
-                            ))}
-                          </div>
-                        ) : (
-                          <p className="text-xs text-muted-foreground mt-1">Subtopics will be generated from playlist metadata.</p>
-                        )}
-                      </div>
-
-                      <div>
-                        <p className="text-xs font-medium text-muted-foreground">What you will learn</p>
-                        {task.learningOutcomes && task.learningOutcomes.length > 0 ? (
-                          <div className="space-y-1 mt-1">
-                            {task.learningOutcomes.map((outcome) => (
-                              <p key={`${task.id}-learn-${outcome}`} className="text-xs text-muted-foreground">
-                                • {outcome}
-                              </p>
-                            ))}
-                          </div>
-                        ) : (
-                          <p className="text-xs text-muted-foreground mt-1">Learning outcomes will be shown when available.</p>
-                        )}
-                      </div>
-
-                      <div>
-                        <p className="text-xs font-medium text-muted-foreground">Test & assessment</p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {assessment.quizType}: {assessment.questions} questions • {assessment.minutes} min after completion.
-                        </p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })
-          ) : (
-            <p className="text-sm text-muted-foreground">No tasks scheduled for today yet.</p>
-          )}
-
-          <div className="pt-1">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowFurtherSessions((prev) => !prev)}
-            >
-              {showFurtherSessions ? "Hide Further Planned Sessions" : "Expand Further Planned Sessions"}
-            </Button>
-          </div>
-
-          {showFurtherSessions && (
-            <div className="space-y-3 pt-1">
-              {futureScheduleDays.length > 0 ? (
-                futureScheduleDays.map((day) => {
-                  const dayTotalMinutes = day.tasks.reduce(
-                    (sum, task) => sum + task.estimatedMinutes,
-                    0
-                  );
-
-                  return (
-                    <div key={day.date} className="rounded-lg border bg-muted/30 p-3 space-y-2">
-                      <div className="flex items-center justify-between gap-3">
-                        <p className="text-sm font-medium">
-                          {new Date(day.date).toLocaleDateString("en-US", {
-                            weekday: "short",
-                            month: "short",
-                            day: "numeric",
-                          })}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {day.tasks.length} sessions • {dayTotalMinutes} min total
-                        </p>
-                      </div>
-
-                      {day.tasks.map((task) => (
-                        <div key={task.id} className="rounded-md border bg-card p-2 space-y-1.5">
-                          <div className="flex items-start justify-between gap-2">
-                            <div>
-                              <p className="text-sm font-medium">{task.title}</p>
-                              <p className="text-xs text-muted-foreground capitalize">
-                                {task.estimatedMinutes} min • {task.priority} priority • {task.type}
-                              </p>
+                        return (
+                          <div key={dateStr} className={`p-4 md:p-5 space-y-3 transition-colors ${isToday ? "bg-indigo-50/10 dark:bg-indigo-950/5 border-l-4 border-indigo-500" : ""}`}>
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-extrabold text-indigo-600 dark:text-indigo-400">
+                                  DAY {dayIndex + 1}
+                                </span>
+                                <span className="text-xs font-semibold text-foreground">
+                                  • {formattedDate}
+                                </span>
+                                {isToday && (
+                                  <span className="px-1.5 py-0.5 rounded text-[8px] font-bold bg-indigo-600 text-white animate-pulse">
+                                    TODAY
+                                  </span>
+                                )}
+                                {isDayComplete && (
+                                  <span className="px-1.5 py-0.5 rounded text-[8px] font-bold bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-200">
+                                    ✓ ALL DONE
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-[10px] text-muted-foreground">
+                                {dayTasks.length} task{dayTasks.length > 1 ? "s" : ""} • {dayTotalMinutes} min total
+                              </div>
                             </div>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-7 px-2 text-xs"
-                              onClick={() => openRescheduleDialog(task, day.date)}
-                            >
-                              Reschedule
-                            </Button>
-                          </div>
 
-                          {task.keyPoints && task.keyPoints.length > 0 && (
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground">Key points</p>
-                              {task.keyPoints.slice(0, 3).map((point) => (
-                                <p key={`${task.id}-kp-${point}`} className="text-xs text-muted-foreground">
-                                  • {point}
-                                </p>
-                              ))}
+                            <div className="grid gap-2">
+                              {dayTasks.map((task) => {
+                                const isTaskCompleted = task.status === "completed";
+                                const isTaskActive = task.id === activeTaskId;
+                                const isDetailsExpanded = expandedTaskIds.includes(task.id);
+                                const assessment = getAssessmentPlan(task.type);
+                                
+                                const getTaskIcon = () => {
+                                  switch (task.type) {
+                                    case "learn":
+                                      return <Play className={`h-3.5 w-3.5 ${isTaskActive ? "text-indigo-600 animate-pulse" : isTaskCompleted ? "text-green-600" : "text-slate-500"}`} />;
+                                    case "quiz":
+                                      return <Award className={`h-3.5 w-3.5 ${isTaskActive ? "text-purple-600" : isTaskCompleted ? "text-green-600" : "text-slate-500"}`} />;
+                                    case "practice":
+                                      return <CheckSquare className={`h-3.5 w-3.5 ${isTaskActive ? "text-blue-600" : isTaskCompleted ? "text-green-600" : "text-slate-500"}`} />;
+                                    default:
+                                      return <BookOpen className="h-3.5 w-3.5 text-slate-500" />;
+                                  }
+                                };
+
+                                return (
+                                  <div
+                                    key={task.id}
+                                    onClick={() => !isTaskCompleted && handleStartSession(task.id)}
+                                    className={`rounded-lg border p-3.5 transition-all duration-200 ${!isTaskCompleted ? "cursor-pointer hover:shadow-md" : ""} ${
+                                      isTaskCompleted
+                                        ? "bg-slate-50/50 dark:bg-slate-900/10 border-slate-200/60 dark:border-slate-800/80 opacity-60"
+                                        : isTaskActive
+                                        ? "bg-gradient-to-r from-indigo-50/30 to-purple-50/10 dark:from-indigo-950/10 dark:to-purple-950/5 border-indigo-300 dark:border-indigo-800 shadow-sm scale-[1.005]"
+                                        : "bg-card border-slate-200/80 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 hover:border-indigo-300 dark:hover:border-indigo-700"
+                                    }`}
+                                  >
+                                    <div className="flex items-center justify-between gap-3">
+                                      <div className="flex items-center gap-3">
+                                        <div className={`p-1.5 rounded-md ${isTaskActive ? "bg-indigo-100 dark:bg-indigo-900/40" : "bg-muted"}`}>
+                                          {getTaskIcon()}
+                                        </div>
+                                        <div className="space-y-0.5">
+                                          <div className="flex flex-wrap items-center gap-2">
+                                            <p className={`font-semibold text-xs text-foreground ${isTaskCompleted ? "line-through text-muted-foreground" : ""}`}>
+                                              {task.title}
+                                            </p>
+                                            {isTaskCompleted && (
+                                              <span className="inline-flex items-center text-[8px] font-bold text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-950/30 px-1 py-0.5 rounded">
+                                                ✓ Completed
+                                              </span>
+                                            )}
+                                            {isTaskActive && (
+                                              <span className="inline-flex items-center text-[8px] font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/40 px-1 py-0.5 rounded border border-indigo-200/50">
+                                                Active
+                                              </span>
+                                            )}
+                                          </div>
+                                          <p className="text-[10px] text-muted-foreground capitalize">
+                                            {task.type} • {task.priority} priority • {task.estimatedMinutes} min
+                                          </p>
+                                        </div>
+                                      </div>
+                                      
+                                      <div className="flex items-center gap-2">
+                                        {!isTaskCompleted && (
+                                          <Button
+                                            size="sm"
+                                            className={`h-6 px-2.5 text-[10px] font-bold ${isTaskActive ? "bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm" : ""}`}
+                                            variant={isTaskActive ? "default" : "outline"}
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              handleStartSession(task.id);
+                                            }}
+                                          >
+                                            {isTaskActive ? "Start Now" : "Start Anyway"}
+                                          </Button>
+                                        )}
+                                        
+                                        {!isTaskCompleted && (
+                                          <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="h-6 px-2 text-[10px] text-muted-foreground hover:text-foreground"
+                                            onClick={() => openRescheduleDialog(task, dateStr)}
+                                          >
+                                            Reschedule
+                                          </Button>
+                                        )}
+                                        
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          className="h-6 w-6 p-0"
+                                          onClick={() => {
+                                            setExpandedTaskIds((prev) =>
+                                              prev.includes(task.id) ? prev.filter(id => id !== task.id) : [...prev, task.id]
+                                            );
+                                          }}
+                                        >
+                                          {isDetailsExpanded ? (
+                                            <ChevronUp className="h-3.5 w-3.5" />
+                                          ) : (
+                                            <ChevronDown className="h-3.5 w-3.5" />
+                                          )}
+                                        </Button>
+                                      </div>
+                                    </div>
+
+                                    {isDetailsExpanded && (
+                                      <div className="mt-2.5 pt-2.5 border-t border-muted/50 space-y-2 text-[11px] text-muted-foreground animate-in slide-in-from-top-1 duration-200">
+                                        {task.videoTitle && (
+                                          <div className="space-y-0.5">
+                                            <p className="font-semibold text-foreground flex items-center gap-1.5">
+                                              <ListVideo className="h-3.5 w-3.5 text-indigo-500" />
+                                              Assigned Video Content
+                                            </p>
+                                            <p className="pl-5 text-indigo-600 dark:text-indigo-400 font-medium">
+                                              {task.videoTitle}
+                                            </p>
+                                          </div>
+                                        )}
+                                        
+                                        {task.keyPoints && task.keyPoints.length > 0 && (
+                                          <div className="space-y-0.5">
+                                            <p className="font-semibold text-foreground">Topics / Subtopics</p>
+                                            <div className="pl-3 space-y-0.5">
+                                              {task.keyPoints.map((point) => (
+                                                <p key={point}>• {point}</p>
+                                              ))}
+                                            </div>
+                                          </div>
+                                        )}
+
+                                        {task.learningOutcomes && task.learningOutcomes.length > 0 && (
+                                          <div className="space-y-0.5">
+                                            <p className="font-semibold text-foreground">Learning Outcomes</p>
+                                            <div className="pl-3 space-y-0.5">
+                                              {task.learningOutcomes.map((outcome) => (
+                                                <p key={outcome}>• {outcome}</p>
+                                              ))}
+                                            </div>
+                                          </div>
+                                        )}
+
+                                        <div className="space-y-0.5">
+                                          <p className="font-semibold text-foreground">Assessment & Practice Plan</p>
+                                          <p className="pl-3">
+                                            {assessment.quizType}: {assessment.questions} questions • {assessment.minutes} min
+                                          </p>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
                             </div>
-                          )}
-
-                          {task.learningOutcomes && task.learningOutcomes.length > 0 && (
-                            <div className="space-y-1 pt-0.5">
-                              <p className="text-xs font-medium text-muted-foreground">Learning outcomes</p>
-                              {task.learningOutcomes.slice(0, 2).map((outcome) => (
-                                <p key={`${task.id}-lo-${outcome}`} className="text-xs text-muted-foreground">
-                                  • {outcome}
-                                </p>
-                              ))}
-                            </div>
-                          )}
-
-                          <div className="space-y-1 pt-0.5">
-                            <p className="text-xs font-medium text-muted-foreground">Test & assessment</p>
-                            <p className="text-xs text-muted-foreground">
-                              {getAssessmentPlan(task.type).quizType}: {getAssessmentPlan(task.type).questions} questions • {getAssessmentPlan(task.type).minutes} min
-                            </p>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
-                  );
-                })
-              ) : (
-                <p className="text-sm text-muted-foreground">No further planned sessions yet.</p>
-              )}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                  </CardContent>
+                )}
+              </Card>
+            );
+          })}
+        </div>
+      )}
 
       <Card>
         <CardHeader className="pb-3">
@@ -1113,6 +1170,7 @@ export function PlannerPage({ data, onSync, sessionSchedules = [], onSchedulePer
               <span className="absolute -top-1 -right-1 h-2 w-2 bg-red-500 rounded-full" />
             )}
           </TabsTrigger>
+          <TabsTrigger value="all">All Sessions</TabsTrigger>
         </TabsList>
 
         <TabsContent value="previous" className="mt-6 space-y-4">
@@ -1230,6 +1288,20 @@ export function PlannerPage({ data, onSync, sessionSchedules = [], onSchedulePer
             </CardHeader>
             <CardContent>
               {renderSessionList(burnoutSessions, "No burnout sessions found yet.")}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="all" className="mt-6">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg">All Sessions</CardTitle>
+              <CardDescription>
+                All planned sessions organized by date and dedicated time.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {renderSessionList(allSessions, "No sessions planned yet.")}
             </CardContent>
           </Card>
         </TabsContent>

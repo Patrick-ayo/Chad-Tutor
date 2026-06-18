@@ -5,6 +5,8 @@ import {
   getTopicOverview,
   getExpertInsight,
   getQuizQuestions,
+  getStructuredNotes,
+  getAiSummary,
 } from '../services/lectureSummary.service';
 
 const router = Router();
@@ -83,6 +85,42 @@ router.get(
 );
 
 router.get(
+  '/:videoId/structured-notes',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { videoId } = req.params as { videoId: string };
+    const title = (req.query.title as string) || 'Untitled lecture';
+    const topic = (req.query.topic as string) || title;
+    const taskId = req.query.taskId as string | undefined;
+
+    const content = await getStructuredNotes(videoId, title, topic, taskId);
+
+    return res.json({
+      videoId,
+      type: 'structured-notes',
+      content,
+    });
+  }),
+);
+
+router.get(
+  '/:videoId/ai-summary',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { videoId } = req.params as { videoId: string };
+    const title = (req.query.title as string) || 'Untitled lecture';
+    const topic = (req.query.topic as string) || title;
+    const taskId = req.query.taskId as string | undefined;
+
+    const content = await getAiSummary(videoId, title, topic, taskId);
+
+    return res.json({
+      videoId,
+      type: 'ai-summary',
+      content,
+    });
+  }),
+);
+
+router.get(
   '/:videoId/all',
   asyncHandler(async (req: Request, res: Response) => {
     const { videoId } = req.params as { videoId: string };
@@ -90,11 +128,12 @@ router.get(
     const topic = (req.query.topic as string) || title;
     const taskId = req.query.taskId as string | undefined;
 
-    const [transcriptSummary, topicOverview, expertInsight, quizQuestions] = await Promise.all([
+    const [transcriptSummary, topicOverview, expertInsight, quizQuestions, structuredNotes] = await Promise.all([
       getTranscriptSummary(videoId, title, taskId),
       getTopicOverview(videoId, title, topic, taskId),
       getExpertInsight(videoId, title, topic, taskId),
       getQuizQuestions(videoId, title, topic, taskId),
+      getStructuredNotes(videoId, title, topic, taskId),
     ]);
 
     return res.json({
@@ -103,6 +142,7 @@ router.get(
       topicOverview,
       expertInsight,
       quizQuestions,
+      structuredNotes,
     });
   }),
 );

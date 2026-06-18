@@ -3,6 +3,7 @@
  */
 
 import { taskRepo } from '../repositories';
+import { prisma } from '../repositories/base.repo';
 import { submitQuizAttempt } from './quiz.service';
 import { assertRowsAffected, ServiceNotFoundError } from './serviceErrors';
 
@@ -75,6 +76,25 @@ export async function completeTask(
   const updatedTask = await taskRepo.findById(taskId, userId);
   if (!updatedTask) {
     throw new ServiceNotFoundError('Task not found');
+  }
+
+  // Next task auto-activation: Find the next pending task for this goal/user
+  const nextPendingTasks = await prisma.studyTask.findMany({
+    where: {
+      userId,
+      ...(updatedTask.goalId && { goalId: updatedTask.goalId }),
+      status: 'SCHEDULED',
+    },
+    orderBy: [
+      { scheduledDate: 'asc' },
+      { sequenceNumber: 'asc' },
+      { id: 'asc' },
+    ],
+    take: 1,
+  });
+
+  if (nextPendingTasks.length > 0) {
+    await taskRepo.updateStatus(nextPendingTasks[0].id, userId, 'IN_PROGRESS');
   }
 
   let quizAttempt = null;

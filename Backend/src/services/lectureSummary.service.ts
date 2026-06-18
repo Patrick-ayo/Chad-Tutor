@@ -113,6 +113,22 @@ function extractJsonArray(text: string): string {
   return trimmed.slice(firstBracket, lastBracket + 1);
 }
 
+function extractJsonObject(text: string): string {
+  const trimmed = text
+    .replace(/```json\n?/gi, '')
+    .replace(/```\n?/g, '')
+    .trim();
+
+  const firstBrace = trimmed.indexOf('{');
+  const lastBrace = trimmed.lastIndexOf('}');
+
+  if (firstBrace === -1 || lastBrace === -1 || lastBrace < firstBrace) {
+    return '{}';
+  }
+
+  return trimmed.slice(firstBrace, lastBrace + 1);
+}
+
 function normalizeQuizQuestions(input: unknown): LectureQuizQuestion[] {
   if (!Array.isArray(input)) {
     return [];
@@ -247,6 +263,161 @@ export async function getExpertInsight(
   });
 
   return insight;
+}
+
+export async function getStructuredNotes(
+  videoId: string,
+  videoTitle: string,
+  topicName: string,
+  taskId?: string,
+): Promise<string> {
+  const existing = await prisma.lectureSummary.findUnique({
+    where: { videoId },
+    select: { structuredNotes: true },
+  });
+
+  if (existing?.structuredNotes) {
+    return existing.structuredNotes;
+  }
+
+  await ensureLectureRecord(videoId, taskId);
+
+  const transcriptPromise = fetchTranscript(videoId);
+  
+  // Fetch video description from YouTube API if possible
+  let description = '';
+  try {
+    const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY || '';
+    if (YOUTUBE_API_KEY && !videoId.includes('-')) { // Basic check to avoid calling YT API with a UUID taskId
+      const videoRes = await axios.get('https://www.googleapis.com/youtube/v3/videos', {
+        params: {
+          id: videoId,
+          key: YOUTUBE_API_KEY,
+          part: 'snippet'
+        }
+      });
+      if (videoRes.data?.items?.[0]?.snippet?.description) {
+        description = videoRes.data.items[0].snippet.description;
+      }
+    }
+  } catch (err) {
+    console.error('Failed to fetch video description for notes:', err);
+  }
+
+  const transcript = await transcriptPromise;
+  
+  let taskContext = '';
+  if (taskId) {
+    const studyTask = await prisma.studyTask.findUnique({
+      where: { id: taskId }
+    });
+    if (studyTask) {
+      taskContext = `
+Task Title: ${studyTask.title}
+Key Points to Cover: ${JSON.stringify(studyTask.keyPoints || [])}
+Learning Outcomes: ${JSON.stringify(studyTask.learningOutcomes || [])}
+      `;
+    }
+  }
+
+  const prompt = `You are an expert tutor creating study notes for a student.
+Generate highly structured, beautiful HTML notes for the topic '${topicName}' based on the video/task '${videoTitle}'.
+
+${taskContext ? `Session Task Details for context:\n${taskContext}\n` : ''}
+${description ? `Video Description to use for context and identifying topics:
+${description.slice(0, 2000)}
+` : ''}
+${transcript ? `VIDEO TRANSCRIPT containing the taught content:
+${transcript.slice(0, 8000)}...
+` : ''}
+
+Requirements:
+1. Return ONLY valid HTML (no markdown code blocks, no \`\`\`html).
+2. Wrap everything in a single <div class="concept-notes">.
+3. Use <h2>, <h3>, <ul>, <li>, <strong>, <em> to structure the content nicely.
+4. IMPORTANT: You MUST take context from the provided details (task details, video description, and transcript), and provide a clear, detailed description for EACH TOPIC.
+5. Include a brief overview, key concepts (with their descriptions), step-by-step breakdown or rules, and a summary.
+6. Keep it concise, exam-focused, and easy to read.`;
+
+  const rawNotes = await callGemini(prompt);
+  const structuredNotes = rawNotes.replace(/```html\n?/gi, '').replace(/```\n?/g, '').trim();
+
+  await prisma.lectureSummary.update({
+    where: { videoId },
+    data: {
+      structuredNotes,
+    },
+  });
+
+  return structuredNotes;
+}
+
+export async function getAiSummary(
+  videoId: string,
+  videoTitle: string,
+  topicName: string,
+  taskId?: string,
+): Promise<{ summary: string; keyInsights: string[]; analogies: string[] }> {
+  // Fetch video description from YouTube API if possible
+  let description = '';
+  try {
+    const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY || '';
+    if (YOUTUBE_API_KEY && !videoId.includes('-')) {
+      const videoRes = await axios.get('https://www.googleapis.com/youtube/v3/videos', {
+        params: { id: videoId, key: YOUTUBE_API_KEY, part: 'snippet' }
+      });
+      description = videoRes.data?.items?.[0]?.snippet?.description || '';
+    }
+  } catch (err) {
+    console.error('Failed to fetch video description for AI summary:', err);
+  }
+
+  const transcript = await fetchTranscript(videoId);
+  
+  let taskContext = '';
+  if (taskId) {
+    const studyTask = await prisma.studyTask.findUnique({
+      where: { id: taskId }
+    });
+    if (studyTask) {
+      taskContext = `
+Task Title: ${studyTask.title}
+Key Points to Cover: ${JSON.stringify(studyTask.keyPoints || [])}
+Learning Outcomes: ${JSON.stringify(studyTask.learningOutcomes || [])}
+      `;
+    }
+  }
+
+  const prompt = `You are an expert tutor creating an AI summary for a student.
+Topic: '${topicName}'
+Video/Task Name: '${videoTitle}'
+
+${taskContext ? `Session Task Details for context:\n${taskContext}\n` : ''}
+${description ? `Video Description for context:\n${description.slice(0, 2000)}\n` : ''}
+${transcript ? `Video Transcript for taught content:\n${transcript.slice(0, 8000)}...\n` : ''}
+
+Requirements:
+1. You MUST take context from the provided details (video description, transcript, or task key points).
+2. You MUST give a proper, comprehensive description of what the topic/session is about and provide proper, factual info on it based on your expert knowledge and the provided context.
+3. Return ONLY a valid JSON object matching this structure (no extra text):
+{
+  "summary": "A comprehensive paragraph describing what the topic is about and proper info on it.",
+  "keyInsights": ["Insight 1", "Insight 2", "Insight 3"],
+  "analogies": ["Analogy 1", "Analogy 2"]
+}`;
+
+  const rawText = await callGemini(prompt);
+  try {
+    const parsed = JSON.parse(extractJsonObject(rawText));
+    return {
+      summary: parsed.summary || "No summary available.",
+      keyInsights: Array.isArray(parsed.keyInsights) ? parsed.keyInsights : [],
+      analogies: Array.isArray(parsed.analogies) ? parsed.analogies : [],
+    };
+  } catch (err) {
+    console.error('Failed to parse getAiSummary JSON:', err);
+    return { summary: "Failed to generate AI summary.", keyInsights: [], analogies: [] };
+  }
 }
 
 export async function getQuizQuestions(

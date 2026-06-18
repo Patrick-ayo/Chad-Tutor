@@ -5,6 +5,7 @@
 import { Router, Request, Response } from 'express';
 import { asyncHandler, requireUser } from '../middleware';
 import { taskService } from '../services';
+import { applyScheduleChange } from '../services/scheduler.service';
 
 const router = Router();
 
@@ -81,6 +82,48 @@ router.post('/:taskId/missed', requireUser, asyncHandler(async (req: Request, re
 
   const task = await taskService.markTaskMissed(req.user!.id, taskId, reason);
   return res.json({ task });
+}));
+
+router.post('/', requireUser, asyncHandler(async (req: Request, res: Response) => {
+  const { date, task } = req.body;
+  if (!date || !task) {
+    return res.status(400).json({ error: 'Bad Request', message: 'date and task are required' });
+  }
+  
+  const result = await applyScheduleChange(req.user!.id, new Date(date), { type: 'create', task });
+  if (!result.success) {
+    return res.status(409).json(result);
+  }
+  return res.status(201).json(result);
+}));
+
+router.patch('/:taskId', requireUser, asyncHandler(async (req: Request, res: Response) => {
+  const { taskId } = req.params as { taskId: string };
+  const { date, task } = req.body;
+  if (!date || !task) {
+    return res.status(400).json({ error: 'Bad Request', message: 'date and task are required' });
+  }
+
+  const result = await applyScheduleChange(req.user!.id, new Date(date), { type: 'edit', task: { ...task, id: taskId } });
+  if (!result.success) {
+    return res.status(409).json(result);
+  }
+  return res.json(result);
+}));
+
+router.delete('/:taskId', requireUser, asyncHandler(async (req: Request, res: Response) => {
+  const { taskId } = req.params as { taskId: string };
+  const { date } = req.query;
+  if (!date || typeof date !== 'string') {
+    return res.status(400).json({ error: 'Bad Request', message: 'date query parameter is required' });
+  }
+
+  const dateStr = date as string;
+  const result = await applyScheduleChange(req.user!.id, new Date(dateStr), { type: 'delete', task: { id: taskId } });
+  if (!result.success) {
+    return res.status(409).json(result);
+  }
+  return res.json(result);
 }));
 
 export default router;

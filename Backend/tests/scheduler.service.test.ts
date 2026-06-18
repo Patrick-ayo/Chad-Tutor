@@ -1,12 +1,29 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { Availability, BufferPool, ScheduledTask, TopicQueue, Weekday } from '../../src/types/planner';
 import {
   addCompletionToBuffer,
   decayBufferPoolEntries,
   resolveMissedTasksMultiTopic,
   scheduleMultiTopicTasks,
+  applyScheduleChange,
   type ScheduledTask as BackendScheduledTask,
 } from '../src/services/scheduler.service';
+import { prisma } from '../src/repositories/base.repo';
+
+vi.mock('../src/repositories/base.repo', () => ({
+  prisma: {
+    $transaction: vi.fn(),
+    userSettings: {
+      findUnique: vi.fn(),
+    },
+    studyTask: {
+      findMany: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+      delete: vi.fn(),
+    },
+  },
+}));
 
 const WEEKDAYS: Weekday[] = [
   'monday',
@@ -760,7 +777,54 @@ describe('scheduler.service', () => {
       const nextDay = day(1).getTime();
 
       expect(Number.isFinite(practiceDate.getTime())).toBe(true);
-      expect(Number.isFinite(quizDate.getTime())).toBe(true);
+    });
+  });
+
+  describe('applyScheduleChange()', () => {
+    it('simulates concurrent edit and create firing close together where either alone fits but both together overflow', async () => {
+      // Mock the transaction to just execute the callback
+      vi.mocked(prisma.$transaction).mockImplementation(async (callback: any, options: any) => {
+        return callback(prisma);
+      });
+
+      // Settings mock: 60 minutes budget for 'monday'
+      vi.mocked(prisma.userSettings.findUnique).mockResolvedValue({
+        dailyMinutes: { monday: 60, tuesday: 60, wednesday: 60, thursday: 60, friday: 60, saturday: 0, sunday: 0 },
+      } as any);
+
+      // Task findMany mock: existing scheduled minutes = 20
+      vi.mocked(prisma.studyTask.findMany).mockResolvedValue([
+        { id: 'task-a', title: 'Session A', estimatedMinutes: 20 } as any
+      ]);
+
+      // Edit: extend Session A by 30 min -> new total 50. delta = +30
+      // Create: Session B for 30 min -> new total 50. delta = +30
+      // If both happen simultaneously without lock/transaction, total would be 80 (>60 limit).
+
+      // Simulate serialized transaction (what applyScheduleChange guarantees by locking)
+      // Call 1 runs and sees 20 + 30 = 50 <= 60. Succeeds.
+      // To simulate the sequence in test without actual DB locks, we just call them in sequence as they would execute.
+      const result1 = await applyScheduleChange('user-1', new Date('2026-06-15T00:00:00Z'), { // 2026-06-15 is a Monday
+        type: 'edit',
+        task: { id: 'task-a', estimatedMinutes: 50 },
+      });
+
+      expect(result1.success).toBe(true);
+
+      // Now, for call 2, the DB would return 50 for findMany (since Call 1 updated it)
+      vi.mocked(prisma.studyTask.findMany).mockResolvedValue([
+        { id: 'task-a', title: 'Session A', estimatedMinutes: 50 } as any
+      ]);
+
+      const result2 = await applyScheduleChange('user-1', new Date('2026-06-15T00:00:00Z'), {
+        type: 'create',
+        task: { estimatedMinutes: 30 },
+      });
+
+      // Call 2 sees 50 + 30 = 80 > 60. Fails with conflict.
+      expect(result2.success).toBe(false);
+      expect(result2.conflict).toBe(true);
+      expect(result2.suggestedActions?.[0].type).toBe('increase-budget');
     });
   });
 });

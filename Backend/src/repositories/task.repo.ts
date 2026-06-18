@@ -29,6 +29,14 @@ export interface CreateStudyTaskData {
   priority?: TaskPriority;
   keyPoints?: Prisma.InputJsonValue;
   learningOutcomes?: Prisma.InputJsonValue;
+  roadmapId?: string;
+  topicId?: string;
+  subtopicId?: string;
+  duration?: number;
+  sequenceNumber?: number;
+  videoId?: string;
+  videoUrl?: string;
+  videoTitle?: string;
 }
 
 export async function create(
@@ -49,6 +57,14 @@ export async function create(
       scheduledTime: data.scheduledTime,
       estimatedMinutes: data.estimatedMinutes ?? 25,
       priority: data.priority ?? "MEDIUM",
+      roadmapId: data.roadmapId,
+      topicId: data.topicId,
+      subtopicId: data.subtopicId,
+      duration: data.duration,
+      sequenceNumber: data.sequenceNumber,
+      videoId: data.videoId,
+      videoUrl: data.videoUrl,
+      videoTitle: data.videoTitle,
       ...(data.keyPoints !== undefined && { keyPoints: data.keyPoints }),
       ...(data.learningOutcomes !== undefined && {
         learningOutcomes: data.learningOutcomes,
@@ -84,6 +100,14 @@ export async function createMany(
       scheduledTime: task.scheduledTime,
       estimatedMinutes: task.estimatedMinutes ?? 25,
       priority: task.priority ?? "MEDIUM",
+      roadmapId: task.roadmapId,
+      topicId: task.topicId,
+      subtopicId: task.subtopicId,
+      duration: task.duration,
+      sequenceNumber: task.sequenceNumber,
+      videoId: task.videoId,
+      videoUrl: task.videoUrl,
+      videoTitle: task.videoTitle,
       ...(task.keyPoints !== undefined && { keyPoints: task.keyPoints }),
       ...(task.learningOutcomes !== undefined && {
         learningOutcomes: task.learningOutcomes,

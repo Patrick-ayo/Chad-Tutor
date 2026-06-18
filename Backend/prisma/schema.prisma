@@ -745,6 +745,16 @@ model StudyTask {
   priority TaskPriority @default(MEDIUM)
   status   TaskStatus   @default(SCHEDULED)
 
+  // New fields for architectural refactor
+  roadmapId      String?
+  topicId        String?
+  subtopicId     String?
+  duration       Int?
+  sequenceNumber Int?
+  videoId        String?
+  videoUrl       String?
+  videoTitle     String?
+
   keyPoints        Json?
   learningOutcomes Json?
 
@@ -786,6 +796,7 @@ model LectureSummary {
   topicOverview     String?
   expertInsight     String?
   quizQuestions     Json?
+  structuredNotes   String?
 
   rawTranscript String?
 

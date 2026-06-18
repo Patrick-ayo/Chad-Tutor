@@ -13,6 +13,7 @@ import {
 
 interface VideoModeProps {
   videoData: VideoMetadata;
+  videoId?: string;
   taskId?: string | null;
   onAutoComplete?: () => void;
   onVideoWatched?: () => void;
@@ -29,8 +30,10 @@ type YouTubePlayerState = {
 type YouTubeWindow = Window & {
   YT?: {
     Player: new (
-      element: HTMLIFrameElement,
+      element: HTMLElement | HTMLIFrameElement | string,
       options: {
+        videoId?: string;
+        playerVars?: Record<string, unknown>;
         events?: {
           onReady?: () => void;
           onStateChange?: (event: { data: number }) => void;
@@ -81,8 +84,8 @@ function loadYouTubeIframeApi(): Promise<void> {
   return youtubeApiPromise;
 }
 
-export function VideoMode({ videoData, taskId, onAutoComplete, onVideoWatched, onProgressUpdate }: VideoModeProps) {
-  const iframeRef = useRef<HTMLIFrameElement | null>(null);
+export function VideoMode({ videoData, videoId, taskId, onAutoComplete, onVideoWatched, onProgressUpdate }: VideoModeProps) {
+  const playerContainerRef = useRef<HTMLDivElement | null>(null);
   const playerRef = useRef<YouTubePlayerState | null>(null);
   const intervalRef = useRef<number | null>(null);
   const breakTimerRef = useRef<number | null>(null);
@@ -94,11 +97,18 @@ export function VideoMode({ videoData, taskId, onAutoComplete, onVideoWatched, o
   const [videoLoaded, setVideoLoaded] = useState(false);
   const [playerReady, setPlayerReady] = useState(false);
 
-  const hasVideoId = Boolean(videoData.videoId);
+  const effectiveVideoId = videoId || videoData.videoId || '';
+  const hasVideoId = Boolean(effectiveVideoId);
+  const playerVideoData = { ...videoData, videoId: effectiveVideoId };
+
+  const callbacksRef = useRef({ onAutoComplete, onVideoWatched, onProgressUpdate });
+  useEffect(() => {
+    callbacksRef.current = { onAutoComplete, onVideoWatched, onProgressUpdate };
+  }, [onAutoComplete, onVideoWatched, onProgressUpdate]);
 
   useEffect(() => {
-    console.log('VideoMode mounted with videoId:', videoData.videoId || '(missing)');
-  }, [videoData.videoId]);
+    console.log('[VideoMode] Loading videoId:', effectiveVideoId || '(missing)');
+  }, [effectiveVideoId]);
 
   const formatDuration = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -129,12 +139,12 @@ export function VideoMode({ videoData, taskId, onAutoComplete, onVideoWatched, o
       }
 
       const currentTimeSeconds = Math.max(0, player.getCurrentTime());
-      const durationSeconds = Math.max(1, player.getDuration() || videoData.duration || 1);
+      const durationSeconds = Math.max(1, player.getDuration() || playerVideoData.duration || 1);
       const watchedMinutes = Math.floor(currentTimeSeconds / 60);
       const percentComplete = Math.round((currentTimeSeconds / durationSeconds) * 100);
 
       if (percentComplete >= 95) {
-        onProgressUpdate?.(percentComplete);
+        callbacksRef.current.onProgressUpdate?.(percentComplete);
 
         if (autoCompletedRef.current) {
           return;
@@ -148,7 +158,7 @@ export function VideoMode({ videoData, taskId, onAutoComplete, onVideoWatched, o
           await completeTask(taskId, {
             completedDurationMinutes: watchedMinutes,
           });
-          onAutoComplete?.();
+          callbacksRef.current.onAutoComplete?.();
         } catch (error) {
           console.error('Failed to auto-complete task from video progress:', error);
           autoCompletedRef.current = false;
@@ -166,10 +176,10 @@ export function VideoMode({ videoData, taskId, onAutoComplete, onVideoWatched, o
       }
 
       lastReportedMinutesRef.current = watchedMinutes;
-      onProgressUpdate?.(percentComplete);
+      callbacksRef.current.onProgressUpdate?.(percentComplete);
       await updateTaskProgress(taskId, watchedMinutes, percentComplete);
     },
-    [clearBreakTimer, clearProgressInterval, onAutoComplete, onProgressUpdate, taskId, videoData.duration],
+    [clearBreakTimer, clearProgressInterval, playerVideoData.duration, taskId],
   );
 
   const ensureSessionStarted = useCallback(() => {
@@ -248,13 +258,21 @@ export function VideoMode({ videoData, taskId, onAutoComplete, onVideoWatched, o
       try {
         await loadYouTubeIframeApi();
 
-        if (cancelled || !iframeRef.current) {
+        if (cancelled || !playerContainerRef.current) {
           return;
         }
 
         const youtubeWindow = window as YouTubeWindow;
 
-        const player = new youtubeWindow.YT!.Player(iframeRef.current, {
+        const player = new youtubeWindow.YT!.Player(playerContainerRef.current, {
+          videoId: effectiveVideoId,
+          playerVars: {
+            rel: 0,
+            enablejsapi: 1,
+            modestbranding: 1,
+            fs: 1,
+            origin: window.location.origin
+          },
           events: {
             onReady: () => {
               if (cancelled) {
@@ -263,7 +281,7 @@ export function VideoMode({ videoData, taskId, onAutoComplete, onVideoWatched, o
 
               setVideoLoaded(true);
               setPlayerReady(true);
-              onVideoWatched?.();
+              callbacksRef.current.onVideoWatched?.();
             },
             onStateChange: (event) => {
               if (cancelled) {
@@ -320,9 +338,12 @@ export function VideoMode({ videoData, taskId, onAutoComplete, onVideoWatched, o
     handlePauseState,
     handlePlayingState,
     hasVideoId,
-    onVideoWatched,
     reportProgress,
   ]);
+
+  if (!effectiveVideoId) {
+    return <div>Video not available for this task</div>;
+  }
 
   return (
     <div className="space-y-6">
@@ -339,15 +360,20 @@ export function VideoMode({ videoData, taskId, onAutoComplete, onVideoWatched, o
               </div>
             )}
             {hasVideoId ? (
-              <iframe
-                ref={iframeRef}
-                key={videoData.videoId}
-                src={`https://www.youtube.com/embed/${videoData.videoId}?rel=0&enablejsapi=1&origin=${encodeURIComponent(window.location.origin)}&modestbranding=1`}
-                className="w-full h-full border-0"
-                title={videoData.title}
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
-              />
+              <>
+                {/* Overlay to block clicks on the YouTube title at the top left */}
+                <div className="absolute top-0 left-0 w-2/3 h-16 z-10" />
+                
+                {/* Overlay to block clicks on the YouTube logo and More Videos at the bottom right (above control bar) */}
+                <div className="absolute bottom-12 right-0 w-48 h-16 z-10" />
+
+                {/* Overlay to block clicks on the Share button at the bottom left (above control bar) */}
+                <div className="absolute bottom-12 left-0 w-24 h-16 z-10" />
+
+                <div key={effectiveVideoId} className="w-full h-full pointer-events-auto">
+                  <div ref={playerContainerRef} className="w-full h-full border-0" />
+                </div>
+              </>
             ) : null}
           </div>
         </CardContent>
@@ -357,11 +383,11 @@ export function VideoMode({ videoData, taskId, onAutoComplete, onVideoWatched, o
         <CardHeader className="pb-4">
           <div className="flex items-start justify-between">
             <div className="space-y-2">
-              <CardTitle className="text-xl leading-tight">{videoData.title}</CardTitle>
+              <CardTitle className="text-xl leading-tight">{playerVideoData.title}</CardTitle>
               <div className="flex items-center gap-4 text-sm text-muted-foreground">
                 <div className="flex items-center gap-1">
                   <Clock className="h-4 w-4" />
-                  {formatDuration(videoData.duration)}
+                  {formatDuration(playerVideoData.duration)}
                 </div>
                 <Button
                   variant="outline"
@@ -369,7 +395,7 @@ export function VideoMode({ videoData, taskId, onAutoComplete, onVideoWatched, o
                   asChild
                   disabled={!hasVideoId}
                 >
-                  <a href={hasVideoId ? `https://youtube.com/watch?v=${videoData.videoId}` : "#"} target="_blank" rel="noopener noreferrer">
+                  <a href={hasVideoId ? `https://youtube.com/watch?v=${effectiveVideoId}` : "#"} target="_blank" rel="noopener noreferrer">
                     <ExternalLink className="h-4 w-4 mr-1" />
                     Watch on YouTube
                   </a>
@@ -383,11 +409,11 @@ export function VideoMode({ videoData, taskId, onAutoComplete, onVideoWatched, o
         </CardHeader>
 
         <CardContent className="space-y-4">
-          {videoData.chapters && videoData.chapters.length > 0 && (
+          {playerVideoData.chapters && playerVideoData.chapters.length > 0 && (
             <div>
               <h4 className="font-medium text-foreground mb-3">Chapters</h4>
               <div className="space-y-2">
-                {videoData.chapters.map((chapter, index) => (
+                {playerVideoData.chapters.map((chapter, index) => (
                   <div
                     key={index}
                     className="flex items-center justify-between p-3 bg-muted rounded-lg hover:bg-accent transition-colors cursor-pointer"
@@ -407,11 +433,11 @@ export function VideoMode({ videoData, taskId, onAutoComplete, onVideoWatched, o
             </div>
           )}
 
-          {videoData.keyTakeaways && videoData.keyTakeaways.length > 0 && (
+          {playerVideoData.keyTakeaways && playerVideoData.keyTakeaways.length > 0 && (
             <div>
               <h4 className="font-medium text-foreground mb-3">Key Takeaways</h4>
               <div className="space-y-2">
-                {videoData.keyTakeaways.map((takeaway, index) => (
+                {playerVideoData.keyTakeaways.map((takeaway, index) => (
                   <div key={index} className="flex items-start gap-3 p-2 bg-muted rounded-lg">
                     <div className="w-6 h-6 bg-primary text-primary-foreground rounded-full flex items-center justify-center text-xs font-medium flex-shrink-0">
                       {index + 1}

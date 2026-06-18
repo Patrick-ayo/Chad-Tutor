@@ -17,6 +17,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { goalOptions } from "@/data/mockGoals";
 import { roles } from "@/data/roles";
 import { convertDetailedRoadmapToRoadmap, generateDetailedRoadmap } from "@/utils/roadmapGenerator";
+import { createGoal } from "@/lib/plannerApi";
 import { useState, useMemo, useCallback } from "react";
 
 type WizardStep = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
@@ -116,7 +117,39 @@ export function GoalBuilderPage({ onSaveGoalSchedule }: GoalBuilderPageProps) {
   const handleComplete = useCallback(async () => {
     setIsGenerating(true);
     try {
-      const generatedDetailedRoadmap = await generateDetailedRoadmap(planningDefinition as GoalDefinition);
+      let activeGoalId = planningDefinition.goalId;
+
+      if (!activeGoalId && (
+        planningDefinition.customName || 
+        planningDefinition.topics?.[0]?.name ||
+        planningDefinition.selectedSkills?.[0]?.name ||
+        planningDefinition.selectedRoles?.length
+      )) {
+        try {
+          const goalName = planningDefinition.customName 
+            || planningDefinition.topics?.[0]?.name 
+            || planningDefinition.selectedSkills?.[0]?.name 
+            || "Learning Goal";
+
+          const newGoal = await createGoal({
+            name: goalName,
+            deadline: constraints.targetDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+            totalHours: selectedVideoHours,
+          });
+          activeGoalId = newGoal.id;
+          
+          setDefinition(prev => ({ ...prev, goalId: activeGoalId }));
+        } catch (err) {
+          console.error("Failed to create goal", err);
+        }
+      }
+
+      const payload = {
+        ...planningDefinition,
+        goalId: activeGoalId
+      } as GoalDefinition;
+
+      const generatedDetailedRoadmap = await generateDetailedRoadmap(payload);
       const generatedRoadmap = convertDetailedRoadmapToRoadmap(generatedDetailedRoadmap);
 
       setDetailedRoadmap(generatedDetailedRoadmap);
@@ -127,7 +160,7 @@ export function GoalBuilderPage({ onSaveGoalSchedule }: GoalBuilderPageProps) {
     } finally {
       setIsGenerating(false);
     }
-  }, [planningDefinition]);
+  }, [planningDefinition, constraints.targetDate, selectedVideoHours]);
 
   // Get selected goal info
   const selectedGoal = useMemo(() => {

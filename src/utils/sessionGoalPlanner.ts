@@ -35,6 +35,7 @@ interface GoalTaskInput {
   priority: "high" | "medium" | "low";
   videoId?: string;
   videoUrl?: string;
+  videoTitle?: string;
   keyPoints?: string[];
   learningOutcomes?: string[];
 }
@@ -163,6 +164,7 @@ export function flattenRoadmapTasks(roadmap: Roadmap): GoalTaskInput[] {
           topicFallbackVideoUrl ||
           roadmapFallbackVideoUrl ||
           (primaryVideoId ? `https://www.youtube.com/watch?v=${primaryVideoId}` : undefined);
+        const primaryVideoTitle = taskPrimary?.title || undefined;
         const keyPoints = taskVideos
           .map((video) => (video.title || "").trim())
           .filter(Boolean)
@@ -175,6 +177,7 @@ export function flattenRoadmapTasks(roadmap: Roadmap): GoalTaskInput[] {
           priority: fromDifficultyToPriority(task.difficulty),
           videoId: primaryVideoId || undefined,
           videoUrl: primaryVideoUrl,
+          videoTitle: primaryVideoTitle,
           keyPoints: keyPoints.length > 0 ? keyPoints : undefined,
           learningOutcomes: task.scheduleReason ? [task.scheduleReason] : undefined,
         });

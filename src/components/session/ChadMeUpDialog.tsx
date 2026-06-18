@@ -89,13 +89,22 @@ export function ChadMeUpDialog({
             {/* YouTube Video Player */}
             <Card className="overflow-hidden bg-black">
               <div className="relative w-full bg-black aspect-video">
+                {/* Overlay to block clicks on the YouTube title at the top left */}
+                <div className="absolute top-0 left-0 w-2/3 h-16 z-10" />
+                
+                {/* Overlay to block clicks on the YouTube logo and More Videos at the bottom right (above control bar) */}
+                <div className="absolute bottom-12 right-0 w-48 h-16 z-10" />
+
+                {/* Overlay to block clicks on the Share button at the bottom left (above control bar) */}
+                <div className="absolute bottom-12 left-0 w-24 h-16 z-10" />
+
                 <iframe
                   key={currentVideo.videoId}
-                  src={`https://www.youtube.com/embed/${currentVideo.videoId}?rel=0&enablejsapi=1&modestbranding=1`}
-                  className="w-full h-full border-0"
+                  src={`https://www.youtube.com/embed/${currentVideo.videoId}?rel=0&enablejsapi=1&modestbranding=1&fs=1`}
+                  className="w-full h-full border-0 pointer-events-auto"
                   title={currentVideo.title}
                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowFullScreen
+                  allowFullScreen={false}
                   style={{ minHeight: '400px' }}
                 />
               </div>

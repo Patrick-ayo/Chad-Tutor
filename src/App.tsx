@@ -15,9 +15,9 @@ import { MrChadPage } from "@/components/mr-chad/MrChadPage";
 import { AccessibilityProvider } from "@/contexts/AccessibilityContext";
 import { mockDashboardData } from "@/data/mockDashboard";
 import { mockSettings } from "@/data/mockSettings";
-import { clearPlannerData, fetchPlannerSnapshot } from "@/lib/plannerApi";
+import { clearPlannerData } from "@/lib/plannerApi";
 import { recomputeSchedule } from "@/lib/plannerApi";
-import { applyGoalRoadmapToSessionPlanner } from "@/utils/sessionGoalPlanner";
+import { useScheduleStore } from "@/lib/scheduleStore";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import type { UserSettings } from "@/types/settings";
 import type { PlannerData } from "@/types/planner";
@@ -153,42 +153,20 @@ function App() {
     }
   };
 
-  const applySessionSchedules = (basePlanner: PlannerData, schedules: SessionScheduleRecord[]) => {
-    return schedules.reduce((acc, item) => {
-      if (item.permissionGranted === false) {
-        return acc;
-      }
+  const { plannerData: storePlannerData, load: loadScheduleStore } = useScheduleStore();
 
-      return applyGoalRoadmapToSessionPlanner(
-        acc,
-        item.roadmap,
-        {
-          activeDays: settings.availability.activeDays,
-          minutesPerDay: settings.availability.minutesPerDay,
-        },
-        item.startDate,
-        item.source,
-      );
-    }, basePlanner);
-  };
-
-  const refreshPlanner = async (
-    schedulesOverride?: SessionScheduleRecord[],
-    fallbackPlanner?: PlannerData,
-  ) => {
-    const schedules = schedulesOverride ?? sessionSchedules;
-
-    try {
-      const planner = await fetchPlannerSnapshot();
-      setPlannerData(applySessionSchedules(planner, schedules));
-    } catch (error) {
-      console.error("Planner API fallback to empty data:", error);
-      setPlannerData(applySessionSchedules(fallbackPlanner ?? EMPTY_PLANNER_DATA, schedules));
+  useEffect(() => {
+    if (storePlannerData) {
+      setPlannerData(storePlannerData);
     }
+  }, [storePlannerData]);
+
+  const refreshPlanner = async (_next?: any, _data?: any) => {
+    await loadScheduleStore();
   };
 
   useEffect(() => {
-    void refreshPlanner();
+    void loadScheduleStore();
   }, [userId]);
 
   useEffect(() => {

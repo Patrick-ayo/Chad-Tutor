@@ -124,6 +124,10 @@ interface PlannerSeedTask {
   notes?: string;
   videoId?: string;
   videoUrl?: string;
+  videoTitle?: string;
+  roadmapId?: string;
+  subtopicId?: string;
+  sequenceNumber?: number;
   keyPoints?: string[];
   learningOutcomes?: string[];
 }
@@ -1013,6 +1017,10 @@ function buildPlannerQueues(
       notes: phase.description,
       videoId: session.videos[0]?.id,
       videoUrl: session.videos[0]?.url,
+      videoTitle: session.videos[0]?.title,
+      roadmapId: roadmap.id,
+      subtopicId: phase.phase,
+      sequenceNumber: (day.dayNumber - 1) * 3 + index + 1,
       keyPoints: session.videos.map((video) => video.title).slice(0, 4),
       learningOutcomes: [session.keyOutcome],
     }));
@@ -1059,6 +1067,14 @@ function mapScheduledTaskToCreateInput(params: {
     priority: toPriority(params.task.type as SessionPhase),
     keyPoints: Array.isArray(params.task.keyPoints) ? (params.task.keyPoints as Prisma.InputJsonValue) : undefined,
     learningOutcomes: Array.isArray(params.task.learningOutcomes) ? (params.task.learningOutcomes as Prisma.InputJsonValue) : undefined,
+    roadmapId: params.task.roadmapId,
+    topicId: params.task.topicId,
+    subtopicId: params.task.subtopicId,
+    duration: params.task.estimatedMinutes,
+    sequenceNumber: params.task.sequenceNumber,
+    videoId: params.task.videoId,
+    videoUrl: params.task.videoUrl,
+    videoTitle: params.task.videoTitle,
   };
 }
 
@@ -1161,12 +1177,39 @@ export async function generateDetailedRoadmapForUser(input: GenerateDetailedRoad
         where: {
           userId: input.userId,
           goalId: input.goalId!,
+          status: {
+            not: 'COMPLETED',
+          },
         },
       });
 
-      if (createInputs.length > 0) {
+      const existingTasks = await tx.studyTask.findMany({
+        where: {
+          userId: input.userId,
+          goalId: input.goalId!,
+        },
+      });
+
+      const existingKeys = new Set(
+        existingTasks.map((t) => {
+          const dateStr = t.scheduledDate instanceof Date
+            ? t.scheduledDate.toISOString().split('T')[0]
+            : new Date(t.scheduledDate).toISOString().split('T')[0];
+          return `${t.topicId || ''}-${t.subtopicId || ''}-${dateStr}`;
+        }),
+      );
+
+      const newInputs = createInputs.filter((item) => {
+        const dateStr = item.scheduledDate instanceof Date
+          ? item.scheduledDate.toISOString().split('T')[0]
+          : new Date(item.scheduledDate).toISOString().split('T')[0];
+        const key = `${item.topicId || ''}-${item.subtopicId || ''}-${dateStr}`;
+        return !existingKeys.has(key);
+      });
+
+      if (newInputs.length > 0) {
         const result = await tx.studyTask.createMany({
-          data: createInputs,
+          data: newInputs,
         });
         plannerTasksCreated = result.count;
       }

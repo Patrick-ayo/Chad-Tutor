@@ -1,5 +1,6 @@
-import { taskRepo } from "../repositories";
+import { taskRepo, settingsRepo } from "../repositories";
 import type { StudyTask } from "@prisma/client";
+import { prisma } from "../repositories/base.repo";
 import { assertRowsAffected } from "./serviceErrors";
 
 async function findNextSlotForTask(
@@ -506,4 +507,130 @@ export function resolveMissedTasksMultiTopic(
   }
 
   return { updatedTasks: updated, warnings, appliedStrategy: applied, suggestedActions: suggestions };
+}
+
+export type ScheduleChangeRequest = {
+  type: "create" | "edit" | "delete";
+  task: Partial<StudyTask> & { id?: string; estimatedMinutes?: number };
+};
+
+export type ScheduleChangeResult = {
+  success: boolean;
+  task?: StudyTask;
+  conflict?: boolean;
+  suggestedActions?: SuggestedAction[];
+};
+
+export async function applyScheduleChange(
+  userId: string,
+  date: Date,
+  change: ScheduleChangeRequest
+): Promise<ScheduleChangeResult> {
+  const targetDate = startOfDay(date);
+  const nextDay = addDays(targetDate, 1);
+
+  // Execute in a serialized transaction
+  return prisma.$transaction(async (tx) => {
+    // 1. Re-read settings inside the transaction (no specific lock on settings needed if we just lock tasks, but good for freshness)
+    const settings = await tx.userSettings.findUnique({
+      where: { userId },
+    });
+    const weekday = dayName(targetDate);
+    const dailyMinutes = settings?.dailyMinutes as Record<Weekday, number> | undefined;
+    const dailyBudget = dailyMinutes?.[weekday] ?? 60;
+
+    // 2. Lock the tasks for this user on this day to prevent concurrent modifications
+    // In PostgreSQL, FOR UPDATE locks rows. If we're creating a new row, we can't lock it yet.
+    // Locking existing tasks for the day is a proxy for locking the day's schedule.
+    // For pure atomicity, if we had a DaySchedule table we'd lock that.
+    // Here we query and lock all tasks for this user and date.
+    const existingTasks = await tx.studyTask.findMany({
+      where: {
+        userId,
+        scheduledDate: {
+          gte: targetDate,
+          lt: nextDay,
+        },
+      },
+      // Using raw query for FOR UPDATE if strictly necessary, but within SERIALIZABLE or by locking user settings, we can avoid phantom reads.
+      // Since prisma doesn't support table-level locks easily without raw query, we'll sum up current minutes manually.
+    });
+
+    let currentScheduledMinutes = existingTasks.reduce((sum, t) => sum + t.estimatedMinutes, 0);
+
+    // Calculate delta based on change type
+    let deltaMinutes = 0;
+    if (change.type === "create") {
+      deltaMinutes = change.task.estimatedMinutes ?? 25;
+    } else if (change.type === "edit") {
+      const originalTask = existingTasks.find((t) => t.id === change.task.id);
+      if (originalTask && change.task.estimatedMinutes !== undefined) {
+        deltaMinutes = change.task.estimatedMinutes - originalTask.estimatedMinutes;
+      }
+    } else if (change.type === "delete") {
+      const originalTask = existingTasks.find((t) => t.id === change.task.id);
+      if (originalTask) {
+        deltaMinutes = -originalTask.estimatedMinutes;
+      }
+    }
+
+    // 3. Check for capacity overflow
+    if (currentScheduledMinutes + deltaMinutes > dailyBudget && deltaMinutes > 0) {
+      // Abort change, return conflict
+      return {
+        success: false,
+        conflict: true,
+        suggestedActions: [
+          {
+            type: "increase-budget",
+            label: "Increase daily budget",
+            details: `This action requires ${currentScheduledMinutes + deltaMinutes - dailyBudget} more minutes than your budget of ${dailyBudget}m for ${weekday}.`,
+          },
+        ],
+      };
+    }
+
+    // 4. Execute the mutation
+    let updatedTask: StudyTask | undefined = undefined;
+
+    if (change.type === "create") {
+      updatedTask = await tx.studyTask.create({
+        data: {
+          userId,
+          title: change.task.title ?? "New Task",
+          estimatedMinutes: change.task.estimatedMinutes ?? 25,
+          scheduledDate: targetDate,
+          priority: change.task.priority ?? "MEDIUM",
+          status: change.task.status ?? "SCHEDULED",
+          // Map other necessary fields
+          ...(change.task.goalId && { goalId: change.task.goalId }),
+          ...(change.task.skillId && { skillId: change.task.skillId }),
+        },
+      });
+    } else if (change.type === "edit" && change.task.id) {
+      // Only pick fields that are actually allowed to be updated
+      const updateData: any = {};
+      if (change.task.title !== undefined) updateData.title = change.task.title;
+      if (change.task.estimatedMinutes !== undefined) updateData.estimatedMinutes = change.task.estimatedMinutes;
+      if (change.task.priority !== undefined) updateData.priority = change.task.priority;
+      if (change.task.status !== undefined) updateData.status = change.task.status;
+      if (change.task.scheduledDate !== undefined) updateData.scheduledDate = change.task.scheduledDate;
+
+      updatedTask = await tx.studyTask.update({
+        where: { id: change.task.id },
+        data: updateData,
+      });
+    } else if (change.type === "delete" && change.task.id) {
+      updatedTask = await tx.studyTask.delete({
+        where: { id: change.task.id },
+      });
+    }
+
+    return {
+      success: true,
+      task: updatedTask,
+    };
+  }, {
+    isolationLevel: 'Serializable', // Use Serializable to prevent phantom reads (e.g. concurrent inserts)
+  });
 }
