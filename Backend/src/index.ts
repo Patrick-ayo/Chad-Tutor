@@ -23,6 +23,7 @@ import {
   aiRoutes,
   geminiRoutes,
   lectureSummaryRoutes,
+  progressRoutes,
 } from './routes';
 import { errorHandler, notFoundHandler } from './middleware';
 import { HipolabsProvider } from './external/providers/HipolabsProvider';
@@ -1047,6 +1048,7 @@ app.use('/api/tasks', tasksRoutes);
 app.use('/api/playlists', playlistsRoutes);
 app.use('/api/quiz', quizRoutes);
 app.use('/api/lecture', lectureSummaryRoutes);
+app.use('/api/progress', progressRoutes);
 
 // 404 handler
 app.use(notFoundHandler);

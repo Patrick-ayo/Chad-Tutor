@@ -106,7 +106,17 @@ async function parseJson<T>(response: Response): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+let injectedGetToken: (() => Promise<string | null>) | null = null;
+
+export function setTokenResolver(resolver: () => Promise<string | null>) {
+  injectedGetToken = resolver;
+}
+
 async function getClerkToken(): Promise<string | null> {
+  if (injectedGetToken) {
+    return await injectedGetToken();
+  }
+
   const clerk = (window as unknown as { Clerk?: ClerkLike }).Clerk;
   if (!clerk?.session?.getToken) {
     return null;
@@ -665,6 +675,7 @@ export async function resolveMissedTasksBatch(
 
 export async function ingestPlaylist(input: {
   name: string;
+  description?: string;
   externalSource: string;
   externalId?: string;
   externalUrl?: string;
@@ -840,3 +851,53 @@ export async function fetchNextPendingTask(
   }
 }
 
+export interface ProgressSummary {
+  totalVideos: number;
+  watchedVideos: number;
+  totalMinutes: number;
+  completedMinutes: number;
+  overallPercent: number;
+
+  subjects: Array<{
+    topicId: string;
+    topicName: string;
+    totalVideos: number;
+    watchedVideos: number;
+    totalMinutes: number;
+    completedMinutes: number;
+    percent: number;
+    status: "not_started"|"in_progress"|"completed";
+  }>;
+
+  pace: {
+    plannedPerDay: number;
+    actualPerDay: number;
+    ratio: number;
+    trend: "ahead"|"on_track"|"behind"|"critical";
+  };
+
+  dailyActivity: Array<{
+    date: string;
+    plannedMinutes: number;
+    completedMinutes: number;
+    intensity: 0|1|2|3|4;
+  }>;
+
+  projectedCompletion: {
+    originalDeadline: string;
+    projectedDate: string;
+    daysAhead: number;
+    onTrack: boolean;
+  };
+}
+
+export async function fetchProgressSummary(): Promise<ProgressSummary | null> {
+  try {
+    const response = await authorizedFetch('/api/progress/summary');
+    const payload = await parseJson<ProgressSummary>(response);
+    return payload;
+  } catch (error) {
+    console.error('Failed to fetch progress summary:', error);
+    return null;
+  }
+}

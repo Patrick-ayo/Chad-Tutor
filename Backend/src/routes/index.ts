@@ -14,3 +14,4 @@ export { default as youtubeRoutes } from './youtube.routes';
 export { default as aiRoutes } from './ai.routes';
 export { default as geminiRoutes } from './gemini.routes';
 export { default as lectureSummaryRoutes } from './lectureSummary.routes';
+export { default as progressRoutes } from './progress';

@@ -62,6 +62,8 @@ export function PlannerPage({ data, onSync, sessionSchedules = [], onSchedulePer
   const [playlistSource, setPlaylistSource] = useState("youtube");
   const [playlistUrl, setPlaylistUrl] = useState("");
   const [playlistItemsInput, setPlaylistItemsInput] = useState("");
+  const [playlistSubject, setPlaylistSubject] = useState("");
+  const [playlistFormat, setPlaylistFormat] = useState("");
   const [playlistIds, setPlaylistIds] = useState<string[]>([]);
   const [plannerMessage, setPlannerMessage] = useState<string | null>(null);
   const [plannerError, setPlannerError] = useState<string | null>(null);
@@ -148,12 +150,61 @@ export function PlannerPage({ data, onSync, sessionSchedules = [], onSchedulePer
   }, []);
 
   useEffect(() => {
+    // Auto-detect Source (Platform)
+    if (!playlistSource || playlistSource === "youtube") {
+      const urlLower = playlistUrl.toLowerCase();
+      if (urlLower.includes("youtube.com") || urlLower.includes("youtu.be")) {
+        setPlaylistSource("youtube");
+      } else if (urlLower.includes("coursera.org")) {
+        setPlaylistSource("coursera");
+      } else if (urlLower.includes("udemy.com")) {
+        setPlaylistSource("udemy");
+      } else if (urlLower.includes("edx.org")) {
+        setPlaylistSource("edx");
+      } else if (urlLower.length > 5) {
+        setPlaylistSource("custom");
+      }
+    }
+
+    const combinedText = `${playlistName} ${playlistItemsInput}`.toLowerCase();
+
+    // Auto-detect Format
+    if (!playlistFormat && combinedText.length > 3) {
+      if (combinedText.includes("crash course")) setPlaylistFormat("Crash Course");
+      else if (combinedText.includes("tutorial")) setPlaylistFormat("Tutorial");
+      else if (combinedText.includes("podcast")) setPlaylistFormat("Podcast");
+      else if (combinedText.includes("interview")) setPlaylistFormat("Interview");
+      else if (combinedText.includes("lecture")) setPlaylistFormat("Lecture Series");
+      else if (combinedText.includes("workshop")) setPlaylistFormat("Workshop");
+      else if (combinedText.includes("review")) setPlaylistFormat("Review");
+      else if (playlistItemsInput.split("\\n").length > 3) setPlaylistFormat("Course");
+    }
+
+    // Auto-detect Subject
+    if (!playlistSubject && combinedText.length > 3) {
+      if (/\\b(math|calculus|algebra|geometry|trigonometry)\\b/i.test(combinedText)) setPlaylistSubject("Mathematics");
+      else if (/\\b(programming|coding|javascript|python|react|java|c\\+\\+|node|web|software)\\b/i.test(combinedText)) setPlaylistSubject("Computer Science");
+      else if (/\\b(physics|chemistry|biology|science|astronomy)\\b/i.test(combinedText)) setPlaylistSubject("Science");
+      else if (/\\b(history|geography|politics|sociology)\\b/i.test(combinedText)) setPlaylistSubject("Humanities");
+      else if (/\\b(business|finance|marketing|economics)\\b/i.test(combinedText)) setPlaylistSubject("Business & Finance");
+      else if (/\\b(art|design|music|drawing)\\b/i.test(combinedText)) setPlaylistSubject("Arts & Design");
+      else if (/\\b(language|english|spanish|french|grammar)\\b/i.test(combinedText)) setPlaylistSubject("Language Learning");
+      else if (/\\b(health|fitness|workout|diet)\\b/i.test(combinedText)) setPlaylistSubject("Health & Fitness");
+    }
+  }, [playlistUrl, playlistItemsInput, playlistName, playlistSource, playlistFormat, playlistSubject]);
+
+  useEffect(() => {
     let isActive = true;
 
     const refreshTopicStatuses = async () => {
-      const topics = await fetchTopicStatuses();
-      if (isActive) {
-        setTopicStatuses(topics);
+      if (!userId) return;
+      try {
+        const topics = await fetchTopicStatuses();
+        if (isActive) {
+          setTopicStatuses(topics);
+        }
+      } catch (err) {
+        console.warn("Failed to fetch planner topic statuses:", err);
       }
     };
 
@@ -258,8 +309,15 @@ export function PlannerPage({ data, onSync, sessionSchedules = [], onSchedulePer
     setIsSubmittingPlaylist(true);
 
     try {
+      const parts = [];
+      if (playlistSource) parts.push(playlistSource);
+      if (playlistFormat) parts.push(playlistFormat);
+      if (playlistSubject) parts.push(`on ${playlistSubject}`);
+      const categoryDesc = parts.length > 0 ? parts.join(" ") : "Playlist";
+
       const playlist = await ingestPlaylist({
         name: playlistName,
+        description: categoryDesc,
         externalSource: playlistSource,
         externalUrl: playlistUrl || undefined,
         externalId: playlistUrl || undefined,
@@ -280,7 +338,7 @@ export function PlannerPage({ data, onSync, sessionSchedules = [], onSchedulePer
       const horizonText = result.horizonDays ? ` within ${result.horizonDays} day horizon` : "";
       const groupText = result.groupSummary ? ` Split: deadline ${result.groupSummary.deadline}, time ${result.groupSummary.time}, effort ${result.groupSummary.effort}.` : "";
       
-      setPlannerMessage(`Imported playlist "${playlist.name}" and generated ${result.createdCount} planned tasks${horizonText}.${groupText}`);
+      setPlannerMessage(`Imported ${categoryDesc}: "${playlist.name}" and generated ${result.createdCount} planned tasks${horizonText}.${groupText}`);
       
       setPlaylistName("");
       setPlaylistUrl("");
@@ -1100,6 +1158,27 @@ export function PlannerPage({ data, onSync, sessionSchedules = [], onSchedulePer
                 value={playlistUrl}
                 onChange={(event) => setPlaylistUrl(event.target.value)}
                 placeholder="https://youtube.com/playlist?..."
+              />
+            </div>
+          </div>
+          
+          <div className="grid md:grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label htmlFor="playlist-subject">Subject (Auto-detected)</Label>
+              <Input
+                id="playlist-subject"
+                value={playlistSubject}
+                onChange={(event) => setPlaylistSubject(event.target.value)}
+                placeholder="e.g. Computer Science, Math"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="playlist-format">Format (Auto-detected)</Label>
+              <Input
+                id="playlist-format"
+                value={playlistFormat}
+                onChange={(event) => setPlaylistFormat(event.target.value)}
+                placeholder="e.g. Crash Course, Lecture"
               />
             </div>
           </div>

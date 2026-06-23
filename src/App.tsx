@@ -5,7 +5,7 @@ import { Layout } from "@/components/layout";
 import { Dashboard } from "@/components/dashboard";
 import { GoalBuilderPage } from "@/components/goal-builder";
 import { LearningSessionPage } from "@/components/session/LearningSessionPage";
-import { ProgressAnalyticsPage } from "@/components/analytics";
+import { ProgressPage } from "@/components/progress/ProgressPage";
 import { PlannerPage } from "@/components/planner/PlannerPage";
 import { SettingsPage } from "@/components/settings";
 import { ExplorePage } from "@/components/explore";
@@ -15,8 +15,7 @@ import { MrChadPage } from "@/components/mr-chad/MrChadPage";
 import { AccessibilityProvider } from "@/contexts/AccessibilityContext";
 import { mockDashboardData } from "@/data/mockDashboard";
 import { mockSettings } from "@/data/mockSettings";
-import { clearPlannerData } from "@/lib/plannerApi";
-import { recomputeSchedule } from "@/lib/plannerApi";
+import { clearPlannerData, recomputeSchedule, setTokenResolver } from "@/lib/plannerApi";
 import { useScheduleStore } from "@/lib/scheduleStore";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import type { UserSettings } from "@/types/settings";
@@ -63,7 +62,11 @@ const EMPTY_PLANNER_DATA: PlannerData = {
 };
 
 function App() {
-  const { userId } = useAuth();
+  const { userId, getToken } = useAuth();
+  
+  useEffect(() => {
+    setTokenResolver(getToken);
+  }, [getToken]);
   const userStoragePrefix = `user:${userId || "anonymous"}`;
   const settingsStorageKey = `${userStoragePrefix}:${SETTINGS_STORAGE_KEY}`;
   const plannerDataStorageKey = `${userStoragePrefix}:${PLANNER_DATA_STORAGE_KEY}`;
@@ -166,7 +169,9 @@ function App() {
   };
 
   useEffect(() => {
-    void loadScheduleStore();
+    if (userId) {
+      void loadScheduleStore();
+    }
   }, [userId]);
 
   useEffect(() => {
@@ -334,7 +339,7 @@ function App() {
             <Route path="/goals" element={<GoalBuilderPage onSaveGoalSchedule={handleGoalSessionSave} />} />
             <Route path="/session" element={<LearningSessionPage plannerData={plannerData} />} />
             <Route path="/session/:taskId" element={<LearningSessionPage plannerData={plannerData} />} />
-            <Route path="/progress" element={<ProgressAnalyticsPage />} />
+            <Route path="/progress" element={<ProgressPage />} />
             <Route
               path="/schedule"
               element={
