@@ -63,7 +63,7 @@ export function TopicStatusBar({ topics }: TopicStatusBarProps) {
               >
                 <div className="min-w-0 space-y-0.5">
                   <p className="truncate text-sm font-medium leading-none">
-                    {formatTopicLabel(topic.topicId)}
+                    {(topic as any).name || (topic as any).title || formatTopicLabel(topic.topicId) || 'Unknown Topic'}
                   </p>
                   <p className="text-xs text-muted-foreground">
                     {topic.remainingMinutes} min remaining • {topic.remainingDays} day{topic.remainingDays === 1 ? '' : 's'} left

@@ -880,6 +880,13 @@ export function PlannerPage({ data, onSync, sessionSchedules = [], onSchedulePer
                           </Button>
                         )}
                         <Button
+                          size="sm"
+                          onClick={() => navigate(`/session?goalId=${record.roadmap.id}&action=start`)}
+                          className="h-8 gap-1 text-xs bg-indigo-600 hover:bg-indigo-700 text-white"
+                        >
+                          Start Session <Play className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
                           variant="outline"
                           size="sm"
                           onClick={() => {

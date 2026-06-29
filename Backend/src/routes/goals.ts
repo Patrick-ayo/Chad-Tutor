@@ -7,8 +7,10 @@
 
 import { Router, Request, Response } from 'express';
 import { goalService, plannerService } from '../services';
+import { generateDetailedRoadmapForUser } from '../services/detailedRoadmap.service';
 import { asyncHandler, requireUser } from '../middleware';
 import { goalRepo, playlistRepo } from '../repositories';
+import prisma from '../db/client';
 
 const router = Router();
 
@@ -99,7 +101,10 @@ router.get('/:id', requireUser, async (req: Request, res: Response) => {
  */
 router.post('/', requireUser, async (req: Request, res: Response) => {
   try {
-    const { name, description, deadline, totalHours } = req.body;
+    const { name, description, deadline, totalHours, generatedRoadmapTasks, tasks } = req.body;
+    
+    // Support both property names to be safe based on user's example
+    const roadmapTasks = generatedRoadmapTasks || tasks;
 
     if (!name || !deadline) {
       return res.status(400).json({
@@ -114,6 +119,32 @@ router.post('/', requireUser, async (req: Request, res: Response) => {
       deadline: new Date(deadline),
       totalHours,
     });
+
+    const playlistIds = req.body.playlistIds;
+    if (playlistIds && Array.isArray(playlistIds) && playlistIds.length > 0) {
+      // Trigger async roadmap generation so tasks populate
+      await generateDetailedRoadmapForUser({
+        userId: req.user!.id,
+        goalId: goal.id,
+        goalName: goal.name,
+        topicName: goal.name,
+        playlistIds,
+      });
+    }
+
+    if (roadmapTasks && Array.isArray(roadmapTasks) && roadmapTasks.length > 0) {
+      // Map the goalId onto the generated tasks
+      const tasksToSave = roadmapTasks.map((task: any) => ({
+        ...task,
+        goalId: goal.id,
+        userId: req.user!.id,
+      }));
+
+      // Persist the tasks
+      await prisma.studyTask.createMany({
+        data: tasksToSave,
+      });
+    }
 
     res.status(201).json({ goal });
   } catch (error) {

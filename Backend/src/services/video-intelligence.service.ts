@@ -1,6 +1,7 @@
 import Bytez from '../lib/bytez';
 import config from '../config';
 import { runGeminiPrompt } from './gemini.service';
+import { fetchTranscript } from './transcript.service';
 
 export interface VideoSignal {
   score: number;
@@ -54,26 +55,24 @@ function computeFreshnessScore(publishedAt?: string): number {
   const ageMs = Date.now() - published;
   const ageDays = ageMs / (1000 * 60 * 60 * 24);
 
-  if (ageDays <= 30) return 1;
-  if (ageDays <= 180) return 0.85;
-  if (ageDays <= 365) return 0.7;
-  if (ageDays <= 730) return 0.55;
-  return 0.4;
+  if (ageDays <= 30) return 1.0;
+  return Math.max(0.4, 1.0 - 0.6 * ((ageDays - 30) / 700));
 }
 
-export function computeVideoSignal(video: VideoSearchRecord): VideoSignal {
+export function computeVideoSignal(video: VideoSearchRecord, channelAuthorityMultiplier: number = 1.0): VideoSignal {
   const views = video.viewCount ?? 0;
   const likes = video.likeCount ?? 0;
   const comments = video.commentCount ?? 0;
 
-  const viewScore = clamp(normalizeCount(views));
+  const viewScore = Math.min(1.0, Math.log10(views + 1) / Math.log10(1000000));
   const likeRatio = views > 0 ? likes / views : 0;
   const commentRatio = views > 0 ? comments / views : 0;
 
-  const engagementScore = clamp((normalizeCount(likes) * 0.6) + (normalizeCount(comments) * 0.4) + (likeRatio * 3) + (commentRatio * 10));
+  const engagementScore = 0.6 * Math.min(1.0, likeRatio / 0.04) + 0.4 * Math.min(1.0, commentRatio / 0.002);
   const freshnessScore = computeFreshnessScore(video.publishedAt);
 
-  const score = clamp((viewScore * 0.5) + (engagementScore * 0.35) + (freshnessScore * 0.15));
+  const rawScore = (viewScore * 0.5) + (engagementScore * 0.35) + (freshnessScore * 0.15);
+  const score = clamp(rawScore * channelAuthorityMultiplier);
 
   const reasons: string[] = [];
   if (views > 50000) reasons.push('High view volume');
@@ -147,11 +146,11 @@ function buildDirectSummary(video: VideoSearchRecord): { summary: string; keyCon
   return { summary, keyConcepts, testPrepPoints };
 }
 
-function buildModelPrompt(video: VideoSearchRecord): string {
+function buildModelPrompt(video: VideoSearchRecord, transcriptChunk: string = ''): string {
   const topic = video.subtopicName || video.topicName || 'general programming topic';
 
   return `You are generating study content for a learning planner.
-Use the video metadata below to produce learning output.
+Use the video metadata and transcript chunk below to produce learning output. If the content lacks educational value or has insufficient data, return "INSUFFICIENT_DATA" for the summary.
 
 Video title: ${video.title}
 Channel: ${video.channelName || 'Unknown'}
@@ -162,14 +161,17 @@ Likes: ${video.likeCount ?? 0}
 Comments/Reviews: ${video.commentCount ?? 0}
 Description: ${video.description || 'N/A'}
 
+Transcript Chunk:
+${transcriptChunk}
+
 Return strict JSON only:
 {
-  "summary": "4-6 sentence teaching summary of what this video likely teaches",
+  "summary": "4-6 sentence teaching summary of what this video likely teaches, or 'INSUFFICIENT_DATA'",
   "keyConcepts": ["concept1", "concept2", "concept3"],
   "testPrepPoints": ["checkpoint1", "checkpoint2", "checkpoint3"]
 }
 
-Keep practical and exam/test-oriented. Avoid hallucinated specifics beyond metadata.`;
+Keep practical and exam/test-oriented. Avoid hallucinated specifics beyond metadata and transcript.`;
 }
 
 async function summarizeWithGemini(video: VideoSearchRecord): Promise<{ summary: string; keyConcepts: string[]; testPrepPoints: string[] } | null> {
@@ -177,7 +179,13 @@ async function summarizeWithGemini(video: VideoSearchRecord): Promise<{ summary:
     return null;
   }
 
-  const { error, output } = await runGeminiPrompt(buildModelPrompt(video));
+  let transcriptChunk = '';
+  if (video.id) {
+    const fullTranscript = await fetchTranscript(video.id);
+    transcriptChunk = fullTranscript ? fullTranscript.slice(0, 3000) : 'No transcript available.';
+  }
+
+  const { error, output } = await runGeminiPrompt(buildModelPrompt(video, transcriptChunk));
   if (error || !output) {
     return null;
   }
@@ -188,7 +196,7 @@ async function summarizeWithGemini(video: VideoSearchRecord): Promise<{ summary:
   }
 
   const summary = typeof parsed.summary === 'string' ? parsed.summary.trim() : '';
-  if (!summary) {
+  if (!summary || summary === 'INSUFFICIENT_DATA') {
     return null;
   }
 
@@ -204,12 +212,18 @@ async function summarizeWithBytez(video: VideoSearchRecord): Promise<{ summary: 
     return null;
   }
 
+  let transcriptChunk = '';
+  if (video.id) {
+    const fullTranscript = await fetchTranscript(video.id);
+    transcriptChunk = fullTranscript ? fullTranscript.slice(0, 3000) : 'No transcript available.';
+  }
+
   try {
     const model = bytezSdk.model(BYTEZ_MODEL);
     const { error, output } = await model.run([
       {
         role: 'user',
-        content: buildModelPrompt(video),
+        content: buildModelPrompt(video, transcriptChunk),
       },
     ]);
 
@@ -225,7 +239,7 @@ async function summarizeWithBytez(video: VideoSearchRecord): Promise<{ summary: 
     }
 
     const summary = typeof parsed.summary === 'string' ? parsed.summary.trim() : '';
-    if (!summary) {
+    if (!summary || summary === 'INSUFFICIENT_DATA') {
       return null;
     }
 

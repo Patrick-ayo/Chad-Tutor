@@ -215,7 +215,7 @@ export async function rescheduleMissedTasks(
 
   const missedIds = missed.map((m) => m.id);
 
-  const result: RescheduleResult = resolveMissedTasksMultiTopic(allTasks, missedIds, asOfDate, availability);
+  const result: RescheduleResult = await resolveMissedTasksMultiTopic(allTasks, missedIds, asOfDate, availability);
 
   // Persist updated tasks back to DB
   for (const ut of result.updatedTasks) {

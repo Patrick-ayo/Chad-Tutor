@@ -2,6 +2,7 @@ import { taskRepo, settingsRepo } from "../repositories";
 import type { StudyTask } from "@prisma/client";
 import { prisma } from "../repositories/base.repo";
 import { assertRowsAffected } from "./serviceErrors";
+import axios from "axios";
 
 async function findNextSlotForTask(
   userId: string,
@@ -71,6 +72,7 @@ export interface ScheduledUnit {
   type: "learn" | "practice" | "quiz" | "revision";
   topicId?: string;
   subtopicClusterId?: string;
+  sequenceNumber?: number;
   scheduledDate?: Date;
   deadlineDate?: Date;
   estimatedMinutes: number;
@@ -78,6 +80,9 @@ export interface ScheduledUnit {
   status?: string;
   rescheduleCount?: number;
   originalEstimatedMinutes?: number;
+  goalType?: "exam" | "skill" | "role";
+  videoId?: string;
+  videoUrl?: string;
 }
 
 export type ScheduledTask = ScheduledUnit;
@@ -89,6 +94,7 @@ export interface TopicQueue {
   totalMinutes: number;
   remainingMinutes: number;
   burnRate?: number;
+  type?: "exam" | "skill" | "role";
 }
 
 export interface BufferPoolEntry {
@@ -121,6 +127,64 @@ export interface RescheduleResult {
   warnings: ScheduleWarning[];
   appliedStrategy: "absorb" | "push_forward" | "global_rebalance";
   suggestedActions?: SuggestedAction[];
+}
+
+async function squeezeAndSwap(topic: TopicQueue): Promise<void> {
+  const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY || '';
+  if (!YOUTUBE_API_KEY) return;
+  
+  const learnTasks = topic.tasks.filter(t => t.type === 'learn' && t.status !== 'completed');
+  if (learnTasks.length === 0) return;
+  
+  try {
+    const query = `${topic.topicId} one shot OR crash course`;
+    const response = await axios.get('https://www.googleapis.com/youtube/v3/search', {
+      params: {
+        key: YOUTUBE_API_KEY,
+        q: query,
+        part: 'snippet',
+        type: 'video',
+        maxResults: 5,
+        videoDuration: 'any',
+      }
+    });
+    
+    const items = response.data.items || [];
+    if (items.length === 0) return;
+    const videoIds = items.map((i: any) => i.id.videoId).filter(Boolean).join(',');
+    
+    if (!videoIds) return;
+
+    const details = await axios.get('https://www.googleapis.com/youtube/v3/videos', {
+      params: { key: YOUTUBE_API_KEY, id: videoIds, part: 'contentDetails' }
+    });
+    
+    const parseDuration = (dur: string) => {
+      const match = dur.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+      if (!match) return 0;
+      return (parseInt(match[1] || '0') * 3600) + (parseInt(match[2] || '0') * 60) + parseInt(match[3] || '0');
+    };
+    
+    let selectedVideoId: string | null = null;
+    for (const v of (details.data.items || [])) {
+      const d = parseDuration(v.contentDetails?.duration || '');
+      if (d > 0 && d < 3600) {
+        selectedVideoId = v.id;
+        break;
+      }
+    }
+    
+    if (selectedVideoId) {
+      for (const t of learnTasks) {
+        t.videoId = selectedVideoId;
+        t.videoUrl = `https://www.youtube.com/watch?v=${selectedVideoId}`;
+        t.estimatedMinutes = Math.min(t.estimatedMinutes, 45); 
+        t.title = "One-Shot Summary: " + t.title;
+      }
+    }
+  } catch (error) {
+     console.error('SqueezeAndSwap fetch error:', error);
+  }
 }
 
 function startOfDay(date: Date): Date {
@@ -238,8 +302,13 @@ function findBufferPoolForTopic(pools: BufferPool[], topicId?: string): BufferPo
 export function scheduleMultiTopicTasks(
   topics: TopicQueue[],
   availability: Availability,
-  startDate: Date,
+  startDate = new Date(),
 ): ScheduledUnit[] {
+  // Enforce sequential sorting strictly
+  for (const t of topics) {
+    t.tasks.sort((a, b) => (a.sequenceNumber ?? 0) - (b.sequenceNumber ?? 0));
+  }
+
   const start = startOfDay(startDate ?? new Date());
   const activeDays = availability.activeDays;
   const dailyMinutes = availability.minutesPerDay;
@@ -297,12 +366,26 @@ export function scheduleMultiTopicTasks(
           continue;
         }
 
+        if (clusterTotal <= remainingDayBudget) {
+          for (const ct of clusterTasks) {
+            scheduled.push({ ...ct, scheduledDate: startOfDay(cursor) });
+          }
+          allocated += clusterTotal;
+          remainingDayBudget -= clusterTotal;
+          topic.remainingMinutes = Math.max(0, topic.remainingMinutes - clusterTotal);
+          idx = ci;
+          break;
+        }
+
         if (clusterTotal > minutesPerDay) {
-          const watchTask = clusterTasks.find((c) => c.type === 'learn');
-          if (watchTask && remainingDayBudget >= (watchTask.estimatedMinutes ?? 0)) {
-            scheduled.push({ ...watchTask, scheduledDate: startOfDay(cursor) });
-            topic.remainingMinutes = Math.max(0, topic.remainingMinutes - (watchTask.estimatedMinutes ?? 0));
-            remainingDayBudget -= (watchTask.estimatedMinutes ?? 0);
+          if (remainingDayBudget === minutesPerDay) {
+            for (const ct of clusterTasks) {
+              scheduled.push({ ...ct, scheduledDate: startOfDay(cursor) });
+            }
+            allocated += clusterTotal;
+            remainingDayBudget = 0;
+            topic.remainingMinutes = Math.max(0, topic.remainingMinutes - clusterTotal);
+            idx = ci;
           }
         }
         break;
@@ -332,12 +415,12 @@ export function scheduleMultiTopicTasks(
   return scheduled;
 }
 
-export function resolveMissedTasksMultiTopic(
+export async function resolveMissedTasksMultiTopic(
   allTasks: ScheduledUnit[],
   missedTaskIds: string[],
   today: Date,
   availability: Availability,
-): RescheduleResult {
+): Promise<RescheduleResult> {
   const warnings: ScheduleWarning[] = [];
   const updated = allTasks.map((t) => ({ ...t }));
   const pools = buildBufferPoolsFromHistory(updated);
@@ -485,8 +568,18 @@ export function resolveMissedTasksMultiTopic(
     for (const [tid, list] of map.entries()) {
       const total = list.reduce((s, x) => s + (x.estimatedMinutes ?? 0), 0);
       const deadline = list.find((x) => x.deadlineDate)?.deadlineDate ?? addDays(today, 7);
-      topicsArr.push({ topicId: tid, deadlineDate: deadline, tasks: list, totalMinutes: total, remainingMinutes: total });
+      const type = list.find((x) => x.goalType)?.goalType;
+      topicsArr.push({ topicId: tid, deadlineDate: deadline, tasks: list, totalMinutes: total, remainingMinutes: total, type });
     }
+
+    for (const t of topicsArr) {
+      if (t.type === 'exam') {
+        await squeezeAndSwap(t);
+        t.remainingMinutes = t.tasks.reduce((s, x) => s + (x.estimatedMinutes ?? 0), 0);
+        t.totalMinutes = t.remainingMinutes;
+      }
+    }
+
     const rescheduled = scheduleMultiTopicTasks(topicsArr, availability, today);
 
     // capacity check
@@ -497,8 +590,8 @@ export function resolveMissedTasksMultiTopic(
       suggestions.push({ type: 'increase-budget', label: 'Increase daily budget', details: 'Increase minutes per day to meet deadlines.' });
       const deficit = totalRem - capacity; const minExtraDays = Math.ceil(deficit / Math.max(...Object.values(availability.minutesPerDay)));
       suggestions.push({ type: 'extend-deadline', label: 'Extend deadlines', details: `Extend by at least ${minExtraDays} days.` });
-      // drop low priority: quizzes/practices first
-      const dropCandidates = incomplete.filter((t) => t.type === 'quiz' || t.type === 'practice');
+      // drop low priority: quizzes/practices first (NOT for exam)
+      const dropCandidates = incomplete.filter((t) => (t.type === 'quiz' || t.type === 'practice') && t.goalType !== 'exam');
       let dropped = 0;
       for (const d of dropCandidates) { d.status = 'skipped'; dropped += d.estimatedMinutes; if (totalRem - dropped <= capacity) break; }
     }

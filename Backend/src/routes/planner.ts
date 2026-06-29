@@ -184,7 +184,7 @@ router.post(
       originalEstimatedMinutes: undefined,
     }));
 
-    const result = resolveMissedTasksMultiTopic(allTasks, missedTaskIds, asOf, availability);
+    const result = await resolveMissedTasksMultiTopic(allTasks, missedTaskIds, asOf, availability);
 
     // persist updated tasks
     for (const ut of result.updatedTasks) {

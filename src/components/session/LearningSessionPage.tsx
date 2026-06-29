@@ -6,6 +6,9 @@ import {
   AlertCircle,
   ArrowLeft,
   Loader2,
+  Play,
+  CheckSquare,
+  BookOpen,
 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -1443,6 +1446,23 @@ export function LearningSessionPage({ plannerData }: LearningSessionPageProps) {
   }, [taskId, navigate, plannerData]);
 
   useEffect(() => {
+    const searchParams = new URLSearchParams(window.location.search);
+    const action = searchParams.get("action");
+    const goalId = searchParams.get("goalId") || searchParams.get("goal_id");
+
+    if (action === "start" && !todaysTasksLoading && todaysTasks.length === 0 && upcomingTasks.length > 0) {
+      const nextTaskItem = goalId 
+        ? upcomingTasks.find(item => item.task?.goalId === goalId) 
+        : upcomingTasks[0];
+
+      if (nextTaskItem) {
+        window.history.replaceState({}, '', `/session${goalId ? `?goalId=${goalId}` : ''}`);
+        handleStartWatchingTask(nextTaskItem.task as any);
+      }
+    }
+  }, [todaysTasksLoading, todaysTasks.length, upcomingTasks]);
+
+  useEffect(() => {
     let isActive = true;
 
     const runRefresh = async () => {
@@ -2020,7 +2040,9 @@ export function LearningSessionPage({ plannerData }: LearningSessionPageProps) {
 
         {upcomingExpanded && (
           <div className="mt-3 space-y-2.5">
-            {upcomingTasks.map((item) => (
+            {(upcomingTasks || []).map((item) => {
+              if (!item || !item.task) return null;
+              return (
               <div key={item.task.id} className="rounded-xl border p-3">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -2033,16 +2055,28 @@ export function LearningSessionPage({ plannerData }: LearningSessionPageProps) {
                     </p>
                     <p className="mt-1 text-xs text-muted-foreground">{getTaskDisplayTopic(item.task)}</p>
                   </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => openTaskPreview(item.task)}
-                  >
-                    Preview
-                  </Button>
+                  <div className="flex flex-col gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (window.confirm("This is scheduled for the future. Start it now?")) {
+                          handleStartWatchingTask(item.task as any);
+                        }
+                      }}
+                    >
+                      {(item.task.type === 'learn' || (item.task.type as any) === 'watch') && <><Play className="mr-1 h-3 w-3" /> Start Lecture</>}
+                      {(item.task.type === 'practice' || item.task.taskType === 'practice') && <><BookOpen className="mr-1 h-3 w-3" /> Start Practice</>}
+                      {(item.task.type === 'quiz' || item.task.taskType === 'quiz') && <><CheckSquare className="mr-1 h-3 w-3" /> Start Quiz</>}
+                      {item.task.type !== 'learn' && (item.task.type as any) !== 'watch' && item.task.type !== 'practice' && item.task.taskType !== 'practice' && item.task.type !== 'quiz' && item.task.taskType !== 'quiz' && (
+                        "Start Early"
+                      )}
+                    </Button>
+                  </div>
                 </div>
               </div>
-            ))}
+            )})}
           </div>
         )}
       </div>
@@ -2084,10 +2118,13 @@ export function LearningSessionPage({ plannerData }: LearningSessionPageProps) {
               Loading today's sessions...
             </div>
           ) : todaysTasks.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No sessions scheduled for today. You're all caught up! 🎉</p>
+            <div className="flex flex-col gap-4 items-start">
+              <p className="text-sm text-muted-foreground">No sessions scheduled for today. You're all caught up! 🎉</p>
+            </div>
           ) : (
             <div className="space-y-2.5">
-              {todaysTasks.map((item) => {
+              {(todaysTasks || []).map((item) => {
+                if (!item) return null;
                 const isCompleted = item.status === 'completed';
                 const isMissed = item.status === 'overdue' || item.status === 'blocked' || item.status === 'skipped';
                 const cardClass = [
@@ -2124,6 +2161,24 @@ export function LearningSessionPage({ plannerData }: LearningSessionPageProps) {
                             {getStatusLabel(item)}
                           </Badge>
                           <span className="text-xs text-muted-foreground">{formatMinutes(item.estimatedMinutes)}</span>
+                          
+                          {!isCompleted && !isMissed && (
+                            <Button
+                              size="sm"
+                              className="ml-auto h-7 text-xs"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleStartWatchingTask(item);
+                              }}
+                            >
+                              {(item.type === 'learn' || (item.type as any) === 'watch') && <><Play className="mr-1 h-3 w-3" /> Start Lecture</>}
+                              {item.type === 'practice' && <><BookOpen className="mr-1 h-3 w-3" /> Start Practice</>}
+                              {item.type === 'quiz' && <><CheckSquare className="mr-1 h-3 w-3" /> Start Quiz</>}
+                              {item.type !== 'learn' && (item.type as any) !== 'watch' && item.type !== 'practice' && item.type !== 'quiz' && (
+                                "Start Session"
+                              )}
+                            </Button>
+                          )}
                         </div>
                       </div>
                       <div className="text-right text-xs text-muted-foreground">{item.estimatedMinutes} min</div>
@@ -2387,19 +2442,41 @@ export function LearningSessionPage({ plannerData }: LearningSessionPageProps) {
   };
 
   // Loading/Error state
-  if (noSessionsPlanned) {
+  if (!todaysTasksLoading && todaysTasks.length === 0) {
+    const hasUpcoming = upcomingTasks && upcomingTasks.length > 0;
     return (
       <div className="min-h-screen flex items-center justify-center bg-background p-4">
         <div className="w-full max-w-4xl space-y-4">
           <Alert className="border-border bg-card text-card-foreground shadow-sm">
             <AlertCircle className="h-4 w-4" />
-            <AlertTitle>No session scheduled for today</AlertTitle>
+            <AlertTitle>{hasUpcoming ? "You're all caught up!" : "No session scheduled for today"}</AlertTitle>
             <AlertDescription>
-              There are no learning sessions scheduled for today. Add or move a task to today in Schedule to start a session.
+              {hasUpcoming
+                ? "You're all caught up for today! You can relax, or get ahead by starting a future task below."
+                : "There are no learning sessions scheduled for today. Add or move a task to today in Schedule to start a session."}
             </AlertDescription>
             <div className="mt-4 flex gap-2">
-              <Button onClick={() => navigate("/schedule")}>Open Schedule</Button>
-              <Button variant="outline" onClick={() => navigate("/goals")}>Create Goal</Button>
+              {hasUpcoming ? (() => {
+                const searchParams = new URLSearchParams(window.location.search);
+                const goalId = searchParams.get("goalId") || searchParams.get("goal_id");
+                const nextTaskItem = goalId 
+                  ? upcomingTasks.find(item => item.task?.goalId === goalId) 
+                  : upcomingTasks[0];
+                  
+                if (nextTaskItem) {
+                  return (
+                    <Button onClick={() => handleStartWatchingTask(nextTaskItem.task as any)}>
+                      Start Next Available Task
+                    </Button>
+                  );
+                }
+                return null;
+              })() : (
+                <>
+                  <Button onClick={() => navigate("/schedule")}>Open Schedule</Button>
+                  <Button variant="outline" onClick={() => navigate("/goals")}>Create Goal</Button>
+                </>
+              )}
             </div>
           </Alert>
 
@@ -2411,7 +2488,15 @@ export function LearningSessionPage({ plannerData }: LearningSessionPageProps) {
   }
 
   // Loading/Error state
-  if (!task) {
+  if (todaysTasksLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background p-4">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (!task && taskId) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background p-4">
         <div className="w-full max-w-4xl space-y-4">
@@ -2448,6 +2533,7 @@ export function LearningSessionPage({ plannerData }: LearningSessionPageProps) {
           videoId={learningSessionData.videoId}
           videoData={currentVideoData}
           taskId={learningSessionData.taskId}
+          task={task}
           onProgressUpdate={setVideoProgress}
           onAutoComplete={() => {
             void handleAfterTaskComplete(learningSessionData.taskId);
@@ -2479,6 +2565,7 @@ export function LearningSessionPage({ plannerData }: LearningSessionPageProps) {
               videoData={currentVideoData}
               videoId={currentVideoData.videoId}
               taskId={taskId}
+              task={task}
               onProgressUpdate={setVideoProgress}
               onAutoComplete={() => {
                 if (taskId) {
@@ -2577,6 +2664,7 @@ export function LearningSessionPage({ plannerData }: LearningSessionPageProps) {
               videoData={currentVideoData}
               videoId={currentVideoData.videoId}
               taskId={taskId}
+              task={task}
               onProgressUpdate={setVideoProgress}
               onAutoComplete={() => {
                 if (taskId) {
@@ -2611,7 +2699,7 @@ export function LearningSessionPage({ plannerData }: LearningSessionPageProps) {
 
       {/* Task Context Bar - Compact top bar */}
       <TaskContextBar
-        task={task}
+        task={task || { id: '', name: 'Session', estimatedMinutes: 0 } as any}
         sessionState={sessionState}
         nextSessionTitle={nextScheduledTaskTitle ?? undefined}
       />
@@ -2688,7 +2776,7 @@ export function LearningSessionPage({ plannerData }: LearningSessionPageProps) {
         isOpen={showEndDialog}
         onClose={() => setShowEndDialog(false)}
         onConfirm={handleConfirmEnd}
-        taskName={task.name}
+        taskName={task?.name || "Session"}
         questionsCorrect={answers.filter((a) => a.isCorrect).length}
         questionsTotal={answers.length}
         timeSpentMinutes={Math.round(elapsedSeconds / 60)}

@@ -275,10 +275,30 @@ function getVideoMinutes(video: SessionVideo): number {
   return Math.max(8, Math.ceil(video.durationSeconds / 60));
 }
 
-function getSessionMinutes(videos: SessionVideo[]): { watch: number; practice: number; quiz: number; total: number } {
+function categorizeTopic(topicName: string = ''): 'PROCEDURAL' | 'DECLARATIVE' {
+  const proceduralKeywords = ['math', 'coding', 'programming', 'algorithm', 'physics', 'statistics', 'computer'];
+  const lowerTopic = topicName.toLowerCase();
+  for (const keyword of proceduralKeywords) {
+    if (lowerTopic.includes(keyword)) return 'PROCEDURAL';
+  }
+  return 'DECLARATIVE';
+}
+
+function getSessionMinutes(videos: SessionVideo[], topicName?: string): { watch: number; practice: number; quiz: number; total: number } {
   const watch = videos.reduce((sum, video) => sum + getVideoMinutes(video), 0);
-  const practice = Math.max(10, Math.round(watch * 0.35));
-  const quiz = Math.max(10, Math.round(watch * 0.2));
+  const domain = categorizeTopic(topicName);
+  
+  let practice = 0;
+  let quiz = 0;
+  
+  if (domain === 'PROCEDURAL') {
+    practice = Math.max(10, Math.round(watch * 1.5));
+    quiz = 10;
+  } else {
+    practice = Math.max(10, Math.round(watch * 0.2));
+    quiz = 25;
+  }
+  
   return {
     watch,
     practice,
@@ -784,7 +804,7 @@ function buildRoadmapFromClusters(input: GenerateDetailedRoadmapInput, availabil
   const days: RoadmapDay[] = clusters.map((cluster, index) => {
     const dayNumber = index + 1;
     const clusterVideos = cluster.videoIndexes.map((videoIndex) => videos[videoIndex]).filter((video): video is SessionVideo => Boolean(video));
-    const minutes = getSessionMinutes(clusterVideos);
+    const minutes = getSessionMinutes(clusterVideos, input.topicName);
     const topicLabel = buildTopicLabel(input.goalName, input.topicName, clusterVideos);
     const title = cleanText(cluster.sessionTitle, `${toConceptTitle(cluster.clusterName)} — ${topicLabel}`);
     const sessionId = `day-${dayNumber}-session-1`;
@@ -1159,11 +1179,6 @@ export async function generateDetailedRoadmapForUser(input: GenerateDetailedRoad
   if (input.goalId) {
     const topicQueues = buildPlannerQueues(roadmap, input.goalId, startDate);
     const scheduled = scheduleMultiTopicTasks(topicQueues, availability as SchedulerAvailability, startDate) as Array<PlannerSeedTask>;
-    const createInputs = scheduled.map((task) => mapScheduledTaskToCreateInput({
-      userId: input.userId,
-      goalId: input.goalId!,
-      task,
-    }));
 
     await withTransaction(async (tx) => {
       await tx.goal.updateMany({
@@ -1191,21 +1206,27 @@ export async function generateDetailedRoadmapForUser(input: GenerateDetailedRoad
       });
 
       const existingKeys = new Set(
-        existingTasks.map((t) => {
+        existingTasks.map((t: any) => {
           const dateStr = t.scheduledDate instanceof Date
             ? t.scheduledDate.toISOString().split('T')[0]
             : new Date(t.scheduledDate).toISOString().split('T')[0];
-          return `${t.topicId || ''}-${t.subtopicId || ''}-${dateStr}`;
+          return `${t.topicId || ''}-${t.subtopicId || ''}-${t.type || ''}-${dateStr}`;
         }),
       );
 
-      const newInputs = createInputs.filter((item) => {
+      const newScheduled = scheduled.filter((item: any) => {
         const dateStr = item.scheduledDate instanceof Date
           ? item.scheduledDate.toISOString().split('T')[0]
           : new Date(item.scheduledDate).toISOString().split('T')[0];
-        const key = `${item.topicId || ''}-${item.subtopicId || ''}-${dateStr}`;
+        const key = `${item.topicId || ''}-${item.subtopicId || ''}-${item.type || ''}-${dateStr}`;
         return !existingKeys.has(key);
       });
+
+      const newInputs = newScheduled.map((task) => mapScheduledTaskToCreateInput({
+        userId: input.userId,
+        goalId: input.goalId!,
+        task,
+      }));
 
       if (newInputs.length > 0) {
         const result = await tx.studyTask.createMany({

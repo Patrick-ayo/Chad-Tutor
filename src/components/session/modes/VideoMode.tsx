@@ -18,6 +18,7 @@ interface VideoModeProps {
   onAutoComplete?: () => void;
   onVideoWatched?: () => void;
   onProgressUpdate?: (percentComplete: number) => void;
+  task?: any;
 }
 
 type YouTubePlayerState = {
@@ -84,7 +85,7 @@ function loadYouTubeIframeApi(): Promise<void> {
   return youtubeApiPromise;
 }
 
-export function VideoMode({ videoData, videoId, taskId, onAutoComplete, onVideoWatched, onProgressUpdate }: VideoModeProps) {
+export function VideoMode({ videoData, videoId, taskId, onAutoComplete, onVideoWatched, onProgressUpdate, task }: VideoModeProps) {
   const playerContainerRef = useRef<HTMLDivElement | null>(null);
   const playerRef = useRef<YouTubePlayerState | null>(null);
   const intervalRef = useRef<number | null>(null);
@@ -97,7 +98,7 @@ export function VideoMode({ videoData, videoId, taskId, onAutoComplete, onVideoW
   const [videoLoaded, setVideoLoaded] = useState(false);
   const [playerReady, setPlayerReady] = useState(false);
 
-  const effectiveVideoId = videoId || videoData.videoId || '';
+  const effectiveVideoId = task?.videoId || task?.videoUrl || videoId || videoData.videoId || '';
   const hasVideoId = Boolean(effectiveVideoId);
   const playerVideoData = { ...videoData, videoId: effectiveVideoId };
 
@@ -350,11 +351,7 @@ export function VideoMode({ videoData, videoId, taskId, onAutoComplete, onVideoW
       <Card>
         <CardContent className="p-0">
           <div className="aspect-video bg-muted rounded-lg overflow-hidden relative">
-            {!hasVideoId ? (
-              <div className="h-full w-full flex items-center justify-center bg-black text-sm text-muted-foreground px-6 text-center">
-                No designated video is attached to this scheduled task.
-              </div>
-            ) : !videoLoaded && (
+            {!videoLoaded && (
               <div className="absolute inset-0 flex items-center justify-center bg-black z-10">
                 <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
               </div>
