@@ -1,6 +1,6 @@
 import express, { Request, Response } from 'express';
 import Bytez from '../lib/bytez';
-import { runGeminiPrompt } from '../services/gemini.service';
+import { runUniversalPrompt } from '../services/llm.factory';
 import type { QuizResponse, StudyPlan } from '../types';
 import config from '../config';
 import { getChatFlowResponse } from '../services/chatbot-flow.service';
@@ -27,7 +27,7 @@ router.post('/chat-flow', async (req: Request, res: Response) => {
     let enrichedMessage = response.message;
     if (response.state === 'active_plan') {
       try {
-        const suggestionsText = await fetchMrChadVideoSuggestions(response.context);
+        const suggestionsText = await fetchMrChadVideoSuggestions(response.context, req.user?.id);
         if (suggestionsText) {
           enrichedMessage = `${response.message}\n${suggestionsText}`;
         }
@@ -180,7 +180,7 @@ function extractFocusTerms(context: any): string[] {
     .slice(0, 3);
 }
 
-async function fetchMrChadVideoSuggestions(context: any): Promise<string | null> {
+async function fetchMrChadVideoSuggestions(context: any, userId?: string): Promise<string | null> {
   if (!YOUTUBE_API_KEY) {
     return null;
   }
@@ -273,7 +273,7 @@ async function fetchMrChadVideoSuggestions(context: any): Promise<string | null>
     return null;
   }
 
-  const enriched = await enrichVideosBatch(rawVideos, { maxItems: 3 });
+  const enriched = await enrichVideosBatch(rawVideos, { maxItems: 3, userId });
 
   const lines = [
     '',
@@ -303,11 +303,11 @@ async function fetchMrChadVideoSuggestions(context: any): Promise<string | null>
   return lines.join('\n');
 }
 
-async function runModelPrompt(prompt: string): Promise<{ error: unknown; output: string }> {
+async function runModelPrompt(prompt: string, userId?: string): Promise<{ error: unknown; output: string }> {
   // Prefer Gemini if configured, otherwise fall back to Bytez SDK
   try {
-    if (config.chatbot.geminiApiKey) {
-      const res = await runGeminiPrompt(prompt);
+    if (true) {
+      const res = await runUniversalPrompt(prompt, userId);
       if (!res.error) return { error: null, output: res.output };
       // fallback to Bytez if Gemini returned an error
       const geminiErrorMessage =
@@ -417,7 +417,7 @@ Requirements:
 - Progress from basics to advanced topics
 - Return ONLY valid JSON, no markdown code blocks or explanations`;
 
-    const { error, output } = await runModelPrompt(prompt);
+    const { error, output } = await runModelPrompt(prompt, req.user?.id);
 
     if (error) {
       console.error('Claude API error:', error);
@@ -490,7 +490,7 @@ Requirements:
 - Cover different aspects of the topic
 - Return ONLY valid JSON, no markdown code blocks or explanations`;
 
-    const { error, output } = await runModelPrompt(prompt);
+    const { error, output } = await runModelPrompt(prompt, req.user?.id);
 
     if (error) {
       console.error('Claude API error:', error);
@@ -624,7 +624,7 @@ Rules:
 - Mix difficulty: beginner/intermediate/advanced.
 - No markdown, no extra text.`;
 
-    const { error, output } = await runModelPrompt(prompt);
+    const { error, output } = await runModelPrompt(prompt, req.user?.id);
     if (error || !output) {
       return res.json({
         success: true,
@@ -756,7 +756,7 @@ Include:
 
 Keep it beginner-friendly, practical, and motivating. Write in a clear, engaging tone.`;
 
-    const { error, output } = await runModelPrompt(prompt);
+    const { error, output } = await runModelPrompt(prompt, req.user?.id);
 
     if (error) {
       return res.status(500).json({
@@ -850,7 +850,7 @@ CRITICAL REQUIREMENTS:
 
 Focus on quality, reputable sources. Research current, popular resources for this topic.`;
 
-    const { error, output } = await runModelPrompt(prompt);
+    const { error, output } = await runModelPrompt(prompt, req.user?.id);
 
     if (error) {
       console.error('Claude API error:', error);
@@ -964,7 +964,7 @@ Generate a JSON response with:
 
 Use REAL URLs from reputable sources. Be specific and practical.`;
 
-    const { error, output } = await runModelPrompt(prompt);
+    const { error, output } = await runModelPrompt(prompt, req.user?.id);
 
     if (error) {
       return res.status(500).json({

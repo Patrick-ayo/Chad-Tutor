@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { runGeminiPrompt } from './gemini.service';
+import { runUniversalPrompt } from './llm.factory';
 import { goalRepo, playlistRepo, settingsRepo, taskRepo, withTransaction } from '../repositories';
 import { scheduleMultiTopicTasks, type Availability as SchedulerAvailability, type TopicQueue } from './scheduler.service';
 import type { Prisma } from '@prisma/client';
@@ -969,7 +969,7 @@ async function refineWithGroq(roadmap: DetailedRoadmap): Promise<Partial<Detaile
   }
 }
 
-async function refineOverviewWithGemini(roadmap: DetailedRoadmap): Promise<string | null> {
+async function refineOverviewWithUniversal(roadmap: DetailedRoadmap, userId?: string): Promise<string | null> {
   const prompt = [
     'Write a concise 2-3 sentence overview for this detailed roadmap.',
     'Mention that each day follows watch -> practice -> quiz back to back.',
@@ -977,7 +977,7 @@ async function refineOverviewWithGemini(roadmap: DetailedRoadmap): Promise<strin
     `Roadmap JSON: ${JSON.stringify(roadmap)}`,
   ].join('\n');
 
-  const { error, output } = await runGeminiPrompt(prompt);
+  const { error, output } = await runUniversalPrompt(prompt, userId);
   if (error || !output.trim()) {
     return null;
   }

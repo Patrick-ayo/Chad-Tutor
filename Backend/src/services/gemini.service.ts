@@ -63,12 +63,14 @@ function parseRetryDelayMs(error: unknown): number {
   return 30_000;
 }
 
-export async function runGeminiPrompt(prompt: string): Promise<{ error: unknown; output: string }> {
-  if (!GEMINI_KEY) {
+export async function runGeminiPrompt(prompt: string, userKey?: string): Promise<{ error: unknown; output: string }> {
+  const activeKey = userKey || GEMINI_KEY;
+  if (!activeKey) {
     return { error: 'No Gemini API key configured', output: '' };
   }
 
-  if (Date.now() < quotaBackoffUntil) {
+  // Quota backoff only applies to the shared system key to prevent blocking users with their own keys
+  if (!userKey && Date.now() < quotaBackoffUntil) {
     const waitMs = quotaBackoffUntil - Date.now();
     return {
       error: `Gemini temporarily in quota backoff (${Math.ceil(waitMs / 1000)}s remaining)`,
@@ -76,12 +78,14 @@ export async function runGeminiPrompt(prompt: string): Promise<{ error: unknown;
     };
   }
 
+  const client = userKey ? new GoogleGenerativeAI(userKey) : genAI;
+
   try {
     let lastError: unknown = null;
 
     for (const candidate of modelCandidates) {
       try {
-        const model = genAI.getGenerativeModel({ model: candidate });
+        const model = client.getGenerativeModel({ model: candidate });
       const result = await model.generateContent(prompt);
       const text = result.response?.text ? result.response.text() : JSON.stringify(result);
       return { error: null, output: String(text) };
@@ -94,8 +98,12 @@ export async function runGeminiPrompt(prompt: string): Promise<{ error: unknown;
 
         if (isQuotaError(inner)) {
           const delayMs = parseRetryDelayMs(inner);
-          quotaBackoffUntil = Date.now() + delayMs;
-          console.warn(`Gemini quota hit; backing off for ${Math.ceil(delayMs / 1000)}s`);
+          if (!userKey) {
+            quotaBackoffUntil = Date.now() + delayMs;
+            console.warn(`Gemini quota hit; backing off for ${Math.ceil(delayMs / 1000)}s`);
+          } else {
+            console.warn(`User Gemini key quota hit; retry suggested in ${Math.ceil(delayMs / 1000)}s`);
+          }
         }
 
         return { error: inner, output: '' };

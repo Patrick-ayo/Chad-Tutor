@@ -1,6 +1,6 @@
 import Bytez from '../lib/bytez';
 import config from '../config';
-import { runGeminiPrompt } from './gemini.service';
+import { runUniversalPrompt } from './llm.factory';
 import { fetchTranscript } from './transcript.service';
 
 export interface VideoSignal {
@@ -174,10 +174,7 @@ Return strict JSON only:
 Keep practical and exam/test-oriented. Avoid hallucinated specifics beyond metadata and transcript.`;
 }
 
-async function summarizeWithGemini(video: VideoSearchRecord): Promise<{ summary: string; keyConcepts: string[]; testPrepPoints: string[] } | null> {
-  if (!config.chatbot.geminiApiKey) {
-    return null;
-  }
+async function summarizeWithGemini(video: VideoSearchRecord, userId?: string): Promise<{ summary: string; keyConcepts: string[]; testPrepPoints: string[] } | null> {
 
   let transcriptChunk = '';
   if (video.id) {
@@ -185,7 +182,7 @@ async function summarizeWithGemini(video: VideoSearchRecord): Promise<{ summary:
     transcriptChunk = fullTranscript ? fullTranscript.slice(0, 3000) : 'No transcript available.';
   }
 
-  const { error, output } = await runGeminiPrompt(buildModelPrompt(video, transcriptChunk));
+  const { error, output } = await runUniversalPrompt(buildModelPrompt(video, transcriptChunk), userId);
   if (error || !output) {
     return null;
   }
@@ -267,7 +264,7 @@ function fallbackSummary(video: VideoSearchRecord): { summary: string; keyConcep
   };
 }
 
-export async function enrichVideoWithContent(video: VideoSearchRecord): Promise<EnrichedVideoFields> {
+export async function enrichVideoWithContent(video: VideoSearchRecord, userId?: string): Promise<EnrichedVideoFields> {
   const qualitySignal = computeVideoSignal(video);
 
   const direct = buildDirectSummary(video);
@@ -281,7 +278,7 @@ export async function enrichVideoWithContent(video: VideoSearchRecord): Promise<
     };
   }
 
-  const gemini = await summarizeWithGemini(video);
+  const gemini = await summarizeWithGemini(video, userId);
   if (gemini) {
     return {
       qualitySignal,
@@ -315,7 +312,7 @@ export async function enrichVideoWithContent(video: VideoSearchRecord): Promise<
 
 export async function enrichVideosBatch<T extends VideoSearchRecord>(
   videos: T[],
-  options?: { maxItems?: number },
+  options?: { maxItems?: number; userId?: string },
 ): Promise<Array<T & EnrichedVideoFields>> {
   const ranked = rankVideosBySignal(videos);
   const maxItems = options?.maxItems ?? 12;
@@ -326,7 +323,7 @@ export async function enrichVideosBatch<T extends VideoSearchRecord>(
     const video = ranked[index];
 
     if (index < maxItems) {
-      const enriched = await enrichVideoWithContent(video);
+      const enriched = await enrichVideoWithContent(video, options?.userId);
       result.push({
         ...(video as T),
         ...enriched,

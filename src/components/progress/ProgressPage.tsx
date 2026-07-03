@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { fetchProgressSummary, type ProgressSummary } from "@/lib/plannerApi";
+import { Link } from "react-router-dom";
+import { Button } from "@/components/ui/button";
 import { 
   Video, 
   Clock, 
@@ -7,7 +9,8 @@ import {
   Calendar,
   AlertTriangle,
   CheckCircle,
-  AlertCircle
+  AlertCircle,
+  BarChart3
 } from "lucide-react";
 import {
   LineChart,
@@ -20,7 +23,10 @@ import {
   ReferenceLine
 } from "recharts";
 
+import { useAuth } from "@clerk/clerk-react";
+
 export function ProgressPage() {
+  const { isLoaded, isSignedIn } = useAuth();
   const [data, setData] = useState<ProgressSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [isDark, setIsDark] = useState(true);
@@ -51,6 +57,12 @@ export function ProgressPage() {
   };
 
   useEffect(() => {
+    if (!isLoaded) return;
+    if (!isSignedIn) {
+      setLoading(false);
+      return;
+    }
+    
     loadData();
 
     const onFocus = () => {
@@ -59,14 +71,34 @@ export function ProgressPage() {
 
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
-  }, []);
+  }, [isLoaded]);
 
   if (loading) {
     return <div className="flex items-center justify-center min-h-screen bg-slate-50 dark:bg-[#0B0C10] text-slate-500 dark:text-slate-400">Loading progress...</div>;
   }
 
-  if (!data) {
-    return <div className="flex items-center justify-center min-h-screen bg-slate-50 dark:bg-[#0B0C10] text-red-500 dark:text-red-400">Failed to load progress data.</div>;
+  if (!data || data.totalMinutes === 0) {
+    return (
+      <div className="flex flex-col flex-1 h-full w-full bg-slate-50 dark:bg-[#0B0C10] text-slate-800 dark:text-slate-200 overflow-y-auto">
+        <div className="max-w-6xl w-full mx-auto p-6 space-y-8 flex flex-col items-center justify-center min-h-[60vh]">
+          <div className="bg-white dark:bg-[#1C1D24] border border-slate-200 dark:border-white/5 rounded-2xl p-8 max-w-lg text-center shadow-sm dark:shadow-xl">
+            <BarChart3 className="w-16 h-16 mx-auto mb-6 text-slate-300 dark:text-slate-600" />
+            <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">No progress data yet</h2>
+            <p className="text-slate-500 dark:text-slate-400 mb-8">
+              There is nothing here yet! Start a learning session, build a goal roadmap, or complete some tasks to see your progress build up.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-3 justify-center">
+              <Button asChild variant="default">
+                <Link to="/goals">Build a Goal</Link>
+              </Button>
+              <Button asChild variant="outline">
+                <Link to="/schedule">View Schedule</Link>
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   const lastActualDate = data.dailyActivity.length > 0 

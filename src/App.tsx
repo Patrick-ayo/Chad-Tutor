@@ -64,9 +64,9 @@ const EMPTY_PLANNER_DATA: PlannerData = {
 function App() {
   const { userId, getToken } = useAuth();
   
-  useEffect(() => {
-    setTokenResolver(getToken);
-  }, [getToken]);
+  // Set the token resolver synchronously so children can use it in their useEffects
+  setTokenResolver(getToken);
+
   const userStoragePrefix = `user:${userId || "anonymous"}`;
   const settingsStorageKey = `${userStoragePrefix}:${SETTINGS_STORAGE_KEY}`;
   const plannerDataStorageKey = `${userStoragePrefix}:${PLANNER_DATA_STORAGE_KEY}`;

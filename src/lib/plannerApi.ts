@@ -129,7 +129,7 @@ async function getClerkToken(): Promise<string | null> {
   }
 }
 
-async function authorizedFetch(input: string, init: RequestInit = {}): Promise<Response> {
+export async function authorizedFetch(input: string, init: RequestInit = {}): Promise<Response> {
   const token = await getClerkToken();
   const headers = new Headers(init.headers ?? {});
 

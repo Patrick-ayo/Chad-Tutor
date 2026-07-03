@@ -11,6 +11,7 @@ import { generateDetailedRoadmapForUser } from '../services/detailedRoadmap.serv
 import { asyncHandler, requireUser } from '../middleware';
 import { goalRepo, playlistRepo } from '../repositories';
 import prisma from '../db/client';
+import { TaskStatus, TaskPriority } from '@prisma/client';
 
 const router = Router();
 
@@ -135,7 +136,20 @@ router.post('/', requireUser, async (req: Request, res: Response) => {
     if (roadmapTasks && Array.isArray(roadmapTasks) && roadmapTasks.length > 0) {
       // Map the goalId onto the generated tasks
       const tasksToSave = roadmapTasks.map((task: any) => ({
-        ...task,
+        title: task.title || 'Untitled Task',
+        description: task.notes || task.description,
+        scheduledDate: task.scheduledDate ? new Date(task.scheduledDate) : new Date(),
+        estimatedMinutes: task.estimatedMinutes || task.duration || 25,
+        priority: task.priority === 'HIGH' || task.type === 'exam' ? TaskPriority.HIGH : TaskPriority.MEDIUM,
+        status: TaskStatus.SCHEDULED,
+        roadmapId: task.roadmapId,
+        topicId: task.topicId,
+        subtopicId: task.subtopicId,
+        duration: task.duration || task.estimatedMinutes || 25,
+        sequenceNumber: task.sequenceNumber,
+        videoId: task.videoId,
+        videoUrl: task.videoUrl,
+        videoTitle: task.videoTitle,
         goalId: goal.id,
         userId: req.user!.id,
       }));

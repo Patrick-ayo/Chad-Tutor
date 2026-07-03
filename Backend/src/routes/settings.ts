@@ -8,6 +8,8 @@
 import { Router, Request, Response } from 'express';
 import { userService } from '../services';
 import { requireUser } from '../middleware';
+import prisma from '../db/client';
+import { encrypt, decrypt } from '../utils/encryption';
 
 const router = Router();
 
@@ -139,6 +141,91 @@ router.get('/history', requireUser, async (req: Request, res: Response) => {
       error: 'Fetch Failed',
       message: 'Failed to fetch settings history',
     });
+  }
+});
+
+/**
+ * GET /api/settings/universal-key
+ * Get current user's LLM provider and masked key
+ */
+router.get('/universal-key', requireUser, async (req: Request, res: Response) => {
+  try {
+    const user: any = await prisma.user.findUnique({
+      where: { id: req.user!.id },
+      select: { llmProvider: true, llmApiKey: true },
+    });
+
+    if (!user || !user.llmApiKey) {
+      return res.json({ hasKey: false, provider: user?.llmProvider || 'gemini', maskedKey: null });
+    }
+
+    try {
+      const decrypted = decrypt(user.llmApiKey);
+      let maskedKey = '***';
+      if (decrypted.length > 10) {
+        if (user.llmProvider === 'openai') {
+          maskedKey = `${decrypted.substring(0, 7)}****************${decrypted.substring(decrypted.length - 4)}`;
+        } else {
+          maskedKey = `${decrypted.substring(0, 6)}****************${decrypted.substring(decrypted.length - 4)}`;
+        }
+      }
+      return res.json({ hasKey: true, provider: user.llmProvider, maskedKey });
+    } catch (e) {
+      console.error('Failed to decrypt API key:', e);
+      return res.json({ hasKey: false, provider: user.llmProvider || 'gemini', maskedKey: null });
+    }
+  } catch (error) {
+    console.error('Get API key error:', error);
+    res.status(500).json({ error: 'Fetch Failed' });
+  }
+});
+
+/**
+ * POST /api/settings/universal-key
+ * Save encrypted universal API key and provider
+ */
+router.post('/universal-key', requireUser, async (req: Request, res: Response) => {
+  try {
+    const { provider, apiKey } = req.body;
+    if (!apiKey || typeof apiKey !== 'string' || !provider || typeof provider !== 'string') {
+      return res.status(400).json({ error: 'Invalid API key or provider' });
+    }
+
+    const encryptedKey = encrypt(apiKey);
+
+    await prisma.user.update({
+      where: { id: req.user!.id },
+      data: { 
+        llmProvider: provider,
+        llmApiKey: encryptedKey 
+      },
+    });
+
+    res.json({ success: true, message: 'API key saved securely' });
+  } catch (error) {
+    console.error('Save API key error:', error);
+    res.status(500).json({ error: 'Save Failed' });
+  }
+});
+
+/**
+ * DELETE /api/settings/universal-key
+ * Remove API key
+ */
+router.delete('/universal-key', requireUser, async (req: Request, res: Response) => {
+  try {
+    await prisma.user.update({
+      where: { id: req.user!.id },
+      data: { 
+        llmProvider: 'gemini',
+        llmApiKey: null 
+      },
+    });
+
+    res.json({ success: true, message: 'API key removed' });
+  } catch (error) {
+    console.error('Remove API key error:', error);
+    res.status(500).json({ error: 'Remove Failed' });
   }
 });
 

@@ -75,14 +75,15 @@ async function callGroq(prompt: string): Promise<string> {
   return response.data.choices?.[0]?.message?.content?.trim() || '';
 }
 
-async function callGemini(prompt: string): Promise<string> {
-  if (!GEMINI_API_KEY) {
+async function callGemini(prompt: string, userKey?: string): Promise<string> {
+  const activeKey = userKey || GEMINI_API_KEY;
+  if (!activeKey) {
     console.warn('[lectureSummary.service] GEMINI_API_KEY missing');
     return 'Insight is unavailable right now because Gemini API is not configured.';
   }
 
   const response = await axios.post<GeminiGenerateResponse>(
-    `${GEMINI_BASE_URL}/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+    `${GEMINI_BASE_URL}/models/gemini-1.5-flash:generateContent?key=${activeKey}`,
     {
       contents: [{ parts: [{ text: prompt }] }],
       generationConfig: { maxOutputTokens: 800, temperature: 0.7 },
@@ -176,7 +177,7 @@ function normalizeQuizQuestions(input: unknown): LectureQuizQuestion[] {
     });
 }
 
-export async function getTranscriptSummary(videoId: string, videoTitle: string, taskId?: string): Promise<string> {
+export async function getTranscriptSummary(videoId: string, videoTitle: string, taskId?: string, userKey?: string): Promise<string> {
   const existing = await prisma.lectureSummary.findUnique({
     where: { videoId },
     select: { transcriptSummary: true },
@@ -210,6 +211,7 @@ export async function getTopicOverview(
   videoTitle: string,
   topicName: string,
   taskId?: string,
+  userKey?: string,
 ): Promise<string> {
   const existing = await prisma.lectureSummary.findUnique({
     where: { videoId },
@@ -240,6 +242,7 @@ export async function getExpertInsight(
   videoTitle: string,
   topicName: string,
   taskId?: string,
+  userKey?: string,
 ): Promise<string> {
   const existing = await prisma.lectureSummary.findUnique({
     where: { videoId },
@@ -253,7 +256,7 @@ export async function getExpertInsight(
   await ensureLectureRecord(videoId, taskId);
 
   const prompt = `In 3-5 sentences, give the single most important insight a student must take away from studying '${topicName}' as covered in '${videoTitle}'. Be specific, not generic. Focus on what most students miss or get wrong.`;
-  const insight = await callGemini(prompt);
+  const insight = await callGemini(prompt, userKey);
 
   await prisma.lectureSummary.update({
     where: { videoId },
@@ -270,6 +273,7 @@ export async function getStructuredNotes(
   videoTitle: string,
   topicName: string,
   taskId?: string,
+  userKey?: string,
 ): Promise<string> {
   const existing = await prisma.lectureSummary.findUnique({
     where: { videoId },
@@ -339,7 +343,7 @@ Requirements:
 5. Include a brief overview, key concepts (with their descriptions), step-by-step breakdown or rules, and a summary.
 6. Keep it concise, exam-focused, and easy to read.`;
 
-  const rawNotes = await callGemini(prompt);
+  const rawNotes = await callGemini(prompt, userKey);
   const structuredNotes = rawNotes.replace(/```html\n?/gi, '').replace(/```\n?/g, '').trim();
 
   await prisma.lectureSummary.update({
@@ -357,6 +361,7 @@ export async function getAiSummary(
   videoTitle: string,
   topicName: string,
   taskId?: string,
+  userKey?: string,
 ): Promise<{ summary: string; keyInsights: string[]; analogies: string[] }> {
   // Fetch video description from YouTube API if possible
   let description = '';
@@ -406,7 +411,7 @@ Requirements:
   "analogies": ["Analogy 1", "Analogy 2"]
 }`;
 
-  const rawText = await callGemini(prompt);
+  const rawText = await callGemini(prompt, userKey);
   try {
     const parsed = JSON.parse(extractJsonObject(rawText));
     return {
@@ -425,6 +430,7 @@ export async function getQuizQuestions(
   videoTitle: string,
   topicName: string,
   taskId?: string,
+  userKey?: string,
 ): Promise<LectureQuizQuestion[]> {
   const existing = await prisma.lectureSummary.findUnique({
     where: { videoId },
@@ -439,7 +445,7 @@ export async function getQuizQuestions(
 
   const prompt = `Generate 5 multiple choice questions to test understanding of '${topicName}' from the lecture '${videoTitle}'. Each question must have 4 options (A/B/C/D) and one correct answer. Return ONLY a JSON array, no other text: [{ question, options: {A,B,C,D}, correct, explanation }]`;
 
-  const rawQuiz = await callGemini(prompt);
+  const rawQuiz = await callGemini(prompt, userKey);
 
   let parsedQuiz: LectureQuizQuestion[] = [];
   try {
