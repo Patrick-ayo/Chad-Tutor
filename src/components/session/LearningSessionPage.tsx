@@ -68,15 +68,12 @@ import type {
 } from "@/types/session";
 import {
   fetchLectureSummary,
-  fetchNextPendingTask,
   fetchPlannerSnapshot,
   fetchTasksForDate,
-  findUpcomingPendingTasks,
   generateSessionQuiz,
   markTaskMissed,
   resolveMissedTasksMultiTopic,
   startLearningSession,
-  type NextPendingTaskInfo,
   type SessionQuizQuestion,
   type LectureQuizQuestion,
 } from "@/lib/plannerApi";
@@ -726,11 +723,12 @@ function readActiveSessionFromStorage(): LearningSessionData | null {
 
 interface SessionMaterialTabsProps {
   sessionData: LearningSessionData;
+  videoData?: VideoMetadata;
   videoProgress: number;
   onQuizComplete: (correctCount: number, questionsCount: number) => Promise<void>;
 }
 
-function SessionMaterialTabs({ sessionData, videoProgress, onQuizComplete }: SessionMaterialTabsProps) {
+function SessionMaterialTabs({ sessionData, videoData, videoProgress, onQuizComplete }: SessionMaterialTabsProps) {
   const [activeTab, setActiveTab] = useState("notes");
   const [quizAnswers, setQuizAnswers] = useState<QuizAnswers>({});
   const [quizSubmitting, setQuizSubmitting] = useState(false);
@@ -768,6 +766,23 @@ function SessionMaterialTabs({ sessionData, videoProgress, onQuizComplete }: Ses
         {sessionData.sessionGoal && (
           <p className="text-sm leading-6">{sessionData.sessionGoal}</p>
         )}
+        
+        {videoData?.keyTakeaways && videoData.keyTakeaways.length > 0 && (
+          <div className="space-y-2 mt-4">
+            <h4 className="font-semibold text-sm">Key Takeaways</h4>
+            <div className="space-y-2">
+              {videoData.keyTakeaways.map((takeaway, index) => (
+                <div key={index} className="flex items-start gap-3 p-2 bg-muted/50 rounded-lg">
+                  <div className="w-5 h-5 bg-primary/20 text-primary rounded-full flex items-center justify-center text-xs font-medium flex-shrink-0">
+                    {index + 1}
+                  </div>
+                  <span className="text-sm text-muted-foreground">{takeaway}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {sessionData.topicsCovered.length > 0 && (
           <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
             {sessionData.topicsCovered.map((topic) => (
@@ -864,7 +879,7 @@ interface LearningSessionPageProps {
 }
 
 export function LearningSessionPage({ plannerData }: LearningSessionPageProps) {
-  const { userId } = useAuth();
+  const { userId, getToken } = useAuth();
   const { completeTask: storeCompleteTask, updateTaskProgress: storeUpdateTaskProgress } = useScheduleStore();
   const userStoragePrefix = `user:${userId || "anonymous"}`;
   const { taskId } = useParams<{ taskId: string }>();
@@ -872,6 +887,10 @@ export function LearningSessionPage({ plannerData }: LearningSessionPageProps) {
 
   // Task data
   const [task, setTask] = useState<SessionTask | null>(null);
+
+  // AI Generated Notes
+  const [aiGeneratedNote, setAiGeneratedNote] = useState<UserNoteData | null>(null);
+  const [isGeneratingAiNotes, setIsGeneratingAiNotes] = useState(false);
 
   // Session state
   const [sessionState, setSessionState] = useState<SessionState>({
@@ -925,9 +944,6 @@ export function LearningSessionPage({ plannerData }: LearningSessionPageProps) {
   const [learningSessionData, setLearningSessionData] = useState<LearningSessionData | null>(null);
   const [videoProgress, setVideoProgress] = useState(0);
   const [isLoadingSession, setIsLoadingSession] = useState(false);
-  const [whatsNextTask, setWhatsNextTask] = useState<{ task: ScheduledTask | null; isToday: boolean } | null>(null);
-  const [upcomingTasks, setUpcomingTasks] = useState<NextPendingTaskInfo[]>([]);
-  const [upcomingExpanded, setUpcomingExpanded] = useState(false);
   const [drawerPreviewMode, setDrawerPreviewMode] = useState(false);
 
   const todayIsoDate = useMemo(() => new Date().toISOString(), []);
@@ -953,12 +969,6 @@ export function LearningSessionPage({ plannerData }: LearningSessionPageProps) {
       ),
     );
   }, []);
-
-  const loadUpcomingTasks = useCallback(async () => {
-    const tasks = await findUpcomingPendingTasks(3, plannerData);
-    setUpcomingTasks(tasks);
-  }, [plannerData]);
-
   const closeTaskDrawer = useCallback(() => {
     setIsTaskDrawerOpen(false);
     setSelectedTodayTask(null);
@@ -1002,16 +1012,14 @@ export function LearningSessionPage({ plannerData }: LearningSessionPageProps) {
   const handleAfterTaskComplete = useCallback(async (completedTaskId: string) => {
     updateTodayTaskStatus(completedTaskId, 'completed');
     await refreshTodayTasks();
-    const next = await fetchNextPendingTask(completedTaskId);
-    setWhatsNextTask(next);
+    
     setLearningSessionData(null);
-    await loadUpcomingTasks();
     window.dispatchEvent(
       new CustomEvent('planner:topic-status-refresh', {
         detail: { reason: 'task-complete' },
       }),
     );
-  }, [loadUpcomingTasks, refreshTodayTasks, updateTodayTaskStatus]);
+  }, [refreshTodayTasks, updateTodayTaskStatus]);
 
   const handleTaskComplete = useCallback(async (nextTask: TodayTask, completedMinutes: number) => {
     try {
@@ -1075,6 +1083,7 @@ export function LearningSessionPage({ plannerData }: LearningSessionPageProps) {
     try {
       await storeCompleteTask(completedTaskId, {
         completedDurationMinutes: learningSessionData.estimatedMinutes,
+        proof: { score: questionsCount > 0 ? correctCount / questionsCount : 0 },
         quiz: {
           questionsCount,
           correctCount,
@@ -1087,39 +1096,6 @@ export function LearningSessionPage({ plannerData }: LearningSessionPageProps) {
       console.error("Failed to submit session quiz:", error);
     }
   }, [handleAfterTaskComplete, learningSessionData, navigate, storeCompleteTask]);
-
-  const handleStartNextTask = useCallback(async (nextInfo: { task: ScheduledTask | null; isToday: boolean }) => {
-    const nextTask = nextInfo.task;
-    if (!nextTask) return;
-
-    if (!nextInfo.isToday) {
-      openTaskPreview(nextTask);
-      return;
-    }
-
-    const mode = getTaskMode(nextTask);
-    if (mode === 'learn') {
-      setWhatsNextTask(null);
-      await handleStartWatchingTask(nextTask);
-      return;
-    }
-
-    setWhatsNextTask(null);
-    openTaskDrawer(nextTask);
-  }, [handleStartWatchingTask, openTaskDrawer, openTaskPreview]);
-
-  const handleStartAnyway = useCallback(async (nextTask: TodayTask) => {
-    const mode = getTaskMode(nextTask);
-    setWhatsNextTask(null);
-    closeTaskDrawer();
-
-    if (mode === 'learn') {
-      await handleStartWatchingTask(nextTask);
-      return;
-    }
-
-    openTaskDrawer(nextTask);
-  }, [closeTaskDrawer, handleStartWatchingTask, openTaskDrawer]);
 
   const handleBackFromSession = useCallback(async () => {
     if (!learningSessionData) {
@@ -1300,8 +1276,23 @@ export function LearningSessionPage({ plannerData }: LearningSessionPageProps) {
         return;
       }
 
-      if (!effectiveTaskId && todayTasks.length > 0) {
-        const selectedTask = todayTasks[0];
+      const searchParams = new URLSearchParams(window.location.search);
+      const urlGoalId = searchParams.get("goalId") || searchParams.get("goal_id");
+
+      if (!effectiveTaskId && plannerTasks.length > 0) {
+        let candidateTasks = urlGoalId ? plannerTasks.filter(t => t.goalId === urlGoalId) : todayTasks;
+        // If no tasks match the specific goal, fallback to today's tasks, or all planner tasks
+        if (candidateTasks.length === 0) {
+           candidateTasks = todayTasks.length > 0 ? todayTasks : plannerTasks;
+        }
+
+        let selectedTask = candidateTasks.find(t => t.status === "in-progress");
+        if (!selectedTask) {
+          selectedTask = candidateTasks.find(t => ["pending", "skipped", "overdue"].includes(t.status));
+        }
+        if (!selectedTask) {
+          selectedTask = candidateTasks[0];
+        }
 
         effectiveTaskId = selectedTask.id;
         currentScheduledTask = selectedTask;
@@ -1315,8 +1306,16 @@ export function LearningSessionPage({ plannerData }: LearningSessionPageProps) {
       currentScheduledTask =
         currentScheduledTask || findBestScheduledTask(plannerTasks, effectiveTaskId, taskData);
 
-      if (!currentScheduledTask && todayTasks.length > 0) {
-        const fallbackTodayTask = todayTasks[0];
+      if (!currentScheduledTask && plannerTasks.length > 0) {
+        let candidateTasks = urlGoalId ? plannerTasks.filter(t => t.goalId === urlGoalId) : todayTasks;
+        if (candidateTasks.length === 0) {
+           candidateTasks = todayTasks.length > 0 ? todayTasks : plannerTasks;
+        }
+        
+        let fallbackTodayTask = candidateTasks.find(t => t.status === "in-progress");
+        if (!fallbackTodayTask) fallbackTodayTask = candidateTasks.find(t => ["pending", "skipped", "overdue"].includes(t.status));
+        if (!fallbackTodayTask) fallbackTodayTask = candidateTasks[0];
+        
         currentScheduledTask = fallbackTodayTask;
         effectiveTaskId = fallbackTodayTask.id;
         taskData = mapScheduledTaskToSessionTask(fallbackTodayTask);
@@ -1446,30 +1445,10 @@ export function LearningSessionPage({ plannerData }: LearningSessionPageProps) {
   }, [taskId, navigate, plannerData]);
 
   useEffect(() => {
-    const searchParams = new URLSearchParams(window.location.search);
-    const action = searchParams.get("action");
-    const goalId = searchParams.get("goalId") || searchParams.get("goal_id");
-
-    if (action === "start" && !todaysTasksLoading && todaysTasks.length === 0 && upcomingTasks.length > 0) {
-      const nextTaskItem = goalId 
-        ? upcomingTasks.find(item => item.task?.goalId === goalId) 
-        : upcomingTasks[0];
-
-      if (nextTaskItem) {
-        window.history.replaceState({}, '', `/session${goalId ? `?goalId=${goalId}` : ''}`);
-        handleStartWatchingTask(nextTaskItem.task as any);
-      }
-    }
-  }, [todaysTasksLoading, todaysTasks.length, upcomingTasks]);
-
-  useEffect(() => {
     let isActive = true;
 
     const runRefresh = async () => {
       await refreshTodayTasks();
-      if (isActive) {
-        await loadUpcomingTasks();
-      }
     };
 
     void runRefresh();
@@ -1480,7 +1459,6 @@ export function LearningSessionPage({ plannerData }: LearningSessionPageProps) {
       }
 
       void refreshTodayTasks();
-      void loadUpcomingTasks();
     };
 
     window.addEventListener('focus', handleFocus);
@@ -1489,7 +1467,7 @@ export function LearningSessionPage({ plannerData }: LearningSessionPageProps) {
       isActive = false;
       window.removeEventListener('focus', handleFocus);
     };
-  }, [loadUpcomingTasks, refreshTodayTasks]);
+  }, [refreshTodayTasks]);
 
   // Timer effect
   useEffect(() => {
@@ -1644,6 +1622,28 @@ export function LearningSessionPage({ plannerData }: LearningSessionPageProps) {
     setCurrentVideoData(newVideoData);
     setElapsedSeconds(0); // Reset playback
 
+    if (learningSessionData && taskId) {
+      void import('@/lib/plannerApi').then(({ fetchLectureSummary }) => {
+        return fetchLectureSummary(
+          suggestedVideo.videoId,
+          'all',
+          suggestedVideo.title,
+          learningSessionData.topicName,
+          taskId
+        );
+      }).then(lecture => {
+        if (lecture && !('type' in lecture)) {
+          setLearningSessionData(prev => prev ? {
+            ...prev,
+            transcriptSummary: lecture.transcriptSummary ?? '',
+            topicOverview: lecture.topicOverview ?? '',
+            expertInsight: lecture.expertInsight ?? '',
+            quizQuestions: lecture.quizQuestions ?? [],
+          } : prev);
+        }
+      }).catch(console.error);
+    }
+
     // Save to localStorage for persistence
     const sessionStorageKey = `${userStoragePrefix}:session_${taskId}`;
     const savedSessionData = localStorage.getItem(sessionStorageKey);
@@ -1669,7 +1669,6 @@ export function LearningSessionPage({ plannerData }: LearningSessionPageProps) {
       }));
 
       logEvent("session_end", {
-        completionStatus: data.completionStatus,
         confidenceRating: data.confidenceRating,
         totalSeconds: elapsedSeconds,
         accuracy:
@@ -1701,25 +1700,9 @@ export function LearningSessionPage({ plannerData }: LearningSessionPageProps) {
       });
 
       if (taskId) {
-        try {
-          const quizPayload = answers.length
-            ? {
-                questionsCount: answers.length,
-                correctCount: answers.filter((answer) => answer.isCorrect).length,
-                metadata: {
-                  confidenceRating: data.confidenceRating,
-                  completionStatus: data.completionStatus,
-                },
-              }
-            : undefined;
-
-          await storeCompleteTask(taskId, {
-            completedDurationMinutes: Math.round(elapsedSeconds / 60),
-            quiz: quizPayload,
-          });
-        } catch (error) {
-          console.error("Failed to sync session completion with planner backend:", error);
-        }
+        // We no longer manually complete the task here. 
+        // Task completion is automatically triggered by watching 90% of a video or submitting a quiz.
+        console.log("Session ended early or without auto-completion. Planner task state remains unchanged.");
       }
 
       // Navigate back to dashboard
@@ -1803,10 +1786,81 @@ export function LearningSessionPage({ plannerData }: LearningSessionPageProps) {
     [sessionConceptTags.topic, sessionLearningPoints, hasSessionMiniTest, aiMiniTestQuestions],
   );
 
-  const sessionUserNotes = useMemo(
-    () => buildTaskUserNotes(task, sessionLearningPoints),
-    [task, sessionLearningPoints],
-  );
+  useEffect(() => {
+    if (!currentVideoData.videoId) return;
+
+    const storageKey = `ai-notes-${currentVideoData.videoId}`;
+    const existingNotes = localStorage.getItem(storageKey);
+    
+    if (existingNotes) {
+      try {
+        const parsed = JSON.parse(existingNotes);
+        setAiGeneratedNote({
+          id: `ai-${currentVideoData.videoId}`,
+          content: parsed,
+          createdAt: new Date().toISOString(),
+          lastModified: new Date().toISOString()
+        });
+      } catch (e) {
+        console.error("Failed to parse existing AI notes", e);
+      }
+      return;
+    }
+
+    const generateNotes = async () => {
+      setIsGeneratingAiNotes(true);
+      try {
+        const token = await getToken();
+        const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/api/session/generate-session-notes`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {})
+          },
+          body: JSON.stringify({
+            videoId: currentVideoData.videoId,
+            videoTitle: currentVideoData.title || task?.name,
+            topicName: task?.topicName || task?.name
+          })
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          if (data.notes) {
+            localStorage.setItem(storageKey, JSON.stringify(data.notes));
+            setAiGeneratedNote({
+              id: `ai-${currentVideoData.videoId}`,
+              content: data.notes,
+              createdAt: new Date().toISOString(),
+              lastModified: new Date().toISOString()
+            });
+          }
+        }
+      } catch (err) {
+        console.error("Failed to generate AI notes", err);
+      } finally {
+        setIsGeneratingAiNotes(false);
+      }
+    };
+
+    void generateNotes();
+  }, [currentVideoData.videoId, currentVideoData.title, task?.name, task?.topicName, getToken]);
+
+  const sessionUserNotes = useMemo(() => {
+    const baseNotes = buildTaskUserNotes(task, sessionLearningPoints);
+    if (isGeneratingAiNotes) {
+      return [{
+        id: 'ai-loading',
+        content: '*Generating AI elaborative notes from video thumbnail...*',
+        createdAt: new Date().toISOString(),
+        lastModified: new Date().toISOString()
+      }, ...baseNotes];
+    }
+    if (aiGeneratedNote) {
+      return [aiGeneratedNote, ...baseNotes];
+    }
+    return baseNotes;
+  }, [task, sessionLearningPoints, aiGeneratedNote, isGeneratingAiNotes]);
 
   const sessionSuggestedVideos = useMemo(() => {
     const scheduledVideo = sessionScheduledTask
@@ -1953,136 +2007,6 @@ export function LearningSessionPage({ plannerData }: LearningSessionPageProps) {
     currentVideoData.transcript,
   ]);
 
-  const renderWhatsNextCard = () => {
-    if (!whatsNextTask) {
-      return null;
-    }
-
-    const { task, isToday } = whatsNextTask;
-
-    if (!task) {
-      return (
-        <div className="mx-auto mb-5 max-w-4xl rounded-2xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm">
-          <p className="text-sm font-semibold text-emerald-900">✅ Session complete!</p>
-          <p className="mt-2 text-sm text-emerald-800 font-medium">You're all caught up!</p>
-          <div className="mt-4 flex flex-wrap gap-2">
-            <Button
-              variant="outline"
-              onClick={() => {
-                setWhatsNextTask(null);
-                navigate("/session");
-              }}
-            >
-              Back to Schedule
-            </Button>
-          </div>
-        </div>
-      );
-    }
-
-    return (
-      <div className="mx-auto mb-5 max-w-4xl rounded-2xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm">
-        <p className="text-sm font-semibold text-emerald-900">✅ Session complete!</p>
-
-        <p className="mt-3 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-          {isToday ? "UP NEXT TODAY" : "NOT TODAY"}
-        </p>
-
-        <div className="mt-2 flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <span>{getTaskTypeLabel(task)}</span>
-              <p className="truncate font-medium">{task.title}</p>
-            </div>
-            <p className="mt-1 text-sm text-muted-foreground">{getTaskDisplayTopic(task)}</p>
-            {!isToday && (
-              <p className="mt-2 text-sm text-amber-800">
-                {FUTURE_TASK_WARNING}
-              </p>
-            )}
-          </div>
-          <span className="shrink-0 text-sm text-muted-foreground">{formatMinutes(task.estimatedMinutes)}</span>
-        </div>
-
-        <div className="mt-4 flex flex-wrap gap-2">
-          <Button onClick={() => void handleStartNextTask(whatsNextTask)}>
-            {isToday ? "Start Next" : "Preview"}
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() => {
-              setWhatsNextTask(null);
-              navigate("/session");
-            }}
-          >
-            Back to Schedule
-          </Button>
-        </div>
-      </div>
-    );
-  };
-
-  const renderComingUpNextSection = () => {
-    if (upcomingTasks.length === 0) {
-      return null;
-    }
-
-    return (
-      <div className="mt-5 border-t pt-4">
-        <button
-          type="button"
-          className="flex w-full items-center justify-between text-left text-sm font-semibold uppercase tracking-[0.2em] text-muted-foreground"
-          onClick={() => setUpcomingExpanded((current) => !current)}
-        >
-          <span>Coming Up Next</span>
-          <span>{upcomingExpanded ? "Show upcoming tasks ▴" : "Show upcoming tasks ▾"}</span>
-        </button>
-
-        {upcomingExpanded && (
-          <div className="mt-3 space-y-2.5">
-            {(upcomingTasks || []).map((item) => {
-              if (!item || !item.task) return null;
-              return (
-              <div key={item.task.id} className="rounded-xl border p-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span>{getTaskTypeLabel(item.task)}</span>
-                      <p className="truncate font-medium">{item.task.title}</p>
-                    </div>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Day {item.daysFromToday} · {formatMinutes(item.task.estimatedMinutes)}
-                    </p>
-                    <p className="mt-1 text-xs text-muted-foreground">{getTaskDisplayTopic(item.task)}</p>
-                  </div>
-                  <div className="flex flex-col gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (window.confirm("This is scheduled for the future. Start it now?")) {
-                          handleStartWatchingTask(item.task as any);
-                        }
-                      }}
-                    >
-                      {(item.task.type === 'learn' || (item.task.type as any) === 'watch') && <><Play className="mr-1 h-3 w-3" /> Start Lecture</>}
-                      {(item.task.type === 'practice' || item.task.taskType === 'practice') && <><BookOpen className="mr-1 h-3 w-3" /> Start Practice</>}
-                      {(item.task.type === 'quiz' || item.task.taskType === 'quiz') && <><CheckSquare className="mr-1 h-3 w-3" /> Start Quiz</>}
-                      {item.task.type !== 'learn' && (item.task.type as any) !== 'watch' && item.task.type !== 'practice' && item.task.taskType !== 'practice' && item.task.type !== 'quiz' && item.task.taskType !== 'quiz' && (
-                        "Start Early"
-                      )}
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            )})}
-          </div>
-        )}
-      </div>
-    );
-  };
-
   const renderTodayTasksSection = () => {
     const completedCount = todaysTasks.filter((item) => item.status === 'completed').length;
     const totalCount = todaysTasks.length;
@@ -2171,7 +2095,7 @@ export function LearningSessionPage({ plannerData }: LearningSessionPageProps) {
                                 handleStartWatchingTask(item);
                               }}
                             >
-                              {(item.type === 'learn' || (item.type as any) === 'watch') && <><Play className="mr-1 h-3 w-3" /> Start Lecture</>}
+                              {(item.type === 'learn' || (item.type as any) === 'watch') && <><Play className="mr-1 h-3 w-3" /> Play Video</>}
                               {item.type === 'practice' && <><BookOpen className="mr-1 h-3 w-3" /> Start Practice</>}
                               {item.type === 'quiz' && <><CheckSquare className="mr-1 h-3 w-3" /> Start Quiz</>}
                               {item.type !== 'learn' && (item.type as any) !== 'watch' && item.type !== 'practice' && item.type !== 'quiz' && (
@@ -2189,8 +2113,6 @@ export function LearningSessionPage({ plannerData }: LearningSessionPageProps) {
             </div>
           )}
         </div>
-
-        {renderComingUpNextSection()}
       </div>
     );
   };
@@ -2443,45 +2365,19 @@ export function LearningSessionPage({ plannerData }: LearningSessionPageProps) {
 
   // Loading/Error state
   if (!todaysTasksLoading && todaysTasks.length === 0) {
-    const hasUpcoming = upcomingTasks && upcomingTasks.length > 0;
     return (
       <div className="min-h-screen flex items-center justify-center bg-background p-4">
         <div className="w-full max-w-4xl space-y-4">
           <Alert className="border-border bg-card text-card-foreground shadow-sm">
             <AlertCircle className="h-4 w-4" />
-            <AlertTitle>{hasUpcoming ? "You're all caught up!" : "No session scheduled for today"}</AlertTitle>
+            <AlertTitle>You're all caught up! No sessions scheduled for today.</AlertTitle>
             <AlertDescription>
-              {hasUpcoming
-                ? "You're all caught up for today! You can relax, or get ahead by starting a future task below."
-                : "There are no learning sessions scheduled for today. Add or move a task to today in Schedule to start a session."}
+              Check your Schedule or Planner to manage upcoming tasks.
             </AlertDescription>
             <div className="mt-4 flex gap-2">
-              {hasUpcoming ? (() => {
-                const searchParams = new URLSearchParams(window.location.search);
-                const goalId = searchParams.get("goalId") || searchParams.get("goal_id");
-                const nextTaskItem = goalId 
-                  ? upcomingTasks.find(item => item.task?.goalId === goalId) 
-                  : upcomingTasks[0];
-                  
-                if (nextTaskItem) {
-                  return (
-                    <Button onClick={() => handleStartWatchingTask(nextTaskItem.task as any)}>
-                      Start Next Available Task
-                    </Button>
-                  );
-                }
-                return null;
-              })() : (
-                <>
-                  <Button onClick={() => navigate("/schedule")}>Open Schedule</Button>
-                  <Button variant="outline" onClick={() => navigate("/goals")}>Create Goal</Button>
-                </>
-              )}
+              <Button onClick={() => navigate("/schedule")}>Open Schedule</Button>
             </div>
           </Alert>
-
-          {renderTodayTasksSection()}
-          {renderWhatsNextCard()}
         </div>
       </div>
     );
@@ -2510,7 +2406,7 @@ export function LearningSessionPage({ plannerData }: LearningSessionPageProps) {
           </Alert>
 
           {renderTodayTasksSection()}
-          {renderWhatsNextCard()}
+          
         </div>
       </div>
     );
@@ -2523,11 +2419,6 @@ export function LearningSessionPage({ plannerData }: LearningSessionPageProps) {
 
     return (
       <div className="space-y-6">
-        <Button variant="ghost" className="px-0" onClick={() => void handleBackFromSession()}>
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Back
-        </Button>
-
         <VideoMode
           key={learningSessionData.videoId}
           videoId={learningSessionData.videoId}
@@ -2543,6 +2434,7 @@ export function LearningSessionPage({ plannerData }: LearningSessionPageProps) {
 
         <SessionMaterialTabs
           sessionData={learningSessionData}
+          videoData={currentVideoData}
           videoProgress={videoProgress}
           onQuizComplete={handleSessionQuizComplete}
         />
@@ -2552,7 +2444,7 @@ export function LearningSessionPage({ plannerData }: LearningSessionPageProps) {
 
   // Render main content based on active mode
   const renderMainContent = () => {
-    if (learningSessionData) {
+    if (learningSessionData && activeMode === 'video') {
       return renderBundledSessionContent();
     }
 
@@ -2567,6 +2459,8 @@ export function LearningSessionPage({ plannerData }: LearningSessionPageProps) {
               taskId={taskId}
               task={task}
               onProgressUpdate={setVideoProgress}
+              onSessionPlay={handleResume}
+              onSessionPause={handlePause}
               onAutoComplete={() => {
                 if (taskId) {
                   void handleAfterTaskComplete(taskId);
@@ -2574,14 +2468,7 @@ export function LearningSessionPage({ plannerData }: LearningSessionPageProps) {
                 }
               }}
             />
-            {taskId && (
-              <LectureSummaryPanel
-                videoId={currentVideoData.videoId}
-                videoTitle={currentVideoData.title || task?.name || "Scheduled Lecture"}
-                topicName={task?.topicName || task?.name || "Topic"}
-                taskId={taskId}
-              />
-            )}
+            
           </div>
         );
       case 'notes':
@@ -2666,6 +2553,8 @@ export function LearningSessionPage({ plannerData }: LearningSessionPageProps) {
               taskId={taskId}
               task={task}
               onProgressUpdate={setVideoProgress}
+              onSessionPlay={handleResume}
+              onSessionPause={handlePause}
               onAutoComplete={() => {
                 if (taskId) {
                   void handleAfterTaskComplete(taskId);
@@ -2673,36 +2562,36 @@ export function LearningSessionPage({ plannerData }: LearningSessionPageProps) {
                 }
               }}
             />
-            {taskId && (
-              <LectureSummaryPanel
-                videoId={currentVideoData.videoId}
-                videoTitle={currentVideoData.title || task?.name || "Scheduled Lecture"}
-                topicName={task?.topicName || task?.name || "Topic"}
-                taskId={taskId}
-              />
-            )}
+            
           </div>
         );
     }
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="h-screen bg-background flex flex-col overflow-hidden">
       {completionToast && (
         <div className="fixed top-4 right-4 z-50 max-w-sm rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 shadow-lg">
           {completionToast}
         </div>
       )}
 
-      {renderTodayTasksSection()}
-      {renderWhatsNextCard()}
+      {!task && !taskId && (
+        <>
+          {renderTodayTasksSection()}
+          
+        </>
+      )}
 
       {/* Task Context Bar - Compact top bar */}
-      <TaskContextBar
-        task={task || { id: '', name: 'Session', estimatedMinutes: 0 } as any}
-        sessionState={sessionState}
-        nextSessionTitle={nextScheduledTaskTitle ?? undefined}
-      />
+      {(learningSessionData || taskId) && (
+        <TaskContextBar
+          task={task || { id: '', name: 'Session', estimatedMinutes: 0 } as any}
+          sessionState={sessionState}
+          nextSessionTitle={nextScheduledTaskTitle ?? undefined}
+          taskStatus={sessionScheduledTask?.status}
+        />
+      )}
 
       {sessionNotice && (
         <div className="px-4 md:px-6 pt-3">
@@ -2715,9 +2604,9 @@ export function LearningSessionPage({ plannerData }: LearningSessionPageProps) {
       )}
 
       {/* Two-Panel Layout */}
-      <div className="flex flex-col md:flex-row h-[calc(100vh-90px)]">
-        {!learningSessionData && (
-          <div className="hidden md:block">
+      {(learningSessionData || taskId) && (
+        <div className="flex flex-col md:flex-row flex-1 overflow-hidden relative">
+          <div className="hidden md:block h-full overflow-y-auto shrink-0 border-r border-muted/20">
             <SessionSidebar 
               activeMode={activeMode}
               onModeChange={setActiveMode}
@@ -2727,15 +2616,19 @@ export function LearningSessionPage({ plannerData }: LearningSessionPageProps) {
               disabled={noSessionsPlanned}
             />
           </div>
-        )}
 
-        <div className="flex-1 overflow-y-auto bg-card pb-32 md:pb-0">
-          <div className="p-4 md:p-6 max-w-4xl mx-auto">
-            {renderMainContent()}
+          <div className="flex-1 h-full overflow-y-auto bg-card pb-32 md:pb-0 scroll-smooth">
+            <div className="p-4 md:p-6 max-w-4xl mx-auto">
+              <div className="mb-6">
+                <Button variant="ghost" className="px-0 hover:bg-transparent" onClick={() => void handleBackFromSession()}>
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  Back to Today's Sessions
+                </Button>
+              </div>
+              {renderMainContent()}
+            </div>
           </div>
-        </div>
 
-        {!learningSessionData && (
           <div className="md:hidden fixed bottom-12 left-0 right-0 bg-background border-t z-40">
             <SessionMobileNav
               activeMode={activeMode}
@@ -2745,8 +2638,8 @@ export function LearningSessionPage({ plannerData }: LearningSessionPageProps) {
               disabled={noSessionsPlanned}
             />
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* AI Help Drawer */}
       <AIHelpDrawer

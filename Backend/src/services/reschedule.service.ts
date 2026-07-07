@@ -7,6 +7,7 @@
 import { settingsRepo, taskRepo, goalRepo } from "../repositories";
 import { assertRowsAffected, ServiceNotFoundError } from "./serviceErrors";
 import {
+  scheduleMultiTopicTasks,
   resolveMissedTasksMultiTopic,
   type Availability as SchedulerAvailability,
   type ScheduledUnit,
@@ -291,4 +292,89 @@ export async function buildTopicQueuesFromDB(userId: string, goalId?: string): P
   }
 
   return queues;
+}
+
+export async function rebuildEntireSchedule(userId: string) {
+  const now = new Date();
+  
+  // 1. Fetch all incomplete tasks
+  const tasks = await taskRepo.findByUserAndDateRange(userId, addDays(now, -365), addDays(now, 365));
+  const incomplete = tasks.filter((t) => t.status !== 'COMPLETED');
+  
+  if (incomplete.length === 0) {
+    return { rescheduledCount: 0 };
+  }
+
+  // 2. Fetch User settings for Availability
+  const settings = await settingsRepo.findByUserId(userId);
+  const activeDays = settings?.activeDays ?? ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
+  const dailyMinutes = settings?.dailyMinutes ?? { monday: 60, tuesday: 60, wednesday: 60, thursday: 60, friday: 60, saturday: 0, sunday: 0 };
+  const availability: SchedulerAvailability = {
+    activeDays: activeDays as any,
+    minutesPerDay: dailyMinutes as any,
+  };
+
+  // 3. Build Topic Queues grouped by goalId (so roadmaps stay together)
+  const grouped = new Map<string, typeof incomplete>();
+  for (const t of incomplete) {
+    const key = t.goalId ?? t.skillId ?? 'unknown';
+    const list = grouped.get(key) ?? [];
+    list.push(t);
+    grouped.set(key, list);
+  }
+
+  const queues: SchedulerTopicQueue[] = [];
+  for (const [topicId, list] of grouped.entries()) {
+    // Ensure tasks are scheduled in their correct sequence
+    list.sort((a, b) => (a.sequenceNumber ?? 9999) - (b.sequenceNumber ?? 9999));
+
+    const total = list.reduce((s, x) => s + x.estimatedMinutes, 0);
+    const goal = list[0].goalId ? await goalRepo.findById(list[0].goalId!, userId) : null;
+    const deadline = goal?.deadline ? new Date(goal.deadline) : addDays(now, 7);
+
+    const tasksUnits = list.map((t) => ({
+      id: t.id,
+      taskId: t.playlistItemId ?? undefined,
+      title: t.title,
+      type: (t.playlistItemId ? 'learn' : 'practice') as any,
+      topicId: topicId, // The goal Id
+      subtopicClusterId: t.topicId ?? undefined, // The roadmap cluster Id
+      sequenceNumber: t.sequenceNumber ?? undefined,
+      scheduledDate: t.scheduledDate,
+      deadlineDate: deadline,
+      estimatedMinutes: t.estimatedMinutes,
+      actualMinutes: t.completedDurationMinutes ?? undefined,
+      status: t.status,
+      rescheduleCount: t.rescheduleCount,
+      originalEstimatedMinutes: undefined,
+    }));
+
+    queues.push({
+      topicId,
+      deadlineDate: deadline,
+      tasks: tasksUnits,
+      totalMinutes: total,
+      remainingMinutes: total
+    });
+  }
+
+  // 4. Run the pure schedule logic
+  const scheduled = scheduleMultiTopicTasks(queues, availability, now);
+
+  // 5. Persist the newly calculated dates back to DB
+  let updatedCount = 0;
+  for (const item of scheduled) {
+    const raw = incomplete.find((r) => r.id === item.id);
+    if (!raw) continue;
+    
+    // Only update if it actually moved
+    if (item.scheduledDate && item.scheduledDate.getTime() !== raw.scheduledDate.getTime()) {
+      await taskRepo.updateStatus(raw.id, userId, 'SCHEDULED', {
+        scheduledDate: item.scheduledDate,
+      });
+      updatedCount++;
+    }
+  }
+
+  return { rescheduledCount: updatedCount };
 }

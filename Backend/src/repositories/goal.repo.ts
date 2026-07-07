@@ -43,6 +43,9 @@ export async function findById(
       id,
       userId,
     },
+    include: {
+      tasks: true,
+    },
   });
 }
 
@@ -59,6 +62,9 @@ export async function findByUserId(
     where: {
       userId,
       ...(status && { status }),
+    },
+    include: {
+      tasks: true,
     },
     orderBy: { createdAt: 'desc' },
   });

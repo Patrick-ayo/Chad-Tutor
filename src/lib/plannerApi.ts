@@ -704,6 +704,7 @@ export async function completeTask(
   taskId: string,
   input?: {
     completedDurationMinutes?: number;
+    proof?: { watchedSeconds?: number; score?: number };
     quiz?: {
       questionsCount: number;
       correctCount: number;

@@ -5,7 +5,7 @@
 import { Router, Request, Response } from "express";
 import { asyncHandler, requireUser } from "../middleware";
 import { plannerService } from "../services";
-import { rescheduleMissedTasks, buildTopicQueuesFromDB } from "../services/reschedule.service";
+import { rescheduleMissedTasks, buildTopicQueuesFromDB, rebuildEntireSchedule } from "../services/reschedule.service";
 import {
   scheduleMultiTopicTasks,
   resolveMissedTasksMultiTopic,
@@ -359,4 +359,10 @@ router.get(
   }),
 );
 
+
+
+router.post('/rebuild-schedule', requireUser, asyncHandler(async (req, res) => {
+  const result = await rebuildEntireSchedule(req.user!.id);
+  res.json({ result });
+}));
 export default router;

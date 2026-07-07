@@ -4,6 +4,8 @@ import { useAuth } from "@clerk/clerk-react";
 import { CalendarDays, Settings2, RefreshCw, ListVideo, Star, ChevronDown, ChevronUp, Play, Award, CheckSquare, BookOpen, ShieldAlert } from "lucide-react";
 import { useScheduleStore } from "@/lib/scheduleStore";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { ScheduleSettingsModal } from "./ScheduleSettingsModal";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -86,6 +88,7 @@ export function PlannerPage({ data, onSync, sessionSchedules = [], onSchedulePer
   const [isResolvingAllMissed, setIsResolvingAllMissed] = useState(false);
   const [suggestedActions, setSuggestedActions] = useState<SuggestedAction[]>([]);
   const [isSuggestedActionsOpen, setIsSuggestedActionsOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [topicStatuses, setTopicStatuses] = useState<TopicStatus[]>([]);
   const currentGoalIds = useMemo(
     () =>
@@ -713,7 +716,7 @@ export function PlannerPage({ data, onSync, sessionSchedules = [], onSchedulePer
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm">
+          <Button variant="outline" size="sm" onClick={() => setIsSettingsOpen(true)}>
             <Settings2 className="h-4 w-4 mr-1" />
             Settings
           </Button>
@@ -815,7 +818,36 @@ export function PlannerPage({ data, onSync, sessionSchedules = [], onSchedulePer
             const isExpanded = expandedRoadmapIds.includes(record.roadmap.id);
             
             // Filter tasks belonging to this roadmap/goal
-            const roadmapTasks = tasks.filter((t) => t.goalId === record.roadmap.id);
+            const fullGoalId = `${record.source}:${record.roadmap.id}`;
+            const roadmapTasks = tasks.filter((t) => t.goalId === record.roadmap.id || t.goalId === fullGoalId);
+
+            // Group tasks by scheduledDate string
+            const tasksByDateStr = new Map<string, ScheduledTask[]>();
+            roadmapTasks.forEach((task) => {
+              const dStr = new Date(task.scheduledDate).toDateString();
+              const list = tasksByDateStr.get(dStr) || [];
+              list.push(task);
+              tasksByDateStr.set(dStr, list);
+            });
+
+            // Find today's session (from sortedDates), or default to the first available session date
+            const todayDateStr = new Date().toDateString();
+            let activeSessionTasks = tasksByDateStr.get(todayDateStr);
+            
+            if (!activeSessionTasks && tasksByDateStr.size > 0) {
+               // Sort dates chronologically to find the first one
+               const sortedDateStrings = Array.from(tasksByDateStr.keys()).sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
+               activeSessionTasks = tasksByDateStr.get(sortedDateStrings[0]);
+            }
+            
+            const todaySessionTasks = activeSessionTasks || [];
+
+            // IMPORTANT: use record.roadmap.id because tasks are stored with the raw DB goalId, not fullGoalId
+            const todaySessionId = record.roadmap.id;
+
+            const totalTasks = todaySessionTasks.length || 0;
+            const completedTasks = todaySessionTasks.filter(t => t.status === "completed").length || 0;
+
             const total = roadmapTasks.length;
             const completed = roadmapTasks.filter((t) => t.status === "completed").length;
             const progressPercent = total > 0 ? Math.round((completed / total) * 100) : 0;
@@ -865,7 +897,7 @@ export function PlannerPage({ data, onSync, sessionSchedules = [], onSchedulePer
                           {progressPercent}% Complete
                         </div>
                         <div className="text-[10px] text-muted-foreground">
-                          {completed} of {total} Tasks Completed
+                          {completedTasks} of {totalTasks} Tasks Completed
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
@@ -881,7 +913,15 @@ export function PlannerPage({ data, onSync, sessionSchedules = [], onSchedulePer
                         )}
                         <Button
                           size="sm"
-                          onClick={() => navigate(`/session?goalId=${record.roadmap.id}&action=start`)}
+                          onClick={() => {
+                            if (todaySessionTasks.length > 0) {
+                              // Find first incomplete task or just the first task
+                              const targetTask = todaySessionTasks.find(t => t.status !== "completed") || todaySessionTasks[0];
+                              navigate(`/session/${targetTask.id}?action=start`);
+                            } else {
+                              navigate(`/session?goalId=${todaySessionId}&action=start`);
+                            }
+                          }}
                           className="h-8 gap-1 text-xs bg-indigo-600 hover:bg-indigo-700 text-white"
                         >
                           Start Session <Play className="h-3.5 w-3.5" />
@@ -1424,6 +1464,11 @@ export function PlannerPage({ data, onSync, sessionSchedules = [], onSchedulePer
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ScheduleSettingsModal 
+        open={isSettingsOpen} 
+        onOpenChange={setIsSettingsOpen} 
+      />
     </div>
   );
 }

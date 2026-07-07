@@ -23,6 +23,7 @@ export interface GoalData {
   status: string;
   progress: number; // Computed from completedHours/totalHours
   createdAt: Date;
+  tasks?: any[];
 }
 
 export interface CreateGoalInput {
@@ -217,6 +218,7 @@ function formatGoal(goal: {
   completedHours: number;
   status: string;
   createdAt: Date;
+  tasks?: any[];
 }): GoalData {
   const progress = goal.totalHours > 0 
     ? Math.round((goal.completedHours / goal.totalHours) * 100) 
@@ -232,5 +234,6 @@ function formatGoal(goal: {
     status: goal.status,
     progress,
     createdAt: goal.createdAt,
+    tasks: goal.tasks,
   };
 }

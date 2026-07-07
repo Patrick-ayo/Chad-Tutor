@@ -272,7 +272,7 @@ function normalizeVideos(videos: RoadmapVideoInput[]): SessionVideo[] {
 }
 
 function getVideoMinutes(video: SessionVideo): number {
-  return Math.max(8, Math.ceil(video.durationSeconds / 60));
+  return Math.ceil(video.durationSeconds / 60);
 }
 
 function categorizeTopic(topicName: string = ''): 'PROCEDURAL' | 'DECLARATIVE' {
@@ -288,15 +288,17 @@ function getSessionMinutes(videos: SessionVideo[], topicName?: string): { watch:
   const watch = videos.reduce((sum, video) => sum + getVideoMinutes(video), 0);
   const domain = categorizeTopic(topicName);
   
+  const buffer = Math.max(2, Math.round(watch * 0.15)); // Minimum 2 minutes buffer
+  
   let practice = 0;
   let quiz = 0;
   
   if (domain === 'PROCEDURAL') {
-    practice = Math.max(10, Math.round(watch * 1.5));
-    quiz = 10;
+    practice = Math.round(buffer * 0.7);
+    quiz = buffer - practice;
   } else {
-    practice = Math.max(10, Math.round(watch * 0.2));
-    quiz = 25;
+    practice = Math.round(buffer * 0.4);
+    quiz = buffer - practice;
   }
   
   return {
@@ -1017,7 +1019,9 @@ function buildPlannerQueues(
   goalId: string,
   startDate: Date,
 ): TopicQueue[] {
-  return roadmap.days.map((day) => {
+  const allTasks: PlannerSeedTask[] = [];
+
+  roadmap.days.forEach((day) => {
     const session = day.sessions[0];
     const deadlineDate = addDays(startOfDay(startDate), Math.max(0, day.dayNumber - 1));
     const tasks: PlannerSeedTask[] = session.phases.map((phase, index) => ({
@@ -1045,17 +1049,22 @@ function buildPlannerQueues(
       learningOutcomes: [session.keyOutcome],
     }));
 
-    const totalMinutes = tasks.reduce((sum, task) => sum + task.estimatedMinutes, 0);
+    allTasks.push(...tasks);
+  });
 
-    return {
-      topicId: session.clusterId,
-      deadlineDate,
-      tasks,
+  const totalMinutes = allTasks.reduce((sum, task) => sum + task.estimatedMinutes, 0);
+  const finalDeadline = addDays(startOfDay(startDate), Math.max(0, roadmap.days.length - 1));
+
+  return [
+    {
+      topicId: roadmap.id,
+      deadlineDate: finalDeadline,
+      tasks: allTasks,
       totalMinutes,
       remainingMinutes: totalMinutes,
       burnRate: undefined,
-    } satisfies TopicQueue;
-  });
+    } satisfies TopicQueue,
+  ];
 }
 
 function toPriority(taskType: SessionPhase | 'learn'): 'LOW' | 'MEDIUM' | 'HIGH' {
@@ -1098,18 +1107,51 @@ function mapScheduledTaskToCreateInput(params: {
   };
 }
 
+function parseYouTubeDuration(duration: string): number {
+  const match = duration.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+  if (!match) return 0;
+  return (parseInt(match[1] || '0') * 3600) + (parseInt(match[2] || '0') * 60) + parseInt(match[3] || '0');
+}
+
+async function fetchVideoDurations(videoIds: string[]): Promise<Map<string, number>> {
+  const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY || '';
+  const map = new Map<string, number>();
+  if (!YOUTUBE_API_KEY || videoIds.length === 0) return map;
+  
+  try {
+    for (let i = 0; i < videoIds.length; i += 50) {
+      const chunk = videoIds.slice(i, i + 50);
+      const details = await axios.get('https://www.googleapis.com/youtube/v3/videos', {
+        params: { key: YOUTUBE_API_KEY, id: chunk.join(','), part: 'contentDetails' }
+      });
+      
+      if (details.data.items) {
+        for (const item of details.data.items) {
+           map.set(item.id, parseYouTubeDuration(item.contentDetails?.duration || 'PT0S'));
+        }
+      }
+    }
+  } catch (err) {
+    console.error('[detailedRoadmap.service] Failed to fetch video durations:', err);
+  }
+  return map;
+}
+
 async function loadPlaylistVideos(userId: string, playlistIds: string[]): Promise<RoadmapVideoInput[]> {
   const playlists = await Promise.all(
     playlistIds.map((playlistId) => playlistRepo.findById(playlistId, userId)),
   );
 
+  const validPlaylists = playlists.filter(Boolean) as NonNullable<typeof playlists[0]>[];
+  
+  // Sort playlists by name using natural alphanumeric sort to respect `#1`, `#2`, etc.
+  validPlaylists.sort((a, b) => 
+    a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })
+  );
+
   const videos: RoadmapVideoInput[] = [];
 
-  for (const playlist of playlists) {
-    if (!playlist) {
-      continue;
-    }
-
+  for (const playlist of validPlaylists) {
     for (const item of playlist.items) {
       videos.push({
         id: item.externalId || `${playlist.id}:${item.sequence}`,
@@ -1120,6 +1162,15 @@ async function loadPlaylistVideos(userId: string, playlistIds: string[]): Promis
         playlistTitle: playlist.name,
         videoUrl: item.externalUrl ?? undefined,
       });
+    }
+  }
+
+  const ytVideoIds = videos.map(v => v.id).filter(id => id.length === 11 && !id.includes(':'));
+  const durationsMap = await fetchVideoDurations(ytVideoIds);
+
+  for (const video of videos) {
+    if (durationsMap.has(video.id)) {
+      video.durationSeconds = Math.max(1, durationsMap.get(video.id)!);
     }
   }
 
@@ -1229,10 +1280,15 @@ export async function generateDetailedRoadmapForUser(input: GenerateDetailedRoad
       }));
 
       if (newInputs.length > 0) {
-        const result = await tx.studyTask.createMany({
-          data: newInputs,
-        });
-        plannerTasksCreated = result.count;
+        try {
+          const result = await tx.studyTask.createMany({
+            data: newInputs,
+          });
+          plannerTasksCreated = result.count;
+        } catch (error) {
+          console.error("DB INSERTION FAILED:", error);
+          throw error;
+        }
       }
     });
 

@@ -83,7 +83,7 @@ function generateTasksForDay(
       id: `task-${dayOffset}-${i}`,
       title: topic,
       type,
-      scheduledDate: addDays(today, dayOffset).toISOString(),
+      scheduledDate: new Date(addDays(today, dayOffset).getTime() + i * 60 * 60 * 1000).toISOString(),
       estimatedMinutes: type === "learn" ? 45 : type === "practice" ? 30 : 20,
       keyPoints: details?.keyPoints ?? [],
       learningOutcomes: details?.outcomes ?? [],

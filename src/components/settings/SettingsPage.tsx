@@ -61,6 +61,23 @@ export function SettingsPage({ initialSettings, onSave, onClearAllData }: Settin
     displayName: string;
   } | null>(null);
 
+  const applyChange = (section: keyof UserSettings, field: string, value: unknown) => {
+    setSettings((prev) => {
+      const sectionData = prev[section];
+      const newSettings = {
+        ...prev,
+        [section]: {
+          ...(typeof sectionData === 'object' && sectionData !== null ? sectionData : {}),
+          [field]: value,
+        },
+        version: prev.version + 1,
+        lastModified: new Date().toISOString(),
+      };
+      onSave(newSettings);
+      return newSettings;
+    });
+  };
+
   // Handle setting change with impact check
   const handleSettingChange = useCallback(
     (section: keyof UserSettings, field: string, value: unknown, displayName?: string) => {
@@ -83,23 +100,6 @@ export function SettingsPage({ initialSettings, onSave, onClearAllData }: Settin
     },
     []
   );
-
-  const applyChange = (section: keyof UserSettings, field: string, value: unknown) => {
-    setSettings((prev) => {
-      const sectionData = prev[section];
-      const newSettings = {
-        ...prev,
-        [section]: {
-          ...(typeof sectionData === 'object' && sectionData !== null ? sectionData : {}),
-          [field]: value,
-        },
-        version: prev.version + 1,
-        lastModified: new Date().toISOString(),
-      };
-      onSave(newSettings);
-      return newSettings;
-    });
-  };
 
   const handleConfirmChange = () => {
     if (pendingChange) {

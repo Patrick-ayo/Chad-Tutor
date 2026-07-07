@@ -9,9 +9,10 @@ interface TaskContextBarProps {
   task: SessionTask;
   sessionState: SessionState;
   nextSessionTitle?: string;
+  taskStatus?: string;
 }
 
-export function TaskContextBar({ task, sessionState, nextSessionTitle }: TaskContextBarProps) {
+export function TaskContextBar({ task, sessionState, nextSessionTitle, taskStatus }: TaskContextBarProps) {
   const { userId } = useAuth();
   const importantSessionStorageKey = `user:${userId || "anonymous"}:planner-important-session-ids`;
   const [isImportant, setIsImportant] = useState(false);
@@ -68,6 +69,15 @@ export function TaskContextBar({ task, sessionState, nextSessionTitle }: TaskCon
             <Badge className={difficultyColors[task.difficulty]}>
               {task.difficulty}
             </Badge>
+            {taskStatus && (
+              <Badge variant="outline" className={
+                taskStatus === 'completed' ? 'border-green-500 text-green-700 bg-green-50' : 
+                taskStatus === 'in-progress' ? 'border-blue-500 text-blue-700 bg-blue-50' : 
+                'border-gray-500 text-gray-700 bg-gray-50'
+              }>
+                {taskStatus === 'in-progress' ? 'In Progress...' : taskStatus === 'completed' ? 'Completed' : 'Not Started'}
+              </Badge>
+            )}
             <Button
               variant={isImportant ? "default" : "outline"}
               size="sm"

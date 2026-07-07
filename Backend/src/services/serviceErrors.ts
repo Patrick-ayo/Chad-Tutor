@@ -13,3 +13,13 @@ export function assertRowsAffected(count: number, message: string): void {
     throw new ServiceNotFoundError(message);
   }
 }
+
+export class ServiceValidationError extends Error {
+  statusCode: number;
+
+  constructor(message: string) {
+    super(message);
+    this.name = "ServiceValidationError";
+    this.statusCode = 400;
+  }
+}

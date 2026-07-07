@@ -23,35 +23,7 @@ interface EndSessionDialogProps {
   timeSpentMinutes: number;
 }
 
-const completionOptions: {
-  value: TaskCompletionStatus;
-  icon: typeof CheckCircle2;
-  label: string;
-  description: string;
-  color: string;
-}[] = [
-  {
-    value: "completed",
-    icon: CheckCircle2,
-    label: "Completed",
-    description: "I finished all the learning material and practice",
-    color: "border-green-500 bg-green-50 text-green-700",
-  },
-  {
-    value: "partial",
-    icon: AlertTriangle,
-    label: "Partial",
-    description: "I made progress but didn't finish everything",
-    color: "border-yellow-500 bg-yellow-50 text-yellow-700",
-  },
-  {
-    value: "blocked",
-    icon: Ban,
-    label: "Blocked",
-    description: "I couldn't continue due to an issue",
-    color: "border-red-500 bg-red-50 text-red-700",
-  },
-];
+
 
 export function EndSessionDialog({
   isOpen,
@@ -62,24 +34,19 @@ export function EndSessionDialog({
   questionsTotal,
   timeSpentMinutes,
 }: EndSessionDialogProps) {
-  const [completionStatus, setCompletionStatus] = useState<TaskCompletionStatus | null>(null);
   const [confidenceRating, setConfidenceRating] = useState<number>(0);
-  const [blockerReason, setBlockerReason] = useState("");
   const [notes, setNotes] = useState("");
 
   const handleConfirm = () => {
-    if (!completionStatus || confidenceRating === 0) return;
+    if (confidenceRating === 0) return;
 
     onConfirm({
-      completionStatus,
       confidenceRating,
-      blockerReason: completionStatus === "blocked" ? blockerReason : undefined,
       notes: notes.trim() || undefined,
     });
   };
 
-  const canSubmit = completionStatus !== null && confidenceRating > 0 &&
-    (completionStatus !== "blocked" || blockerReason.trim().length > 0);
+  const canSubmit = confidenceRating > 0;
 
   const accuracyPercent = questionsTotal > 0 
     ? Math.round((questionsCorrect / questionsTotal) * 100)
@@ -124,45 +91,7 @@ export function EndSessionDialog({
             </div>
           </div>
 
-          {/* Completion Status */}
-          <div>
-            <Label className="text-sm font-medium">Did you finish?</Label>
-            <div className="grid grid-cols-3 gap-2 mt-2">
-              {completionOptions.map((option) => (
-                <button
-                  key={option.value}
-                  onClick={() => setCompletionStatus(option.value)}
-                  className={`p-3 rounded-lg border-2 transition-all text-center ${
-                    completionStatus === option.value
-                      ? option.color + " border-2"
-                      : "border-gray-200 hover:border-gray-300"
-                  }`}
-                >
-                  <option.icon className="h-5 w-5 mx-auto mb-1" />
-                  <p className="text-sm font-medium">{option.label}</p>
-                </button>
-              ))}
-            </div>
-            {completionStatus && (
-              <p className="text-xs text-gray-500 mt-2">
-                {completionOptions.find((o) => o.value === completionStatus)?.description}
-              </p>
-            )}
-          </div>
 
-          {/* Blocker Reason (if blocked) */}
-          {completionStatus === "blocked" && (
-            <div>
-              <Label htmlFor="blocker">What blocked you?</Label>
-              <Input
-                id="blocker"
-                value={blockerReason}
-                onChange={(e) => setBlockerReason(e.target.value)}
-                placeholder="e.g., Need prerequisite knowledge, confusing content..."
-                className="mt-1"
-              />
-            </div>
-          )}
 
           {/* Confidence Rating */}
           <div>

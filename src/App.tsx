@@ -265,8 +265,11 @@ function App() {
     });
   };
 
-  const handleGoalSessionSave = (roadmap: Roadmap, startDate?: string) => {
+  const handleGoalSessionSave = async (roadmap: Roadmap, startDate?: string) => {
     upsertSessionSchedule("goal-builder", roadmap, startDate);
+
+    // Refresh planner data immediately to pull the new tasks from the DB
+    await refreshPlanner();
 
     // RECOMPUTE TRIGGER: deadline-change — calls /api/planner/recompute
     if (roadmap.id) {

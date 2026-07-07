@@ -18,6 +18,8 @@ interface VideoModeProps {
   onAutoComplete?: () => void;
   onVideoWatched?: () => void;
   onProgressUpdate?: (percentComplete: number) => void;
+  onSessionPlay?: () => void;
+  onSessionPause?: () => void;
   task?: any;
 }
 
@@ -26,6 +28,7 @@ type YouTubePlayerState = {
   getDuration: () => number;
   destroy: () => void;
   getPlayerState: () => number;
+  seekTo?: (seconds: number, allowSeekAhead: boolean) => void;
 };
 
 type YouTubeWindow = Window & {
@@ -85,11 +88,13 @@ function loadYouTubeIframeApi(): Promise<void> {
   return youtubeApiPromise;
 }
 
-export function VideoMode({ videoData, videoId, taskId, onAutoComplete, onVideoWatched, onProgressUpdate, task }: VideoModeProps) {
+export function VideoMode({ videoData, videoId, taskId, onAutoComplete, onVideoWatched, onProgressUpdate, onSessionPlay, onSessionPause, task }: VideoModeProps) {
   const playerContainerRef = useRef<HTMLDivElement | null>(null);
   const playerRef = useRef<YouTubePlayerState | null>(null);
   const intervalRef = useRef<number | null>(null);
+  const watchedSecondsIntervalRef = useRef<number | null>(null);
   const breakTimerRef = useRef<number | null>(null);
+  const watchedSecondsRef = useRef(0);
   const lastReportedMinutesRef = useRef(-1);
   const sessionStartedRef = useRef(false);
   const breakActiveRef = useRef(false);
@@ -97,15 +102,17 @@ export function VideoMode({ videoData, videoId, taskId, onAutoComplete, onVideoW
   const playerStateRef = useRef<number | null>(null);
   const [videoLoaded, setVideoLoaded] = useState(false);
   const [playerReady, setPlayerReady] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [activeChapterIndex, setActiveChapterIndex] = useState(-1);
 
   const effectiveVideoId = task?.videoId || task?.videoUrl || videoId || videoData.videoId || '';
   const hasVideoId = Boolean(effectiveVideoId);
   const playerVideoData = { ...videoData, videoId: effectiveVideoId };
 
-  const callbacksRef = useRef({ onAutoComplete, onVideoWatched, onProgressUpdate });
+  const callbacksRef = useRef({ onAutoComplete, onVideoWatched, onProgressUpdate, onSessionPlay, onSessionPause });
   useEffect(() => {
-    callbacksRef.current = { onAutoComplete, onVideoWatched, onProgressUpdate };
-  }, [onAutoComplete, onVideoWatched, onProgressUpdate]);
+    callbacksRef.current = { onAutoComplete, onVideoWatched, onProgressUpdate, onSessionPlay, onSessionPause };
+  }, [onAutoComplete, onVideoWatched, onProgressUpdate, onSessionPlay, onSessionPause]);
 
   useEffect(() => {
     console.log('[VideoMode] Loading videoId:', effectiveVideoId || '(missing)');
@@ -121,6 +128,10 @@ export function VideoMode({ videoData, videoId, taskId, onAutoComplete, onVideoW
     if (intervalRef.current !== null) {
       window.clearInterval(intervalRef.current);
       intervalRef.current = null;
+    }
+    if (watchedSecondsIntervalRef.current !== null) {
+      window.clearInterval(watchedSecondsIntervalRef.current);
+      watchedSecondsIntervalRef.current = null;
     }
   }, []);
 
@@ -139,12 +150,12 @@ export function VideoMode({ videoData, videoId, taskId, onAutoComplete, onVideoW
         return;
       }
 
-      const currentTimeSeconds = Math.max(0, player.getCurrentTime());
       const durationSeconds = Math.max(1, player.getDuration() || playerVideoData.duration || 1);
-      const watchedMinutes = Math.floor(currentTimeSeconds / 60);
-      const percentComplete = Math.round((currentTimeSeconds / durationSeconds) * 100);
+      const watchedSeconds = watchedSecondsRef.current;
+      const watchedMinutes = Math.floor(watchedSeconds / 60);
+      const percentComplete = Math.round((watchedSeconds / durationSeconds) * 100);
 
-      if (percentComplete >= 95) {
+      if (percentComplete >= 90) {
         callbacksRef.current.onProgressUpdate?.(percentComplete);
 
         if (autoCompletedRef.current) {
@@ -158,8 +169,9 @@ export function VideoMode({ videoData, videoId, taskId, onAutoComplete, onVideoW
         try {
           await completeTask(taskId, {
             completedDurationMinutes: watchedMinutes,
+            proof: { watchedSeconds }
           });
-          callbacksRef.current.onAutoComplete?.();
+          // Do not call onAutoComplete here, let the user manually end the session or finish the video
         } catch (error) {
           console.error('Failed to auto-complete task from video progress:', error);
           autoCompletedRef.current = false;
@@ -211,6 +223,7 @@ export function VideoMode({ videoData, videoId, taskId, onAutoComplete, onVideoW
   }, []);
 
   const handlePauseState = useCallback(() => {
+    callbacksRef.current.onSessionPause?.();
     clearProgressInterval();
     void reportProgress(true);
 
@@ -221,6 +234,7 @@ export function VideoMode({ videoData, videoId, taskId, onAutoComplete, onVideoW
   }, [clearBreakTimer, clearProgressInterval, ensureBreakStarted, reportProgress]);
 
   const handlePlayingState = useCallback(() => {
+    callbacksRef.current.onSessionPlay?.();
     ensureSessionStarted();
     clearBreakTimer();
     ensureBreakEnded();
@@ -236,6 +250,34 @@ export function VideoMode({ videoData, videoId, taskId, onAutoComplete, onVideoW
 
         void reportProgress();
       }, 30000);
+    }
+    
+    if (watchedSecondsIntervalRef.current === null) {
+      watchedSecondsIntervalRef.current = window.setInterval(() => {
+        const currentState = playerStateRef.current;
+        const youtubeWindow = window as YouTubeWindow;
+
+        if (currentState === youtubeWindow.YT?.PlayerState.PLAYING) {
+          watchedSecondsRef.current += 1;
+        }
+
+        if (playerRef.current) {
+          const current = playerRef.current.getCurrentTime();
+          setCurrentTime(current);
+
+          if (playerVideoData.chapters && playerVideoData.chapters.length > 0) {
+            let activeIdx = -1;
+            for (let i = 0; i < playerVideoData.chapters.length; i++) {
+              if (current >= playerVideoData.chapters[i].startTime) {
+                activeIdx = i;
+              } else {
+                break;
+              }
+            }
+            setActiveChapterIndex(activeIdx);
+          }
+        }
+      }, 1000);
     }
   }, [clearBreakTimer, ensureBreakEnded, ensureSessionStarted, reportProgress]);
 
@@ -305,6 +347,7 @@ export function VideoMode({ videoData, videoId, taskId, onAutoComplete, onVideoW
                 clearProgressInterval();
                 clearBreakTimer();
                 void reportProgress(true);
+                callbacksRef.current.onAutoComplete?.();
               }
             },
           },
@@ -408,12 +451,23 @@ export function VideoMode({ videoData, videoId, taskId, onAutoComplete, onVideoW
         <CardContent className="space-y-4">
           {playerVideoData.chapters && playerVideoData.chapters.length > 0 && (
             <div>
-              <h4 className="font-medium text-foreground mb-3">Chapters</h4>
+              <h4 className="font-medium text-foreground mb-3">
+                Session Outline: {task?.topicName || playerVideoData.title}
+              </h4>
               <div className="space-y-2">
                 {playerVideoData.chapters.map((chapter, index) => (
                   <div
                     key={index}
-                    className="flex items-center justify-between p-3 bg-muted rounded-lg hover:bg-accent transition-colors cursor-pointer"
+                    onClick={() => {
+                      if (playerRef.current && typeof playerRef.current.seekTo === 'function') {
+                        playerRef.current.seekTo(chapter.startTime, true);
+                      }
+                    }}
+                    className={`flex items-center justify-between p-3 rounded-lg hover:bg-accent hover:text-accent-foreground transition-colors cursor-pointer ${
+                      activeChapterIndex === index
+                        ? 'bg-primary/20 border border-primary/30 shadow-sm ring-1 ring-primary/50'
+                        : 'bg-muted'
+                    }`}
                   >
                     <div className="flex items-center gap-3">
                       <div className="flex items-center gap-2 text-primary">
@@ -430,21 +484,6 @@ export function VideoMode({ videoData, videoId, taskId, onAutoComplete, onVideoW
             </div>
           )}
 
-          {playerVideoData.keyTakeaways && playerVideoData.keyTakeaways.length > 0 && (
-            <div>
-              <h4 className="font-medium text-foreground mb-3">Key Takeaways</h4>
-              <div className="space-y-2">
-                {playerVideoData.keyTakeaways.map((takeaway, index) => (
-                  <div key={index} className="flex items-start gap-3 p-2 bg-muted rounded-lg">
-                    <div className="w-6 h-6 bg-primary text-primary-foreground rounded-full flex items-center justify-center text-xs font-medium flex-shrink-0">
-                      {index + 1}
-                    </div>
-                    <span className="text-sm text-foreground">{takeaway}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </CardContent>
       </Card>
     </div>

@@ -5,7 +5,7 @@
 import { taskRepo } from '../repositories';
 import { prisma } from '../repositories/base.repo';
 import { submitQuizAttempt } from './quiz.service';
-import { assertRowsAffected, ServiceNotFoundError } from './serviceErrors';
+import { assertRowsAffected, ServiceNotFoundError, ServiceValidationError } from './serviceErrors';
 
 function startOfDay(date: Date): Date {
   const d = new Date(date);
@@ -59,6 +59,7 @@ export async function completeTask(
   taskId: string,
   input?: {
     completedDurationMinutes?: number;
+    proof?: { watchedSeconds?: number; score?: number };
     quiz?: {
       questionsCount: number;
       correctCount: number;
@@ -67,6 +68,25 @@ export async function completeTask(
     };
   }
 ) {
+  const task = await taskRepo.findById(taskId, userId);
+  if (!task) {
+    throw new ServiceNotFoundError('Task not found');
+  }
+
+  // Enforce Proof of Work
+  const isVideo = !!(task.videoId || task.videoUrl);
+  if (isVideo) {
+    const requiredSeconds = (task.duration || task.estimatedMinutes * 60) * 0.90;
+    if (input?.proof?.watchedSeconds === undefined || input.proof.watchedSeconds < requiredSeconds) {
+      throw new ServiceValidationError('Proof of work failed: insufficient watchedSeconds');
+    }
+  } else {
+    // Treat as quiz/practice
+    if (input?.proof?.score === undefined) {
+      throw new ServiceValidationError('Proof of work failed: missing score');
+    }
+  }
+
   const updatedCount = await taskRepo.updateStatus(taskId, userId, 'COMPLETED', {
     completedAt: new Date(),
     completedDurationMinutes: input?.completedDurationMinutes,

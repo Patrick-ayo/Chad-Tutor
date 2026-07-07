@@ -176,10 +176,8 @@ export interface SessionState {
 
 // End session data
 export interface EndSessionData {
-  completionStatus: TaskCompletionStatus;
   confidenceRating: number; // 1-5
   notes?: string;
-  blockerReason?: string; // If blocked
 }
 
 // Full session record (for storage)

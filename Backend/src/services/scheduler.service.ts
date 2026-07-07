@@ -166,10 +166,12 @@ async function squeezeAndSwap(topic: TopicQueue): Promise<void> {
     };
     
     let selectedVideoId: string | null = null;
+    let selectedDurationSeconds = 0;
     for (const v of (details.data.items || [])) {
       const d = parseDuration(v.contentDetails?.duration || '');
       if (d > 0 && d < 3600) {
         selectedVideoId = v.id;
+        selectedDurationSeconds = d;
         break;
       }
     }
@@ -178,7 +180,7 @@ async function squeezeAndSwap(topic: TopicQueue): Promise<void> {
       for (const t of learnTasks) {
         t.videoId = selectedVideoId;
         t.videoUrl = `https://www.youtube.com/watch?v=${selectedVideoId}`;
-        t.estimatedMinutes = Math.min(t.estimatedMinutes, 45); 
+        t.estimatedMinutes = Math.max(2, Math.round((selectedDurationSeconds / 60) * 1.15));
         t.title = "One-Shot Summary: " + t.title;
       }
     }

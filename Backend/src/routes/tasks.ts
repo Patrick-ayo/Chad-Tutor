@@ -58,8 +58,9 @@ router.patch('/:taskId/progress', requireUser, asyncHandler(async (req: Request,
 
 router.post('/:taskId/complete', requireUser, asyncHandler(async (req: Request, res: Response) => {
   const { taskId } = req.params as { taskId: string };
-  const { completedDurationMinutes, quiz } = req.body as {
+  const { completedDurationMinutes, proof, quiz } = req.body as {
     completedDurationMinutes?: number;
+    proof?: { watchedSeconds?: number; score?: number };
     quiz?: {
       questionsCount: number;
       correctCount: number;
@@ -70,6 +71,7 @@ router.post('/:taskId/complete', requireUser, asyncHandler(async (req: Request, 
 
   const result = await taskService.completeTask(req.user!.id, taskId, {
     completedDurationMinutes,
+    proof,
     quiz,
   });
 

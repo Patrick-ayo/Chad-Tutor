@@ -5,6 +5,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { BookOpen, Target, Loader2 } from "lucide-react";
 import type { ConceptTags } from "@/types/session";
 import { fetchLectureSummary } from "@/lib/plannerApi";
+import { LectureSummaryPanel } from "@/components/planner/LectureSummaryPanel";
 
 interface NotesModeProps {
   conceptTags: ConceptTags;
@@ -148,6 +149,16 @@ export function NotesMode({ conceptTags, structuredNotes, videoId, videoTitle, t
           </div>
         </CardContent>
       </Card>
+
+      {/* Detailed Lecture Summary */}
+      {taskId && (
+        <LectureSummaryPanel
+          videoId={videoId || ""}
+          videoTitle={videoTitle || topicName || "Scheduled Lecture"}
+          topicName={topicName || "Topic"}
+          taskId={taskId}
+        />
+      )}
     </div>
   );
 }

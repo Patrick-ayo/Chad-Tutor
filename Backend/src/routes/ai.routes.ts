@@ -1,4 +1,5 @@
 import express, { Request, Response } from 'express';
+import { requireUser } from '../middleware/auth';
 import Bytez from '../lib/bytez';
 import { runUniversalPrompt } from '../services/llm.factory';
 import type { QuizResponse, StudyPlan } from '../types';
@@ -992,6 +993,61 @@ Use REAL URLs from reputable sources. Be specific and practical.`;
       message: 'Failed to enrich node',
       error: error instanceof Error ? error.message : 'Unknown error',
     });
+  }
+});
+
+router.post('/generate-session-notes', requireUser, async (req: Request, res: Response) => {
+  try {
+    const { videoId, videoTitle, topicName } = req.body;
+    if (!videoId || !videoTitle) {
+      return res.status(400).json({ error: 'Missing video context' });
+    }
+
+    const GROQ_API_KEY = process.env.GROQ_API_KEY;
+    if (!GROQ_API_KEY) {
+      return res.status(500).json({ error: 'GROQ_API_KEY missing' });
+    }
+
+    const thumbnailUrl = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
+    
+    const axios = require('axios');
+    const response = await axios.post(
+      'https://api.groq.com/openai/v1/chat/completions',
+      {
+        model: 'llama-3.2-90b-vision-preview',
+        temperature: 0.2,
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: `Analyze this video thumbnail and generate elaborative, well-structured study notes about the topic: '${topicName || videoTitle}'. \n\nVideo Title: ${videoTitle}\n\nIf this is a coding or technical topic, infer the programming language or technology from the title/thumbnail. Provide context, key concepts, and a summary. Format as clean Markdown.`
+              },
+              {
+                type: 'image_url',
+                image_url: {
+                  url: thumbnailUrl
+                }
+              }
+            ]
+          }
+        ],
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${GROQ_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        timeout: 45000,
+      }
+    );
+
+    const generatedText = response.data?.choices?.[0]?.message?.content || '';
+    res.json({ notes: generatedText });
+  } catch (error: any) {
+    console.error('Groq vision failed:', error?.response?.data || error);
+    res.status(500).json({ error: 'Failed to generate AI notes' });
   }
 });
 

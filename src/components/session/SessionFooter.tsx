@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React from "react";
 import { Play, Pause, Square, Clock, MessageCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -26,20 +26,7 @@ export function SessionFooter({
   onOpenAIHelp,
   onChadMeUp,
 }: SessionFooterProps) {
-  const [displayTime, setDisplayTime] = useState(elapsedSeconds);
-
-  useEffect(() => {
-    if (!isRunning) {
-      setDisplayTime(elapsedSeconds);
-      return;
-    }
-
-    const interval = setInterval(() => {
-      setDisplayTime((prev) => prev + 1);
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [isRunning, elapsedSeconds]);
+  // We use the parent's elapsedSeconds directly since it ticks every second
 
   const formatTime = (totalSeconds: number) => {
     const hours = Math.floor(totalSeconds / 3600);
@@ -66,7 +53,7 @@ export function SessionFooter({
                 <Clock className={`h-3 w-3 md:h-4 md:w-4 ${isRunning ? "text-green-600 dark:text-green-400" : "text-amber-600 dark:text-amber-400"}`} />
               </div>
               <span className="text-base md:text-xl font-mono font-semibold text-foreground">
-                {formatTime(displayTime)}
+                {formatTime(elapsedSeconds)}
               </span>
             </div>
 

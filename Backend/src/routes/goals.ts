@@ -134,8 +134,11 @@ router.post('/', requireUser, async (req: Request, res: Response) => {
     }
 
     if (roadmapTasks && Array.isArray(roadmapTasks) && roadmapTasks.length > 0) {
-      // Map the goalId onto the generated tasks
-      const tasksToSave = roadmapTasks.map((task: any) => ({
+      // 1. Ensure the Goal exists
+      const targetGoalId = goal.id;
+
+      // 2. Map the generated tasks to include the foreign key
+      const tasksToInsert = roadmapTasks.map((task: any) => ({
         title: task.title || 'Untitled Task',
         description: task.notes || task.description,
         scheduledDate: task.scheduledDate ? new Date(task.scheduledDate) : new Date(),
@@ -150,14 +153,22 @@ router.post('/', requireUser, async (req: Request, res: Response) => {
         videoId: task.videoId,
         videoUrl: task.videoUrl,
         videoTitle: task.videoTitle,
-        goalId: goal.id,
+        goalId: targetGoalId, // THIS IS MANDATORY
         userId: req.user!.id,
       }));
 
-      // Persist the tasks
-      await prisma.studyTask.createMany({
-        data: tasksToSave,
-      });
+      // 3. Persist to DB
+      try {
+        await prisma.studyTask.createMany({
+          data: tasksToInsert,
+          skipDuplicates: true
+        });
+
+        // 4. Add a server log so we can prove it worked
+        console.log(`Successfully saved ${tasksToInsert.length} tasks to Goal ${targetGoalId}`);
+      } catch (error) {
+        console.error("DB INSERTION FAILED:", error);
+      }
     }
 
     res.status(201).json({ goal });
