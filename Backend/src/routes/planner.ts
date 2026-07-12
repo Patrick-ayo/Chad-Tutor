@@ -161,7 +161,7 @@ router.post(
 
     const settings = await settingsRepo.findByUserId(req.user!.id);
     const availability = {
-      activeDays: settings?.activeDays ?? ['monday','tuesday','wednesday','thursday','friday'],
+      activeDays: settings?.activeDays ?? ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'],
       minutesPerDay: settings?.dailyMinutes ?? { monday: 60, tuesday: 60, wednesday: 60, thursday: 60, friday: 60, saturday: 0, sunday: 0 },
     } as any;
 
@@ -220,7 +220,7 @@ router.post(
     const queues = await buildTopicQueuesFromDB(req.user!.id, goalId);
     const settings = await settingsRepo.findByUserId(req.user!.id);
     const availability = {
-      activeDays: settings?.activeDays ?? ['monday','tuesday','wednesday','thursday','friday'],
+      activeDays: settings?.activeDays ?? ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'],
       minutesPerDay: settings?.dailyMinutes ?? { monday: 60, tuesday: 60, wednesday: 60, thursday: 60, friday: 60, saturday: 0, sunday: 0 },
     } as any;
 
@@ -268,7 +268,7 @@ router.get(
   requireUser,
   asyncHandler(async (req: Request, res: Response) => {
     const settings = await settingsRepo.findByUserId(req.user!.id);
-    const activeDays = settings?.activeDays ?? ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
+    const activeDays = settings?.activeDays ?? ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
     const dailyMinutes = settings?.dailyMinutes ?? {
       monday: 60,
       tuesday: 60,

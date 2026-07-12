@@ -152,6 +152,8 @@ export async function rescheduleMissedTasks(
     "wednesday",
     "thursday",
     "friday",
+    "saturday",
+    "sunday",
   ];
   const dailyMinutes = settings?.dailyMinutes ?? {};
 
@@ -307,7 +309,7 @@ export async function rebuildEntireSchedule(userId: string) {
 
   // 2. Fetch User settings for Availability
   const settings = await settingsRepo.findByUserId(userId);
-  const activeDays = settings?.activeDays ?? ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
+  const activeDays = settings?.activeDays ?? ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
   const dailyMinutes = settings?.dailyMinutes ?? { monday: 60, tuesday: 60, wednesday: 60, thursday: 60, friday: 60, saturday: 0, sunday: 0 };
   const availability: SchedulerAvailability = {
     activeDays: activeDays as any,

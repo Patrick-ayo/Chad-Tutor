@@ -685,6 +685,7 @@ app.post('/api/videos/search', async (req, res) => {
                   publishedAt?: string;
                   thumbnails?: { medium?: { url: string }; default?: { url: string } };
                   resourceId?: { videoId?: string };
+                  position?: number;
                 };
               }>;
             };
@@ -749,6 +750,7 @@ app.post('/api/videos/search', async (req, res) => {
                   module: item.module,
                   playlistId,
                   playlistTitle: playlistItem.snippet.title,
+                  playlistPosition: pi.snippet.position,
                   isOneShot: durationSeconds > 3600,
                 });
               }
@@ -820,10 +822,17 @@ app.post('/api/videos/search', async (req, res) => {
       }
       
       // Format durations and convert to array
-      playlists = Array.from(playlistMap.values()).map(p => ({
-        ...p,
-        totalDurationFormatted: formatDuration(p.totalDuration)
-      }));
+      playlists = Array.from(playlistMap.values()).map(p => {
+        p.videos.sort((a: any, b: any) => {
+          const posA = typeof a.playlistPosition === 'number' ? a.playlistPosition : 999;
+          const posB = typeof b.playlistPosition === 'number' ? b.playlistPosition : 999;
+          return posA - posB;
+        });
+        return {
+          ...p,
+          totalDurationFormatted: formatDuration(p.totalDuration)
+        };
+      });
     }
 
     const result = {

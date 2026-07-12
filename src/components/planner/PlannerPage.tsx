@@ -819,7 +819,8 @@ export function PlannerPage({ data, onSync, sessionSchedules = [], onSchedulePer
             
             // Filter tasks belonging to this roadmap/goal
             const fullGoalId = `${record.source}:${record.roadmap.id}`;
-            const roadmapTasks = tasks.filter((t) => t.goalId === record.roadmap.id || t.goalId === fullGoalId);
+            const goalDbId = record.roadmap.goalId;
+            const roadmapTasks = tasks.filter((t) => t.goalId === goalDbId || t.goalId === record.roadmap.id || t.goalId === fullGoalId);
 
             // Group tasks by scheduledDate string
             const tasksByDateStr = new Map<string, ScheduledTask[]>();
@@ -842,8 +843,8 @@ export function PlannerPage({ data, onSync, sessionSchedules = [], onSchedulePer
             
             const todaySessionTasks = activeSessionTasks || [];
 
-            // IMPORTANT: use record.roadmap.id because tasks are stored with the raw DB goalId, not fullGoalId
-            const todaySessionId = record.roadmap.id;
+            // IMPORTANT: use record.roadmap.goalId if available, otherwise record.roadmap.id
+            const todaySessionId = goalDbId || record.roadmap.id;
 
             const totalTasks = todaySessionTasks.length || 0;
             const completedTasks = todaySessionTasks.filter(t => t.status === "completed").length || 0;

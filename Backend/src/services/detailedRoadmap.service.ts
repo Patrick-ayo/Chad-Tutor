@@ -190,7 +190,7 @@ function normalizeAvailability(settings: {
   activeDays?: string[] | null;
   dailyMinutes?: Prisma.JsonValue | null;
 } | null | undefined): DetailedRoadmap['availability'] {
-  const defaultDays: Weekday[] = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
+  const defaultDays: Weekday[] = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
   const activeDays = Array.isArray(settings?.activeDays)
     ? settings!.activeDays.filter((value): value is Weekday => typeof value === 'string')
     : defaultDays;
@@ -405,7 +405,9 @@ function parseClusterSpecs(raw: string): ClusterSpec[] | null {
           ? cluster.topicsCovered.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
           : [];
         const videoIndexes = Array.isArray(cluster.videoIndexes)
-          ? cluster.videoIndexes.filter((value): value is number => typeof value === 'number' && Number.isInteger(value))
+          ? cluster.videoIndexes
+              .filter((value): value is number => typeof value === 'number' && Number.isInteger(value))
+              .map(v => v - 1)
           : [];
 
         if (!clusterName || !clusterGoal || videoIndexes.length === 0) {

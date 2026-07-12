@@ -75,27 +75,15 @@ async function callGroq(prompt: string): Promise<string> {
   return response.data.choices?.[0]?.message?.content?.trim() || '';
 }
 
+import { runGeminiPrompt } from './gemini.service';
+
 async function callGemini(prompt: string, userKey?: string): Promise<string> {
-  const activeKey = userKey || GEMINI_API_KEY;
-  if (!activeKey) {
-    console.warn('[lectureSummary.service] GEMINI_API_KEY missing');
-    return 'Insight is unavailable right now because Gemini API is not configured.';
+  const { error, output } = await runGeminiPrompt(prompt, userKey);
+  if (error) {
+    console.error('[lectureSummary.service] Gemini error:', error);
+    return 'Insight is unavailable right now due to an AI service error.';
   }
-
-  const response = await axios.post<GeminiGenerateResponse>(
-    `${GEMINI_BASE_URL}/models/gemini-1.5-flash:generateContent?key=${activeKey}`,
-    {
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { maxOutputTokens: 800, temperature: 0.7 },
-    },
-    {
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    },
-  );
-
-  return response.data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
+  return output.trim();
 }
 
 function extractJsonArray(text: string): string {

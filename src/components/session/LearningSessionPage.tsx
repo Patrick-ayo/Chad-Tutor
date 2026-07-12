@@ -2016,102 +2016,123 @@ export function LearningSessionPage({ plannerData }: LearningSessionPageProps) {
     const totalMinutes = todaysTasks.reduce((sum, item) => sum + item.estimatedMinutes, 0);
     const progressValue = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
+    const nextTask = todaysTasks.find((item) => item.status !== 'completed');
+
     return (
-      <div className="mb-5 rounded-2xl border bg-card p-4 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-muted-foreground">Today's Sessions</p>
-            <p className="mt-1 text-sm text-muted-foreground">{formatTodayLabel(new Date())}</p>
+      <div className="flex h-full flex-col items-center justify-center p-4 md:p-8">
+        <div className="w-full max-w-md space-y-6">
+          <div className="space-y-2 text-center">
+            <h2 className="text-2xl font-bold tracking-tight">Your Next Session</h2>
+            <p className="text-sm text-muted-foreground">
+              {completedCount}/{totalCount} sessions completed today ({completedMinutes}/{totalMinutes} min)
+            </p>
+            <Progress value={progressValue} className="h-2 mx-auto w-3/4 mt-2" />
           </div>
-        </div>
 
-        <div className="mt-4 space-y-2">
-          <div className="flex items-center justify-between text-sm">
-            <span className="font-medium">Today's Progress</span>
-            <span className="text-muted-foreground">
-              {completedCount}/{totalCount} sessions · {completedMinutes}/{totalMinutes} min
-            </span>
-          </div>
-          <Progress value={progressValue} className="h-2" />
-        </div>
+          <div className="mt-8">
+            {todaysTasksLoading ? (
+              <div className="flex flex-col items-center justify-center gap-3 text-sm text-muted-foreground py-10">
+                <Loader2 className="h-8 w-8 animate-spin" />
+                <p>Loading your session...</p>
+              </div>
+            ) : !nextTask ? (
+              <div className="rounded-xl border bg-card p-8 text-center shadow-sm">
+                <p className="text-lg font-medium">You're all caught up! 🎉</p>
+                <p className="mt-2 text-sm text-muted-foreground">No more sessions scheduled for today.</p>
+                <Button variant="outline" className="mt-6" onClick={() => navigate('/schedule')}>
+                  View Schedule
+                </Button>
+              </div>
+            ) : (
+              <div className="rounded-xl border border-primary/20 bg-card p-6 shadow-md transition-all hover:shadow-lg">
+                <div className="flex flex-col gap-4 text-center">
+                  <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
+                    <span className="text-2xl">{getStatusIcon(nextTask)}</span>
+                  </div>
+                  
+                  <div>
+                    <h3 className="text-xl font-semibold">{nextTask.title}</h3>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {getTaskDisplayTopic(nextTask)}
+                    </p>
+                  </div>
+                  
+                  <div className="flex items-center justify-center gap-2 mt-2">
+                    <Badge variant="secondary" className="text-xs">
+                      {getTaskTypeLabel(nextTask)}
+                    </Badge>
+                    <span className="text-xs text-muted-foreground font-medium flex items-center gap-1">
+                      {formatMinutes(nextTask.estimatedMinutes)}
+                    </span>
+                  </div>
 
-        <div className="mt-4">
-          {todaysTasksLoading ? (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Loading today's sessions...
-            </div>
-          ) : todaysTasks.length === 0 ? (
-            <div className="flex flex-col gap-4 items-start">
-              <p className="text-sm text-muted-foreground">No sessions scheduled for today. You're all caught up! 🎉</p>
-            </div>
-          ) : (
-            <div className="space-y-2.5">
-              {(todaysTasks || []).map((item) => {
-                if (!item) return null;
-                const isCompleted = item.status === 'completed';
-                const isMissed = item.status === 'overdue' || item.status === 'blocked' || item.status === 'skipped';
-                const cardClass = [
-                  'rounded-xl border p-3 transition-all',
-                  isMissed ? 'border-red-300 border-l-4 border-l-red-500' : 'border-border',
-                  isCompleted ? 'opacity-50' : 'hover:border-primary/50 hover:bg-muted/30 cursor-pointer',
-                ].join(' ');
+                  {/* Added Context Sections */}
+                  <div className="mt-6 space-y-4 text-left border-t pt-4">
+                    {/* Topics / What you'll learn */}
+                    {getTaskTopics(nextTask).length > 0 && (
+                      <div className="rounded-xl bg-muted/30 p-3">
+                        <p className="text-sm font-semibold mb-2">What you'll learn:</p>
+                        <ul className="space-y-1 text-sm text-muted-foreground">
+                          {getTaskTopics(nextTask).map((topic) => (
+                            <li key={topic}>• {topic}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
 
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    className={cardClass}
-                    onClick={() => openTaskDrawer(item)}
-                    disabled={isCompleted}
-                  >
-                    <div className="flex items-start justify-between gap-3 text-left">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className="text-base">{getStatusIcon(item)}</span>
-                          <span className="text-base">{getTaskTypeLabel(item)}</span>
-                          <p className={[
-                            'truncate font-medium',
-                            isCompleted ? 'line-through' : '',
-                          ].join(' ')}>
-                            {item.title}
-                          </p>
-                        </div>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          {getTaskDisplayTopic(item)}
-                        </p>
-                        <div className="mt-2 flex items-center gap-2">
-                          <Badge variant="outline" className="text-[11px] font-normal">
-                            {getStatusLabel(item)}
-                          </Badge>
-                          <span className="text-xs text-muted-foreground">{formatMinutes(item.estimatedMinutes)}</span>
-                          
-                          {!isCompleted && !isMissed && (
-                            <Button
-                              size="sm"
-                              className="ml-auto h-7 text-xs"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleStartWatchingTask(item);
-                              }}
-                            >
-                              {(item.type === 'learn' || (item.type as any) === 'watch') && <><Play className="mr-1 h-3 w-3" /> Play Video</>}
-                              {item.type === 'practice' && <><BookOpen className="mr-1 h-3 w-3" /> Start Practice</>}
-                              {item.type === 'quiz' && <><CheckSquare className="mr-1 h-3 w-3" /> Start Quiz</>}
-                              {item.type !== 'learn' && (item.type as any) !== 'watch' && item.type !== 'practice' && item.type !== 'quiz' && (
-                                "Start Session"
-                              )}
-                            </Button>
-                          )}
+                    {/* Assigned Video Content */}
+                    {(nextTask.type === 'learn' || (nextTask.type as any) === 'watch') && (nextTask.videoTitle || nextTask.title) && (
+                      <div className="rounded-xl border bg-card p-3 shadow-sm">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-semibold text-primary flex items-center gap-1.5">
+                              <Play className="h-3.5 w-3.5" />
+                              Assigned Video Content
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {nextTask.videoTitle || nextTask.title}
+                            </p>
+                          </div>
                         </div>
                       </div>
-                      <div className="text-right text-xs text-muted-foreground">{item.estimatedMinutes} min</div>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          )}
+                    )}
+
+                    {/* Learning Outcomes */}
+                    {nextTask.learningOutcomes && nextTask.learningOutcomes.length > 0 && (
+                      <div className="rounded-xl border border-primary/10 bg-primary/5 p-3">
+                        <p className="text-sm font-semibold mb-2">Learning Outcomes:</p>
+                        <ul className="space-y-1 text-sm text-muted-foreground">
+                          {nextTask.learningOutcomes.map((outcome: string) => (
+                            <li key={outcome}>• {outcome}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+
+                  <Button
+                    size="lg"
+                    className="mt-6 w-full gap-2 font-semibold"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleStartWatchingTask(nextTask);
+                    }}
+                  >
+                    {(nextTask.type === 'learn' || (nextTask.type as any) === 'watch') && <><Play className="h-4 w-4" /> Start Video</>}
+                    {nextTask.type === 'practice' && <><BookOpen className="h-4 w-4" /> Start Practice</>}
+                    {nextTask.type === 'quiz' && <><CheckSquare className="h-4 w-4" /> Start Quiz</>}
+                    {nextTask.type !== 'learn' && (nextTask.type as any) !== 'watch' && nextTask.type !== 'practice' && nextTask.type !== 'quiz' && (
+                      "Start Session"
+                    )}
+                  </Button>
+                  
+                  <Button variant="ghost" size="sm" className="w-full mt-2" onClick={() => navigate('/schedule')}>
+                    View Full Schedule
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     );

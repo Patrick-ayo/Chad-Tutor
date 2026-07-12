@@ -29,14 +29,6 @@ export interface CreateStudyTaskData {
   priority?: TaskPriority;
   keyPoints?: Prisma.InputJsonValue;
   learningOutcomes?: Prisma.InputJsonValue;
-  roadmapId?: string;
-  topicId?: string;
-  subtopicId?: string;
-  duration?: number;
-  sequenceNumber?: number;
-  videoId?: string;
-  videoUrl?: string;
-  videoTitle?: string;
 }
 
 export async function create(
@@ -57,14 +49,6 @@ export async function create(
       scheduledTime: data.scheduledTime,
       estimatedMinutes: data.estimatedMinutes ?? 25,
       priority: data.priority ?? "MEDIUM",
-      roadmapId: data.roadmapId,
-      topicId: data.topicId,
-      subtopicId: data.subtopicId,
-      duration: data.duration,
-      sequenceNumber: data.sequenceNumber,
-      videoId: data.videoId,
-      videoUrl: data.videoUrl,
-      videoTitle: data.videoTitle,
       ...(data.keyPoints !== undefined && { keyPoints: data.keyPoints }),
       ...(data.learningOutcomes !== undefined && {
         learningOutcomes: data.learningOutcomes,
@@ -100,14 +84,6 @@ export async function createMany(
       scheduledTime: task.scheduledTime,
       estimatedMinutes: task.estimatedMinutes ?? 25,
       priority: task.priority ?? "MEDIUM",
-      roadmapId: task.roadmapId,
-      topicId: task.topicId,
-      subtopicId: task.subtopicId,
-      duration: task.duration,
-      sequenceNumber: task.sequenceNumber,
-      videoId: task.videoId,
-      videoUrl: task.videoUrl,
-      videoTitle: task.videoTitle,
       ...(task.keyPoints !== undefined && { keyPoints: task.keyPoints }),
       ...(task.learningOutcomes !== undefined && {
         learningOutcomes: task.learningOutcomes,
@@ -292,5 +268,62 @@ export async function findByPlaylistOrdered(
       playlistItem: true,
     },
     orderBy: [{ scheduledDate: "asc" }, { createdAt: "asc" }],
+  });
+}
+
+export async function findPlannerTasks(
+  userId: string,
+  startDate: Date,
+  endDate: Date,
+  tx?: TransactionClient,
+): Promise<StudyTask[]> {
+  const client = tx || prisma;
+  return client.studyTask.findMany({
+    where: {
+      userId,
+      OR: [
+        { scheduledDate: { gte: startDate, lte: endDate } },
+        { scheduledDate: { lt: startDate }, status: { not: "COMPLETED" } },
+      ],
+    },
+    include: {
+      skill: true,
+      goal: true,
+      playlistItem: true,
+    },
+    orderBy: [
+      { scheduledDate: "asc" },
+      { priority: "desc" },
+      { createdAt: "asc" },
+    ],
+  });
+}
+
+export async function findPendingTasksUpTo(
+  userId: string,
+  asOfDate: Date,
+  tx?: TransactionClient,
+): Promise<StudyTask[]> {
+  const client = tx || prisma;
+  return client.studyTask.findMany({
+    where: {
+      userId,
+      scheduledDate: {
+        lte: asOfDate,
+      },
+      status: {
+        not: "COMPLETED",
+      },
+    },
+    include: {
+      skill: true,
+      goal: true,
+      playlistItem: true,
+    },
+    orderBy: [
+      { sequenceNumber: "asc" },
+      { scheduledDate: "asc" },
+      { priority: "desc" },
+    ],
   });
 }

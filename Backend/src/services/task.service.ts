@@ -20,7 +20,21 @@ function endOfDay(date: Date): Date {
 }
 
 export async function getTasksForDate(userId: string, date: Date) {
-  return taskRepo.findByUserAndDateRange(userId, startOfDay(date), endOfDay(date));
+  // Cascading Rescheduler: physically move missed tasks to the requested date (usually today)
+  const missedTasks = await taskRepo.findMissedBeforeDate(userId, startOfDay(date));
+  if (missedTasks.length > 0) {
+    const missedIds = missedTasks.map(t => t.id);
+    await prisma.studyTask.updateMany({
+      where: { id: { in: missedIds } },
+      data: {
+        scheduledDate: startOfDay(date),
+        status: 'RESCHEDULED' // Optional: track that they were rolled forward
+      }
+    });
+  }
+
+  // Fetch all tasks <= requested date that are pending, keeping sequential order
+  return taskRepo.findPendingTasksUpTo(userId, endOfDay(date));
 }
 
 export async function getTasksForRange(userId: string, startDate: Date, endDate: Date) {

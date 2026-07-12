@@ -342,7 +342,7 @@ export async function getPlannerSnapshot(userId: string) {
   const end = endOfDay(addDays(today, 10));
 
   const [tasks, settings] = await Promise.all([
-    taskRepo.findByUserAndDateRange(userId, start, end),
+    taskRepo.findPlannerTasks(userId, start, end),
     settingsRepo.findByUserId(userId),
   ]);
 
@@ -353,6 +353,12 @@ export async function getPlannerSnapshot(userId: string) {
     const dateEnd = endOfDay(date).getTime();
     const dayTasks = tasks.filter((task) => {
       const taskTs = task.scheduledDate.getTime();
+      
+      // Cascading Rescheduler: Roll all past incomplete tasks into "Today"
+      if (dateStart === startOfDay(today).getTime() && task.status !== "COMPLETED" && taskTs < dateStart) {
+        return true;
+      }
+      
       return taskTs >= dateStart && taskTs <= dateEnd;
     });
 
