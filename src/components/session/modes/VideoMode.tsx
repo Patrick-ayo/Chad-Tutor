@@ -102,7 +102,6 @@ export function VideoMode({ videoData, videoId, taskId, onAutoComplete, onVideoW
   const playerStateRef = useRef<number | null>(null);
   const [videoLoaded, setVideoLoaded] = useState(false);
   const [playerReady, setPlayerReady] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
   const [activeChapterIndex, setActiveChapterIndex] = useState(-1);
 
   const effectiveVideoId = task?.videoId || task?.videoUrl || videoId || videoData.videoId || '';
@@ -263,7 +262,6 @@ export function VideoMode({ videoData, videoId, taskId, onAutoComplete, onVideoW
 
         if (playerRef.current) {
           const current = playerRef.current.getCurrentTime();
-          setCurrentTime(current);
 
           if (playerVideoData.chapters && playerVideoData.chapters.length > 0) {
             let activeIdx = -1;

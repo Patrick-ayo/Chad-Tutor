@@ -4,7 +4,6 @@ import { useAuth } from "@clerk/clerk-react";
 import { CalendarDays, Settings2, RefreshCw, ListVideo, Star, ChevronDown, ChevronUp, Play, Award, CheckSquare, BookOpen, ShieldAlert } from "lucide-react";
 import { useScheduleStore } from "@/lib/scheduleStore";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { ScheduleSettingsModal } from "./ScheduleSettingsModal";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";

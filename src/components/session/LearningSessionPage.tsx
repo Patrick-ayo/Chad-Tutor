@@ -90,13 +90,6 @@ type TaskMode = "learn" | "practice" | "quiz" | "revision";
 
 type QuizAnswers = Record<number, "A" | "B" | "C" | "D">;
 
-function formatTodayLabel(date: Date): string {
-  return date.toLocaleDateString("en-US", {
-    weekday: "long",
-    month: "short",
-    day: "numeric",
-  });
-}
 
 function formatMinutes(minutes: number): string {
   return `${Math.max(0, Math.round(minutes))} min`;
@@ -119,12 +112,6 @@ function getTaskTypeLabel(task: ScheduledTask): string {
   return "🔄";
 }
 
-function getStatusLabel(task: ScheduledTask): string {
-  if (task.status === "completed") return "Done";
-  if (task.status === "in-progress") return "In Progress";
-  if (task.status === "overdue" || task.status === "blocked" || task.status === "skipped") return "Missed";
-  return "Pending";
-}
 
 function getStatusIcon(task: ScheduledTask): string {
   if (task.status === "completed") return "●";
@@ -994,20 +981,10 @@ export function LearningSessionPage({ plannerData }: LearningSessionPageProps) {
     setDrawerFeedback(null);
   }, []);
 
-  const openTaskPreview = useCallback((nextTask: TodayTask) => {
-    if (nextTask.status === 'completed') {
-      return;
-    }
-
-    setSelectedTodayTask(nextTask);
-    setDrawerPreviewMode(true);
-    setIsTaskDrawerOpen(true);
-    setShowLectureSummary(false);
-    setDrawerQuizQuestions(null);
-    setDrawerQuizLoading(false);
-    setDrawerQuizAnswers({});
-    setDrawerFeedback(null);
-  }, []);
+  const handleStartAnyway = useCallback((nextTask: TodayTask) => {
+    closeTaskDrawer();
+    openTaskDrawer(nextTask);
+  }, [closeTaskDrawer, openTaskDrawer]);
 
   const handleAfterTaskComplete = useCallback(async (completedTaskId: string) => {
     updateTodayTaskStatus(completedTaskId, 'completed');
